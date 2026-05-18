@@ -22,7 +22,7 @@
       @save="handleSetup"
     />
 
-    <div v-else-if="stateData" class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+    <div v-else-if="stateData" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <ProfileEditor
         v-for="(profile, pIndex) in stateData.profiles"
         :key="pIndex"
@@ -34,6 +34,7 @@
         @preview="handlePreview"
         @copyLink="handleCopyLink"
         @remove="removeProfile"
+        @duplicate="duplicateProfile"
       />
 
     </div>
@@ -82,7 +83,7 @@ import StatusToast from './components/StatusToast.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v2.0.1';
+const APP_VERSION = 'v2.1.0';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
@@ -275,6 +276,16 @@ function removeProfile(index: number) {
   if (expandedIndex.value === index) expandedIndex.value = null;
   else if (expandedIndex.value !== null && expandedIndex.value > index) expandedIndex.value--;
   stateData.value.profiles.splice(index, 1);
+}
+
+function duplicateProfile(index: number) {
+  if (!stateData.value) return;
+  const source = stateData.value.profiles[index];
+  if (!source) return;
+  const copy: Profile = JSON.parse(JSON.stringify(source));
+  copy.name = `${source.name || 'untitled'}_copy`;
+  stateData.value.profiles.splice(index + 1, 0, copy);
+  expandedIndex.value = index + 1;
 }
 
 function sortProfiles() {
