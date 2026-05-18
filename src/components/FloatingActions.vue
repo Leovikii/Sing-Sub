@@ -27,6 +27,18 @@
       </button>
 
       <button
+        @click="handleSort"
+        class="fab-btn group"
+        :class="{ 'fab-bounce': sortBounce }"
+        title="按名称排序"
+      >
+        <ArrowDownAZ
+          :size="20"
+          class="fab-icon text-[#86868b] transition-colors duration-200 group-hover:text-[#f5f5f7]"
+        />
+      </button>
+
+      <button
         @click="handleSave"
         :disabled="saveState !== 'idle'"
         class="fab-btn fab-save group"
@@ -63,7 +75,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { RefreshCw, Plus, Save, Check, X, Loader2 } from 'lucide-vue-next';
+import { RefreshCw, Plus, ArrowDownAZ, Save, Check, X, Loader2 } from 'lucide-vue-next';
 
 const props = defineProps<{
   saveState: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
@@ -73,10 +85,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   refresh: [];
   add: [];
+  sort: [];
   save: [];
 }>();
 
 const addBounce = ref(false);
+const sortBounce = ref(false);
 
 function handleRefresh() {
   if (props.refreshing) return;
@@ -87,6 +101,12 @@ function handleAdd() {
   addBounce.value = true;
   setTimeout(() => { addBounce.value = false; }, 300);
   emit('add');
+}
+
+function handleSort() {
+  sortBounce.value = true;
+  setTimeout(() => { sortBounce.value = false; }, 300);
+  emit('sort');
 }
 
 function handleSave() {
