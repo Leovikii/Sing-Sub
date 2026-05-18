@@ -22,22 +22,36 @@
       @save="handleSetup"
     />
 
-    <div v-else-if="stateData" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <ProfileEditor
-        v-for="(profile, pIndex) in stateData.profiles"
-        :key="pIndex"
-        :profile="profile"
-        :index="pIndex"
-        :copyStatus="!!copyStatus[pIndex]"
-        :expanded="expandedIndex === pIndex"
-        @update:expanded="toggleExpand(pIndex)"
-        @preview="handlePreview"
-        @copyLink="handleCopyLink"
-        @remove="removeProfile"
-        @duplicate="duplicateProfile"
+    <template v-else-if="stateData">
+      <TopToolbar
+        :saveState="saveStatus"
+        :refreshing="refreshing"
+        :isDirty="isDirty"
+        @refresh="handleRefresh"
+        @add="addProfile"
+        @sort="sortProfiles"
+        @save="handleSave"
       />
 
-    </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ProfileEditor
+          v-for="(profile, pIndex) in stateData.profiles"
+          :key="pIndex"
+          :profile="profile"
+          :index="pIndex"
+          :copyStatus="!!copyStatus[pIndex]"
+          :expanded="expandedIndex === pIndex"
+          :saveState="saveStatus"
+          :isDirty="isDirty"
+          @update:expanded="toggleExpand(pIndex)"
+          @preview="handlePreview"
+          @copyLink="handleCopyLink"
+          @remove="removeProfile"
+          @duplicate="duplicateProfile"
+          @save="handleSave"
+        />
+      </div>
+    </template>
 
     <PreviewModal
       :visible="showPreviewModal"
@@ -56,29 +70,19 @@
       @cancel="showDisconnectConfirm = false"
     />
 
-    <FloatingActions
-      v-if="stateData"
-      :saveState="saveStatus"
-      :refreshing="refreshing"
-      @refresh="handleRefresh"
-      @add="addProfile"
-      @sort="sortProfiles"
-      @save="handleSave"
-    />
-
     <StatusToast :status="saveStatus" :message="statusMessage" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, watch, nextTick } from 'vue';
 import { Loader2 } from 'lucide-vue-next';
 import AppHeader from './components/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
 import ProfileEditor from './components/ProfileEditor.vue';
 import PreviewModal from './components/PreviewModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
-import FloatingActions from './components/FloatingActions.vue';
+import TopToolbar from './components/TopToolbar.vue';
 import StatusToast from './components/StatusToast.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
@@ -101,7 +105,25 @@ const previewTitle = ref('');
 const previewContent = ref('');
 const previewLoading = ref(false);
 
+const isDirty = ref(false);
+let suppressDirty = false;
+
 const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getPreview } = useApi();
+
+function setStateData(state: StateData) {
+  suppressDirty = true;
+  stateData.value = normalizeProfiles(state);
+  nextTick(() => {
+    suppressDirty = false;
+    isDirty.value = false;
+  });
+}
+
+watch(stateData, () => {
+  if (suppressDirty) return;
+  if (!stateData.value) return;
+  isDirty.value = true;
+}, { deep: true });
 
 function normalizeProfiles(state: StateData): StateData {
   state.profiles.forEach((p: Profile) => {
@@ -117,7 +139,7 @@ onMounted(async () => {
     const s = await getSettings();
     if (s) {
       const data = await getState();
-      stateData.value = normalizeProfiles(data.state);
+      setStateData(data.state);
       fileSha.value = data.sha;
     }
   } catch { /* not logged in */ }
@@ -130,7 +152,7 @@ async function handleSetup() {
   try {
     const result = await login(setupData);
     const data = await getState();
-    stateData.value = normalizeProfiles(data.state);
+    setStateData(data.state);
     fileSha.value = data.sha;
     setupData.pat = '';
     if (result.warning) {
@@ -150,7 +172,7 @@ async function handleSaveSettings(newSettings: { owner: string; repo: string; pa
   try {
     const result = await saveSettings(newSettings);
     const data = await getState();
-    stateData.value = normalizeProfiles(data.state);
+    setStateData(data.state);
     fileSha.value = data.sha;
     if (result.warning) {
       saveStatus.value = 'warning';
@@ -192,6 +214,7 @@ async function handleSave() {
   try {
     const data = await saveState(stateData.value, fileSha.value);
     fileSha.value = data.sha;
+    isDirty.value = false;
     if (data.warning) {
       saveStatus.value = 'warning';
       statusMessage.value = '规则已保存，但构建失败: ' + data.warning;
@@ -215,7 +238,7 @@ async function handleRefresh() {
   statusMessage.value = '';
   try {
     const data = await rebuild();
-    stateData.value = normalizeProfiles(data.state);
+    setStateData(data.state);
     fileSha.value = data.sha;
     if (data.warning) {
       saveStatus.value = 'warning';
