@@ -61,6 +61,7 @@
       :refreshing="refreshing"
       @refresh="handleRefresh"
       @add="addProfile"
+      @sort="sortProfiles"
       @save="handleSave"
     />
 
@@ -81,7 +82,7 @@ import StatusToast from './components/StatusToast.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v2.0.0';
+const APP_VERSION = 'v2.0.1';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
@@ -274,6 +275,20 @@ function removeProfile(index: number) {
   if (expandedIndex.value === index) expandedIndex.value = null;
   else if (expandedIndex.value !== null && expandedIndex.value > index) expandedIndex.value--;
   stateData.value.profiles.splice(index, 1);
+}
+
+function sortProfiles() {
+  if (!stateData.value) return;
+  const expandedName = expandedIndex.value !== null
+    ? stateData.value.profiles[expandedIndex.value]?.name ?? null
+    : null;
+  stateData.value.profiles.sort((a, b) =>
+    (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+  );
+  if (expandedName !== null) {
+    const newIndex = stateData.value.profiles.findIndex(p => p.name === expandedName);
+    expandedIndex.value = newIndex >= 0 ? newIndex : null;
+  }
 }
 
 function toggleExpand(index: number) {
