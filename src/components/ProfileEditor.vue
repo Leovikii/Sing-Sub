@@ -1,12 +1,13 @@
 <template>
   <!-- Compact Card -->
   <div
-    class="glass p-5 cursor-pointer select-none space-y-2 transition-all duration-200 hover:border-[rgba(245,150,170,0.25)]"
+    ref="cardRef"
+    class="card glass p-5 cursor-pointer select-none space-y-2"
     @click="openModal"
   >
     <div class="flex items-center gap-4">
       <div class="flex items-center gap-2 min-w-0 flex-1">
-        <span class="text-lg font-semibold text-[#f5f5f7] truncate">{{ profile.name || 'untitled' }}</span>
+        <span class="card-title text-lg font-semibold text-[#f5f5f7] truncate">{{ profile.name || 'untitled' }}</span>
         <span class="text-[#86868b] font-mono text-sm select-none">.json</span>
       </div>
 
@@ -90,7 +91,10 @@
         class="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-6 bg-[#121212]/90 backdrop-blur-lg"
         @click.self="closeModal"
       >
-        <div class="modal-panel w-full md:max-w-3xl md:max-h-[88vh] max-h-[92vh] bg-[#1c1c1e] border border-[#38383a] md:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div
+          ref="panelRef"
+          class="modal-panel w-full md:max-w-3xl md:max-h-[88vh] max-h-[92vh] bg-[#1c1c1e] border border-[#38383a] md:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col overflow-hidden"
+        >
           <!-- Header -->
           <div class="flex items-center justify-between gap-3 p-4 border-b border-[#38383a] bg-[#0a0a0a]/40 shrink-0">
             <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -199,6 +203,32 @@
               </div>
             </div>
           </div>
+
+          <!-- Footer (sticky save) -->
+          <div class="flex items-center justify-end gap-3 p-4 border-t border-[#38383a] bg-[#0a0a0a]/40 shrink-0">
+            <span v-if="isDirty && saveState === 'idle'" class="text-xs text-[#F596AA] mr-auto flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-[#F596AA] animate-pulse"></span>
+              有未保存更改
+            </span>
+            <button
+              @click="handleSave"
+              :disabled="saveState !== 'idle'"
+              :class="[
+                'modal-save-btn',
+                {
+                  'modal-save-dirty': isDirty && saveState === 'idle',
+                  'modal-save-success': saveState === 'success',
+                  'modal-save-error': saveState === 'error',
+                },
+              ]"
+            >
+              <Loader2 v-if="saveState === 'saving'" :size="14" class="modal-save-spin" />
+              <Check v-else-if="saveState === 'success'" :size="14" />
+              <X v-else-if="saveState === 'error'" :size="14" />
+              <Save v-else :size="14" />
+              <span>{{ saveLabel }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </Transition>
@@ -207,7 +237,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import { Eye, Link, Check, Trash2, MoreHorizontal, Copy, X } from 'lucide-vue-next';
+import { Eye, Link, Check, Trash2, MoreHorizontal, Copy, X, Save, Loader2 } from 'lucide-vue-next';
 import AppleInput from './AppleInput.vue';
 import AppleButton from './AppleButton.vue';
 import type { Profile } from '../types';
@@ -217,6 +247,8 @@ const props = defineProps<{
   index: number;
   copyStatus: boolean;
   expanded?: boolean;
+  saveState: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
+  isDirty: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -224,6 +256,7 @@ const emit = defineEmits<{
   copyLink: [name: string, index: number];
   remove: [index: number];
   duplicate: [index: number];
+  save: [];
   'update:expanded': [value: boolean];
 }>();
 
@@ -238,6 +271,30 @@ const outboundCount = computed(() => props.profile.rules.length);
 
 const menuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
+const cardRef = ref<HTMLElement | null>(null);
+const panelRef = ref<HTMLElement | null>(null);
+
+const saveLabel = computed(() => {
+  switch (props.saveState) {
+    case 'saving': return '保存中…';
+    case 'success': return '已保存';
+    case 'error': return '失败';
+    default: return props.isDirty ? '保存全部' : '保存';
+  }
+});
+
+function applyOrigin() {
+  if (!cardRef.value || !panelRef.value) return;
+  if (window.matchMedia('(max-width: 767px)').matches) {
+    panelRef.value.style.removeProperty('transform-origin');
+    return;
+  }
+  const cr = cardRef.value.getBoundingClientRect();
+  const pr = panelRef.value.getBoundingClientRect();
+  const ox = cr.left + cr.width / 2 - pr.left;
+  const oy = cr.top + cr.height / 2 - pr.top;
+  panelRef.value.style.transformOrigin = `${ox}px ${oy}px`;
+}
 
 function openModal() {
   if (menuOpen.value) return;
@@ -245,18 +302,25 @@ function openModal() {
 }
 
 function closeModal() {
+  applyOrigin();
   isOpen.value = false;
 }
 
 function handleDuplicate() {
   menuOpen.value = false;
-  closeModal();
+  applyOrigin();
+  isOpen.value = false;
   emit('duplicate', props.index);
 }
 
 function handleRemove() {
   menuOpen.value = false;
   emit('remove', props.index);
+}
+
+function handleSave() {
+  if (props.saveState !== 'idle') return;
+  emit('save');
 }
 
 function onDocumentClick(e: MouseEvent) {
@@ -280,6 +344,7 @@ watch(isOpen, (open) => {
   if (open) {
     document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', onKeydown);
+    requestAnimationFrame(applyOrigin);
   } else {
     document.body.style.overflow = '';
     document.removeEventListener('keydown', onKeydown);
@@ -294,13 +359,40 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.card {
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 200ms ease,
+              box-shadow 200ms ease;
+  will-change: transform;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 150, 170, 0.3);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(245, 150, 170, 0.08);
+}
+
+.card:hover .card-title {
+  color: #F596AA;
+}
+
+.card:active {
+  transform: scale(0.99);
+  transition-duration: 80ms;
+}
+
+.card-title {
+  transition: color 200ms ease;
+}
+
 .modal-enter-active,
 .modal-leave-active {
-  transition: opacity 200ms ease;
+  transition: opacity 220ms ease;
 }
 .modal-enter-active .modal-panel,
 .modal-leave-active .modal-panel {
-  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease;
+  transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms ease;
+  will-change: transform, opacity;
 }
 .modal-enter-from,
 .modal-leave-to {
@@ -308,14 +400,19 @@ onUnmounted(() => {
 }
 .modal-enter-from .modal-panel,
 .modal-leave-to .modal-panel {
-  transform: translateY(16px) scale(0.98);
+  transform: scale(0.7);
   opacity: 0;
 }
 
 @media (max-width: 767px) {
+  .modal-enter-active .modal-panel,
+  .modal-leave-active .modal-panel {
+    transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms ease;
+  }
   .modal-enter-from .modal-panel,
   .modal-leave-to .modal-panel {
     transform: translateY(100%);
+    opacity: 1;
   }
 }
 
@@ -327,5 +424,86 @@ onUnmounted(() => {
 .menu-leave-to {
   opacity: 0;
   transform: translateY(-4px) scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card:hover,
+  .card:active {
+    transform: none !important;
+  }
+  .modal-enter-from .modal-panel,
+  .modal-leave-to .modal-panel {
+    transform: none !important;
+  }
+}
+
+.modal-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #86868b;
+  background: rgba(44, 44, 46, 0.6);
+  border: 1px solid rgba(56, 56, 58, 0.8);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+}
+
+.modal-save-btn:hover:not(:disabled) {
+  color: #f5f5f7;
+  border-color: #86868b;
+}
+
+.modal-save-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.modal-save-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.modal-save-btn.modal-save-dirty {
+  background: #F596AA;
+  border-color: #F596AA;
+  color: #1a1a1c;
+  box-shadow: 0 0 0 0 rgba(245, 150, 170, 0.45);
+  animation: modal-save-pulse 2.2s ease-in-out infinite;
+}
+
+.modal-save-btn.modal-save-dirty:hover {
+  background: #f7a8ba;
+  border-color: #f7a8ba;
+  color: #1a1a1c;
+}
+
+@keyframes modal-save-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 150, 170, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(245, 150, 170, 0); }
+}
+
+.modal-save-btn.modal-save-success {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.modal-save-btn.modal-save-error {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.modal-save-spin {
+  animation: modal-save-spin-anim 1s linear infinite;
+}
+
+@keyframes modal-save-spin-anim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

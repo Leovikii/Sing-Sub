@@ -17,35 +17,6 @@ body {
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
-.expand-grid {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 300ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.expand-grid.is-open {
-  grid-template-rows: 1fr;
-}
-
-.expand-grid > .expand-content {
-  overflow: hidden;
-  opacity: 0;
-  transition: opacity 200ms ease;
-}
-
-.expand-grid.is-open > .expand-content {
-  opacity: 1;
-  transition-delay: 100ms;
-}
-
-.glass:has(.expand-grid) {
-  transition: backdrop-filter 0ms;
-}
-
-.glass:has(.expand-grid) > .expand-grid {
-  contain: layout;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
