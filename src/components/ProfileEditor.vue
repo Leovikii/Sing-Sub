@@ -3,7 +3,7 @@
   <div
     ref="cardRef"
     class="card glass p-5 cursor-pointer select-none space-y-2"
-    @click="openModal"
+    @click="handleCardClick"
   >
     <div class="flex items-center gap-4">
       <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -13,10 +13,10 @@
 
       <div class="flex items-center gap-2 shrink-0">
         <button
-          @click.stop="$emit('preview', profile.name)"
+          @click.stop="openModal"
           class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#86868b] transition-colors cursor-pointer"
         >
-          <Eye :size="14" />预览
+          <Pencil :size="14" />编辑
         </button>
         <button
           @click.stop="$emit('copyLink', profile.name, index)"
@@ -69,10 +69,10 @@
 
     <div class="flex md:hidden items-center gap-2 pt-1">
       <button
-        @click.stop="$emit('preview', profile.name)"
+        @click.stop="openModal"
         class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#86868b] transition-colors cursor-pointer"
       >
-        <Eye :size="14" />预览
+        <Pencil :size="14" />编辑
       </button>
       <button
         @click.stop="$emit('copyLink', profile.name, index)"
@@ -237,7 +237,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import { Eye, Link, Check, Trash2, MoreHorizontal, Copy, X, Save, Loader2 } from 'lucide-vue-next';
+import { Pencil, Link, Check, Trash2, MoreHorizontal, Copy, X, Save, Loader2 } from 'lucide-vue-next';
 import AppleInput from './AppleInput.vue';
 import AppleButton from './AppleButton.vue';
 import type { Profile } from '../types';
@@ -299,6 +299,11 @@ function applyOrigin() {
 function openModal() {
   if (menuOpen.value) return;
   isOpen.value = true;
+}
+
+function handleCardClick() {
+  if (menuOpen.value) return;
+  emit('preview', props.profile.name);
 }
 
 function closeModal() {
@@ -364,16 +369,19 @@ onUnmounted(() => {
               border-color 200ms ease,
               box-shadow 200ms ease;
   will-change: transform;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(245, 150, 170, 0.3);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(245, 150, 170, 0.08);
-}
+@media (hover: hover) {
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(245, 150, 170, 0.3);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(245, 150, 170, 0.08);
+  }
 
-.card:hover .card-title {
-  color: #F596AA;
+  .card:hover .card-title {
+    color: #F596AA;
+  }
 }
 
 .card:active {
