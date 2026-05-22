@@ -5,12 +5,13 @@
       <p class="text-sm text-[#86868b] leading-relaxed">{{ message }}</p>
       <div class="flex gap-3 pt-2">
         <AppleButton @click="$emit('cancel')" variant="secondary" class="flex-1">取消</AppleButton>
-        <button
+        <AppleButton
           @click="$emit('confirm')"
-          class="flex-1 rounded-[20px] px-6 py-2.5 font-medium text-[14px] transition-all duration-200 cursor-pointer border-none bg-red-500/90 text-white hover:bg-red-400 hover:scale-[1.02]"
+          variant="danger"
+          class="flex-1"
         >
           {{ confirmText }}
-        </button>
+        </AppleButton>
       </div>
     </div>
   </div>

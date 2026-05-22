@@ -87,7 +87,7 @@ import StatusToast from './components/StatusToast.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v2.2.0';
+const APP_VERSION = 'v2.2.1';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
@@ -107,6 +107,14 @@ const previewLoading = ref(false);
 
 const isDirty = ref(false);
 let suppressDirty = false;
+let statusTimer: any = null;
+
+function showStatus(state: 'success' | 'warning' | 'error', msg: string, duration = 3000) {
+  if (statusTimer) clearTimeout(statusTimer);
+  saveStatus.value = state;
+  statusMessage.value = msg;
+  statusTimer = setTimeout(() => { saveStatus.value = 'idle'; }, duration);
+}
 
 const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getPreview } = useApi();
 
@@ -156,12 +164,10 @@ async function handleSetup() {
     fileSha.value = data.sha;
     setupData.pat = '';
     if (result.warning) {
-      saveStatus.value = 'warning';
-      statusMessage.value = '登录成功，但配置构建失败: ' + result.warning;
-      setTimeout(() => { saveStatus.value = 'idle'; }, 5000);
+      showStatus('warning', '登录成功，但配置构建失败: ' + result.warning, 5000);
     }
   } catch (e: any) {
-    alert('登录失败: ' + e.message);
+    showStatus('error', '登录失败: ' + e.message, 5000);
   } finally {
     loadingData.value = false;
   }
@@ -175,16 +181,12 @@ async function handleSaveSettings(newSettings: { owner: string; repo: string; pa
     setStateData(data.state);
     fileSha.value = data.sha;
     if (result.warning) {
-      saveStatus.value = 'warning';
-      statusMessage.value = '设置已保存，但配置构建失败: ' + result.warning;
-      setTimeout(() => { saveStatus.value = 'idle'; }, 5000);
+      showStatus('warning', '设置已保存，但配置构建失败: ' + result.warning, 5000);
     } else {
-      saveStatus.value = 'success';
-      statusMessage.value = '设置已保存，配置已更新';
-      setTimeout(() => { saveStatus.value = 'idle'; }, 3000);
+      showStatus('success', '设置已保存，配置已更新', 3000);
     }
   } catch (e: any) {
-    alert('更新设置失败: ' + e.message);
+    showStatus('error', '更新设置失败: ' + e.message, 5000);
   } finally {
     loadingData.value = false;
   }
@@ -216,18 +218,12 @@ async function handleSave() {
     fileSha.value = data.sha;
     isDirty.value = false;
     if (data.warning) {
-      saveStatus.value = 'warning';
-      statusMessage.value = '规则已保存，但构建失败: ' + data.warning;
-      setTimeout(() => { saveStatus.value = 'idle'; }, 5000);
+      showStatus('warning', '规则已保存，但构建失败: ' + data.warning, 5000);
     } else {
-      saveStatus.value = 'success';
-      statusMessage.value = '保存成功，配置已更新';
-      setTimeout(() => { saveStatus.value = 'idle'; }, 3000);
+      showStatus('success', '保存成功，配置已更新', 3000);
     }
   } catch (e: any) {
-    saveStatus.value = 'error';
-    statusMessage.value = e.message || '保存失败';
-    setTimeout(() => { saveStatus.value = 'idle'; }, 5000);
+    showStatus('error', e.message || '保存失败', 5000);
   }
 }
 
@@ -241,18 +237,12 @@ async function handleRefresh() {
     setStateData(data.state);
     fileSha.value = data.sha;
     if (data.warning) {
-      saveStatus.value = 'warning';
-      statusMessage.value = '刷新成功，但构建失败: ' + data.warning;
-      setTimeout(() => { saveStatus.value = 'idle'; }, 5000);
+      showStatus('warning', '刷新成功，但构建失败: ' + data.warning, 5000);
     } else {
-      saveStatus.value = 'success';
-      statusMessage.value = '刷新并重新构建成功';
-      setTimeout(() => { saveStatus.value = 'idle'; }, 3000);
+      showStatus('success', '刷新并重新构建成功', 3000);
     }
   } catch (e: any) {
-    saveStatus.value = 'error';
-    statusMessage.value = '刷新失败: ' + e.message;
-    setTimeout(() => { saveStatus.value = 'idle'; }, 5000);
+    showStatus('error', '刷新失败: ' + e.message, 5000);
   } finally {
     refreshing.value = false;
   }
@@ -281,14 +271,14 @@ async function handleCopyLink(name: string, index: number) {
     copyStatus.value[index] = true;
     setTimeout(() => { copyStatus.value[index] = false; }, 2000);
   } catch {
-    alert('复制失败');
+    showStatus('error', '复制失败', 3000);
   }
 }
 
 function addProfile() {
   if (!stateData.value) return;
   stateData.value.profiles.push({
-    name: 'new_env', note: '', templateUrl: '', inboundsPath: '', outboundsPath: '',
+    name: 'new_env', note: '', templateUrl: '', nodesPath: 'sing-sub/nodes.json',
     rules: [], inboundRules: [],
   });
   expandedIndex.value = stateData.value.profiles.length - 1;

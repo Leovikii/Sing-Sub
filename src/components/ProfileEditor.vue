@@ -145,14 +145,10 @@
                   <label class="text-sm font-medium text-[#86868b]">公开模板 URL</label>
                   <AppleInput v-model="profile.templateUrl" placeholder="https://raw.githubusercontent.com/..." />
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 gap-6">
                   <div class="space-y-2">
-                    <label class="text-sm font-medium text-[#86868b]">入站节点文件路径</label>
-                    <AppleInput v-model="profile.inboundsPath" placeholder="例如: gates.json (留空不导入)" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-[#86868b]">出站节点文件路径</label>
-                    <AppleInput v-model="profile.outboundsPath" placeholder="例如: nodes.json (留空不导入)" />
+                    <label class="text-sm font-medium text-[#86868b]">节点文件路径</label>
+                    <AppleInput v-model="profile.nodesPath" placeholder="例如: sing-sub/nodes.json (必填)" />
                   </div>
                 </div>
               </div>
@@ -285,10 +281,6 @@ const saveLabel = computed(() => {
 
 function applyOrigin() {
   if (!cardRef.value || !panelRef.value) return;
-  if (window.matchMedia('(max-width: 767px)').matches) {
-    panelRef.value.style.removeProperty('transform-origin');
-    return;
-  }
   const cr = cardRef.value.getBoundingClientRect();
   const pr = panelRef.value.getBoundingClientRect();
   const ox = cr.left + cr.width / 2 - pr.left;
@@ -421,6 +413,9 @@ onUnmounted(() => {
   .modal-leave-to .modal-panel {
     transform: translateY(100%);
     opacity: 1;
+  }
+  .modal-panel {
+    transform-origin: 50% 50% !important;
   }
 }
 

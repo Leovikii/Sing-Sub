@@ -20,8 +20,7 @@ export interface Profile {
   name: string;
   note?: string;
   templateUrl: string;
-  inboundsPath: string;
-  outboundsPath: string;
+  nodesPath: string;
   rules: { group: string; include: string; exclude: string }[];
   inboundRules: { include: string; exclude: string }[];
 }

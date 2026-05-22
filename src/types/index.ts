@@ -27,8 +27,7 @@ export interface Profile {
   name: string;
   note?: string;
   templateUrl: string;
-  inboundsPath: string;
-  outboundsPath: string;
+  nodesPath: string;
   rules: Rule[];
   inboundRules: InboundRule[];
 }

@@ -55,14 +55,13 @@ async function fetchRepoJson(path: string, session: RepoSession): Promise<unknow
 }
 
 export async function buildProfile(profile: Profile, session: RepoSession): Promise<string> {
-  const [template, outData, inData] = await Promise.all([
+  const [template, nodesData] = await Promise.all([
     fetchJson(profile.templateUrl) as Promise<Record<string, unknown>>,
-    fetchRepoJson(profile.outboundsPath, session),
-    fetchRepoJson(profile.inboundsPath, session),
+    fetchRepoJson(profile.nodesPath, session),
   ]);
 
-  if (inData) {
-    const inboundsArray = normalizeArray<Inbound>(inData, 'inbounds');
+  if (nodesData) {
+    const inboundsArray = normalizeArray<Inbound>(nodesData, 'inbounds');
     let filtered: Inbound[];
 
     if (profile.inboundRules && profile.inboundRules.length > 0) {
@@ -77,14 +76,18 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
     }
 
     if (filtered.length > 0) {
-      template.inbounds = [...((template.inbounds as Inbound[]) || []), ...filtered];
+      const existingInbounds = Array.isArray(template.inbounds) ? template.inbounds : [];
+      template.inbounds = [...existingInbounds, ...filtered];
     }
   }
 
-  if (outData) {
-    const outboundsArray = normalizeArray<Outbound>(outData, 'outbounds');
+  if (nodesData) {
+    const outboundsArray = normalizeArray<Outbound>(nodesData, 'outbounds');
 
     if (outboundsArray.length > 0) {
+      if (!Array.isArray(template.outbounds)) {
+        template.outbounds = [];
+      }
       const templateOutbounds = template.outbounds as Outbound[];
       templateOutbounds.forEach(outbound => {
         const rule = profile.rules.find(r => r.group === outbound.tag);
