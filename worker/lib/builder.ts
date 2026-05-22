@@ -89,16 +89,23 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
         template.outbounds = [];
       }
       const templateOutbounds = template.outbounds as Outbound[];
+      const matchedOutbounds = new Set<Outbound>();
+
       templateOutbounds.forEach(outbound => {
         const rule = profile.rules.find(r => r.group === outbound.tag);
         if (rule && Array.isArray(outbound.outbounds)) {
           const matched = outboundsArray
-            .filter(n => n.tag && matchesFilter(n.tag, rule.include, rule.exclude))
-            .map(n => n.tag!);
-          outbound.outbounds.push(...matched);
+            .filter(n => n.tag && matchesFilter(n.tag, rule.include, rule.exclude));
+          outbound.outbounds.push(...matched.map(n => n.tag!));
+          matched.forEach(n => matchedOutbounds.add(n));
         }
       });
-      templateOutbounds.push(...outboundsArray);
+
+      if (profile.rules && profile.rules.length > 0) {
+        templateOutbounds.push(...Array.from(matchedOutbounds));
+      } else {
+        templateOutbounds.push(...outboundsArray);
+      }
     }
   }
 
