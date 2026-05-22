@@ -62,7 +62,7 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
 
   if (nodesData) {
     const inboundsArray = normalizeArray<Inbound>(nodesData, 'inbounds');
-    let filtered: Inbound[];
+    let filtered: Inbound[] = [];
 
     if (profile.inboundRules && profile.inboundRules.length > 0) {
       filtered = inboundsArray.filter(inbound => {
@@ -71,8 +71,6 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
           matchesFilter(inbound.tag!, rule.include, rule.exclude)
         );
       });
-    } else {
-      filtered = inboundsArray;
     }
 
     if (filtered.length > 0) {
@@ -101,10 +99,8 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
         }
       });
 
-      if (profile.rules && profile.rules.length > 0) {
+      if (matchedOutbounds.size > 0) {
         templateOutbounds.push(...Array.from(matchedOutbounds));
-      } else {
-        templateOutbounds.push(...outboundsArray);
       }
     }
   }
