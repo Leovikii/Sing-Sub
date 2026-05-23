@@ -145,11 +145,14 @@ watch(stateData, () => {
 }, { deep: true });
 
 function normalizeProfiles(state: StateData): StateData {
-  state.profiles.forEach((p: Profile) => {
-    if (!p.rules) p.rules = [];
-    if (!p.inboundRules) p.inboundRules = [];
-    if (!p.note) p.note = '';
-  });
+  state.profiles = state.profiles.map((p: any) => ({
+    name: p.name || '',
+    note: p.note || '',
+    templateUrl: p.templateUrl || '',
+    nodesPath: p.nodesPath || '',
+    rules: Array.isArray(p.rules) ? p.rules : [],
+    inboundRules: Array.isArray(p.inboundRules) ? p.inboundRules : [],
+  }));
   return state;
 }
 

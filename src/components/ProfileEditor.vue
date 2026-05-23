@@ -293,11 +293,7 @@ function extractFilename(path: string) {
 }
 
 const nodeOptions = computed(() => {
-  const opts = (props.availableNodes || []).map(p => ({ label: extractFilename(p), value: p }));
-  if (props.profile.nodesPath && !opts.find(o => o.value === props.profile.nodesPath)) {
-    opts.unshift({ label: extractFilename(props.profile.nodesPath), value: props.profile.nodesPath });
-  }
-  return opts;
+  return (props.availableNodes || []).map(p => ({ label: extractFilename(p), value: p }));
 });
 
 const isCustomTemplate = ref(false);
