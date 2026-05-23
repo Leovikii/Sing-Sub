@@ -10,12 +10,24 @@
         :title="getBasename(node.path)"
         :inboundCount="node.inboundsCount"
         :outboundCount="node.outboundsCount"
+        icon="network"
+        tag="NODE"
+        tagStyle="bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20"
         :menuItems="nodeMenuItems"
-        @click="editNode(node)"
+        @click="openPreview(node)"
         @edit="editNode(node)"
         @action="(act) => handleNodeAction(act, node)"
       />
     </div>
+
+    <!-- Preview Modal -->
+    <PreviewModal
+      :visible="!!previewNode"
+      :title="previewNode ? getBasename(previewNode.path).replace(/\.json$/, '') : ''"
+      :content="previewContent"
+      :loading="isLoadingNode"
+      @close="closePreview"
+    />
 
     <div v-if="nodes.length === 0" class="text-center py-20 text-[#86868b]">
       暂无节点文件，仓库初始化可能正在进行中。
@@ -37,18 +49,12 @@
       @reset="resetNodeCode"
       @close="closeEditor"
     >
-      <!-- Editor Body -->
-      <div class="flex-1 relative bg-[#0d0d0d] min-h-[60vh] flex flex-col">
-        <div v-if="isLoadingNode" class="absolute inset-0 flex flex-col justify-center items-center z-10 bg-[#0d0d0d]/80 backdrop-blur-sm">
-          <Loader2 class="w-8 h-8 text-[#F596AA] animate-spin mb-4" />
-          <span class="text-[#86868b]">加载文件内容中...</span>
-        </div>
-        <textarea
-          v-model="editorContent"
-          class="flex-1 w-full h-full p-6 bg-transparent text-[#a1a1aa] font-mono text-sm leading-relaxed resize-none outline-none selection:bg-[#F596AA]/30 selection:text-[#f5f5f7]"
-          spellcheck="false"
-        ></textarea>
-      </div>
+      <CodeEditor
+        v-model="editorContent"
+        :loading="isLoadingNode"
+        loadingText="读取中..."
+        class="min-h-[60vh]"
+      />
     </EditorModal>
 
     <!-- Confirm Modal -->
@@ -65,10 +71,12 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Loader2, Trash2 } from 'lucide-vue-next';
+import { Trash2 } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
+import PreviewModal from './ui/PreviewModal.vue';
 import ConfirmModal from './ui/ConfirmModal.vue';
+import CodeEditor from './ui/CodeEditor.vue';
 
 const props = defineProps<{
   nodes: any[];
@@ -79,8 +87,10 @@ const emit = defineEmits<{
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
 }>();
 
-const editingNode = ref<any | null>(null);
+const editingNode = ref<any>(null);
+const previewNode = ref<any>(null);
 const editorContent = ref('');
+const previewContent = ref('');
 const originalContent = ref('');
 const isLoadingNode = ref(false);
 const isSaving = ref(false);
@@ -105,6 +115,28 @@ const isNameDirty = computed(() => {
   if (editingNode.value.isNew) return true;
   return localNodeName.value !== getBasename(editingNode.value.path).replace(/\.json$/, '');
 });
+
+async function openPreview(node: any) {
+  previewNode.value = node;
+  isLoadingNode.value = true;
+  previewContent.value = '';
+  
+  try {
+    const res = await fetch(`/api/file?path=${encodeURIComponent(node.path)}`);
+    if (!res.ok) throw new Error('Failed to load file');
+    const data = await res.json();
+    previewContent.value = data.content;
+  } catch (e: any) {
+    emit('status', 'error', '加载失败: ' + e.message);
+  } finally {
+    isLoadingNode.value = false;
+  }
+}
+
+function closePreview() {
+  previewNode.value = null;
+  previewContent.value = '';
+}
 
 const nodeMenuItems = [
   { label: '删除文件', action: 'remove', icon: Trash2, danger: true },

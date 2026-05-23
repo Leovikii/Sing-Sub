@@ -5,18 +5,18 @@
     :inboundCount="inboundCount"
     :outboundCount="outboundCount"
     :menuItems="cardMenuItems"
-    @click="openModal"
+    @click="$emit('preview', profile.name || '')"
     @edit="openModal"
     @action="handleCardAction"
   >
     <template #actions>
       <button
         @click.stop="$emit('copyLink', profile.name || '', index)"
-        :class="['hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer border', copyStatus ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border-[#38383a] hover:border-[#F596AA]']"
-        title="复制配置订阅链接"
+        :class="['flex items-center justify-center gap-1.5 w-8 h-8 md:w-auto md:h-auto md:px-3 md:py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer border', copyStatus ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border-[#38383a] hover:border-[#F596AA]']"
+        :title="copyStatus ? '已复制' : '订阅'"
       >
         <component :is="copyStatus ? Check : Link2" :size="14" />
-        {{ copyStatus ? '已复制' : '订阅' }}
+        <span class="hidden md:inline">{{ copyStatus ? '已复制' : '订阅' }}</span>
       </button>
     </template>
   </FileCard>
@@ -37,15 +37,32 @@
   >
     <template #header-actions>
       <!-- Mode Toggle -->
-      <div class="flex items-center bg-[#2c2c2e] rounded-full p-1 border border-[#38383a]">
+      <div class="relative flex items-center bg-[#2c2c2e] rounded-full p-1 border border-[#38383a] overflow-hidden w-24 md:w-48">
+        <!-- Animated slider -->
+        <div 
+          class="absolute top-1 bottom-1 rounded-full bg-[#38383a] transition-all duration-300 ease-out shadow-sm z-0"
+          :style="{
+            left: !isCodeMode ? '4px' : 'calc(50% + 2px)',
+            width: 'calc(50% - 6px)'
+          }"
+        ></div>
+
         <button
           @click="isCodeMode = false"
-          :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer', !isCodeMode ? 'bg-[#38383a] text-[#f5f5f7] shadow-sm' : 'text-[#86868b] hover:text-[#f5f5f7]']"
-        >UI</button>
+          class="relative z-10 flex items-center justify-center gap-1.5 px-3 py-1 w-full rounded-full text-xs font-medium transition-colors cursor-pointer"
+          :class="!isCodeMode ? 'text-[#f5f5f7]' : 'text-[#86868b] hover:text-[#f5f5f7]'"
+        >
+          <LayoutTemplate :size="12" />
+          <span class="hidden md:inline">UI 视图</span>
+        </button>
         <button
           @click="isCodeMode = true"
-          :class="['px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer flex items-center gap-1', isCodeMode ? 'bg-[#38383a] text-[#F596AA] shadow-sm' : 'text-[#86868b] hover:text-[#f5f5f7]']"
-        ><Code :size="12" /> Live Preview</button>
+          class="relative z-10 flex items-center justify-center gap-1.5 px-3 py-1 w-full rounded-full text-xs font-medium transition-colors cursor-pointer"
+          :class="isCodeMode ? 'text-[#F596AA]' : 'text-[#86868b] hover:text-[#f5f5f7]'"
+        >
+          <Code :size="12" />
+          <span class="hidden md:inline">代码预览</span>
+        </button>
       </div>
 
     </template>
@@ -73,7 +90,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import { Trash2, Copy, Link2, Check, Code } from 'lucide-vue-next';
+import { Trash2, Copy, Link2, Check, Code, LayoutTemplate } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
 import ProfileBasicInfo from './profile/ProfileBasicInfo.vue';

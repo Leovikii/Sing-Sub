@@ -34,6 +34,8 @@ export interface Profile {
   nodesPath: string;
   rules: Rule[];
   inboundRules: InboundRule[];
+  created_at?: number;
+  updated_at?: number;
 }
 
 export interface StateData {

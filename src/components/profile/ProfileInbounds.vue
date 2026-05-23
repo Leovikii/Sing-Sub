@@ -51,10 +51,10 @@
                 <span
                   v-for="(node, idx) in matchedNodes.slice(0, 5)"
                   :key="idx"
-                  class="inline-flex items-center rounded-full whitespace-nowrap border border-[#F596AA]/20 overflow-hidden"
+                  class="inline-flex items-stretch rounded-full whitespace-nowrap border border-[#F596AA]/20 overflow-hidden"
                 >
-                  <span class="px-1.5 py-1 bg-[#38383a] text-[#86868b] text-[10px] font-bold uppercase leading-none">{{ node.type }}</span>
-                  <span class="px-2 py-1 bg-[#F596AA]/10 text-[#F596AA] text-xs font-medium leading-none">{{ node.tag }}</span>
+                  <span class="px-1.5 py-0.5 flex items-center justify-center bg-[#38383a] text-[#86868b] text-[10px] font-bold uppercase">{{ node.type }}</span>
+                  <span class="px-2 py-0.5 flex items-center justify-center bg-[#F596AA]/10 text-[#F596AA] text-xs font-medium">{{ node.tag }}</span>
                 </span>
                 <span v-if="matchedNodes.length > 5" class="px-2 py-0.5 rounded-full bg-[#38383a] text-[#86868b] text-xs font-medium whitespace-nowrap">
                   +{{ matchedNodes.length - 5 }}

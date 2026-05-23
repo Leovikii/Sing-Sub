@@ -8,8 +8,10 @@ Edge-based multi-environment configuration distribution console for [sing-box](h
 - **Server-side security** — GitHub PAT stored in Cloudflare KV (encrypted at rest), never exposed to the browser. Same repo from different devices shares one user entry.
 - **Edge config building** — Worker fetches templates and nodes from GitHub, merges them on the fly, and caches in KV. No GitHub Actions or Gist needed.
 - **Subscription distribution** — `/sub/{token}/{name}.json` with User-Agent filtering (sing-box clients only).
+- **Next-Gen Glassmorphism UI** — A stunning, fully responsive interface optimized for both desktop and mobile, featuring dynamic layout adaptation, intelligent protocol tag rendering, and seamless mode toggles.
+- **Dual-Mode Profile Editor** — Switch instantly between Visual UI Builder and Live JSON Preview with animated segmented controls.
+- **Nodes Manager** — Dedicated interface for inspecting node definitions and previewing remote node files instantly.
 - **Multi-profile** — Manage multiple environments (e.g. `home`, `office`, `travel`) with independent inbound/outbound rules and templates.
-- **Preview** — Preview cached configs directly from KV, showing exactly what sing-box clients will receive.
 - **Auto-deploy** — Push to `main` triggers GitHub Actions to deploy the Worker automatically.
 
 ## Tech Stack

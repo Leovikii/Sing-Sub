@@ -1,100 +1,143 @@
 <template>
-  <div class="toolbar-wrapper">
-    <div class="toolbar flex items-center justify-between gap-3 px-3 py-2 sm:px-4 sm:py-2.5">
+  <div class="flex items-center justify-between mb-6">
+    <!-- Left: Sort (Minimalist Text Dropdown Style) -->
+    <div class="relative z-50" ref="sortMenuRef">
       <button
-        @click="handleSort"
-        :class="['tb-btn', { 'tb-bounce': sortBounce }]"
-        title="按名称排序"
+        @click.stop="sortMenuOpen = !sortMenuOpen"
+        class="flex items-center gap-1.5 text-xs font-medium transition-colors cursor-pointer outline-none"
+        :class="sortMenuOpen ? 'text-[#f5f5f7]' : 'text-[#86868b] hover:text-[#f5f5f7]'"
+        title="更改排序方式"
       >
-        <ArrowDownAZ :size="16" class="text-[#86868b]" />
-        <span class="tb-label">排序</span>
+        <span class="inline-block" :class="{ 'tb-bounce': sortBounce }">
+          <Clock v-if="sortType === 'updated'" :size="16" />
+          <Calendar v-else-if="sortType === 'created'" :size="16" />
+          <ArrowDownAZ v-else :size="16" />
+        </span>
+        <span>{{ currentSortLabel }}</span>
+        <ChevronDown :size="14" class="transition-transform duration-200" :class="{ 'rotate-180': sortMenuOpen }" />
       </button>
 
-      <div class="flex items-center gap-1.5 sm:gap-2">
-        <button
-          @click="handleRefresh"
-          :disabled="refreshing"
-          class="tb-btn"
-          title="刷新"
+      <Transition name="menu">
+        <div
+          v-if="sortMenuOpen"
+          @click.stop
+          class="absolute left-0 top-full mt-2 w-44 rounded-xl bg-[#1c1c1e] border border-[#38383a] shadow-[0_8px_30px_rgba(0,0,0,0.5)] overflow-hidden transform origin-top-left"
         >
-          <RefreshCw
-            :size="16"
-            :class="refreshing ? 'tb-spin text-[#F596AA]' : 'text-[#86868b]'"
-          />
-          <span class="tb-label">刷新</span>
-        </button>
-
-        <button
-          @click="handleAdd"
-          :class="['tb-btn', { 'tb-bounce': addBounce }]"
-          title="新增配置"
-        >
-          <Plus :size="16" class="text-[#86868b]" />
-          <span class="tb-label">新建</span>
-        </button>
-
-        <Transition name="slide-fade">
           <button
-            v-show="isDirty || saveState !== 'idle'"
-            @click="handleSave"
-            :disabled="saveState !== 'idle'"
-            :class="[
-              'tb-btn tb-save',
-              {
-                'tb-dirty': isDirty && saveState === 'idle',
-                'tb-success': saveState === 'success',
-                'tb-error': saveState === 'error',
-              },
-            ]"
-            title="保存所有配置"
+            v-for="opt in sortOptions"
+            :key="opt.value"
+            @click="selectSort(opt.value)"
+            class="w-full flex items-center gap-2 px-3 py-2.5 text-sm transition-colors cursor-pointer"
+            :class="opt.value === sortType ? 'bg-[#F596AA]/10 text-[#F596AA]' : 'text-[#f5f5f7] hover:bg-[#2c2c2e]'"
           >
-            <Loader2
-              v-if="saveState === 'saving'"
-              :size="16"
-              class="tb-spin text-[#F596AA]"
-            />
-            <Check
-              v-else-if="saveState === 'success'"
-              :size="16"
-              class="text-emerald-400"
-            />
-            <X
-              v-else-if="saveState === 'error'"
-              :size="16"
-              class="text-red-400"
-            />
-            <Save
-              v-else
-              :size="16"
-              :class="isDirty ? 'text-[#F596AA]' : 'text-[#86868b]'"
-            />
-            <span class="tb-label">保存</span>
+            <Check :size="14" :class="opt.value === sortType ? 'opacity-100' : 'opacity-0'" />
+            {{ opt.label }}
           </button>
-        </Transition>
-      </div>
+        </div>
+      </Transition>
+    </div>
+
+    <!-- Right: Unified Action Island -->
+    <div class="flex items-center gap-1 p-1 bg-[#1c1c1e]/80 backdrop-blur-xl border border-[#38383a] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+      <button
+        @click="handleRefresh"
+        :disabled="refreshing"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        title="刷新"
+      >
+        <RefreshCw :size="14" :class="{ 'tb-spin text-[#F596AA]': refreshing }" />
+        <span class="hidden md:inline">刷新</span>
+      </button>
+
+      <div class="w-px h-3.5 bg-[#38383a] mx-0.5"></div>
+
+      <button
+        v-if="isDirty"
+        @click="$emit('reset')"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors cursor-pointer"
+        title="复位"
+      >
+        <RotateCcw :size="14" />
+        <span class="hidden md:inline">复位</span>
+      </button>
+
+      <button
+        v-show="isDirty || saveState !== 'idle'"
+        @click="handleSave"
+        :disabled="saveState !== 'idle'"
+        :class="[
+          'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
+          saveState === 'idle' ? 'bg-[#F596AA]/10 text-[#F596AA] hover:bg-[#F596AA]/20 shadow-sm shadow-[#F596AA]/10 cursor-pointer' : '',
+          saveState === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : '',
+          saveState === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : '',
+          saveState === 'saving' ? 'bg-[#2c2c2e] text-[#86868b] cursor-not-allowed' : ''
+        ]"
+        title="保存"
+      >
+        <Loader2 v-if="saveState === 'saving'" :size="14" class="tb-spin text-[#F596AA]" />
+        <Check v-else-if="saveState === 'success'" :size="14" />
+        <X v-else-if="saveState === 'error'" :size="14" />
+        <Save v-else :size="14" />
+        <span class="hidden md:inline">保存</span>
+      </button>
+
+      <button
+        @click="handleAdd"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[#F596AA] text-[#121212] hover:bg-[#F596AA]/90 transition-colors shadow-md shadow-[#F596AA]/20 cursor-pointer"
+        title="新建配置"
+      >
+        <span class="inline-block" :class="{ 'tb-bounce': addBounce }"><Plus :size="14" /></span>
+        <span class="hidden md:inline">新建</span>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { RefreshCw, Plus, ArrowDownAZ, Save, Check, X, Loader2 } from 'lucide-vue-next';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { RefreshCw, Plus, ArrowDownAZ, Save, Check, X, Loader2, RotateCcw, Clock, Calendar, ChevronDown } from 'lucide-vue-next';
 
 const props = defineProps<{
   saveState: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
   refreshing: boolean;
   isDirty: boolean;
+  sortType: 'name' | 'updated' | 'created';
 }>();
 
 const emit = defineEmits<{
   refresh: [];
   add: [];
-  sort: [];
+  'update:sortType': [value: 'name' | 'updated' | 'created'];
   save: [];
+  reset: [];
 }>();
 
 const addBounce = ref(false);
 const sortBounce = ref(false);
+
+const sortMenuOpen = ref(false);
+const sortMenuRef = ref<HTMLElement | null>(null);
+
+const sortOptions = [
+  { label: '按更新时间排序', value: 'updated' as const },
+  { label: '按创建时间排序', value: 'created' as const },
+  { label: '按字母顺序排序', value: 'name' as const }
+];
+
+const currentSortLabel = computed(() => {
+  return sortOptions.find(o => o.value === props.sortType)?.label || '按更新时间排序';
+});
+
+function selectSort(val: 'name' | 'updated' | 'created') {
+  if (val === props.sortType) {
+    sortMenuOpen.value = false;
+    return;
+  }
+  sortBounce.value = true;
+  setTimeout(() => { sortBounce.value = false; }, 300);
+  emit('update:sortType', val);
+  sortMenuOpen.value = false;
+}
 
 function handleRefresh() {
   if (props.refreshing) return;
@@ -107,95 +150,22 @@ function handleAdd() {
   emit('add');
 }
 
-function handleSort() {
-  sortBounce.value = true;
-  setTimeout(() => { sortBounce.value = false; }, 300);
-  emit('sort');
-}
-
 function handleSave() {
   if (props.saveState !== 'idle') return;
   emit('save');
 }
+
+function onClickOutside(e: MouseEvent) {
+  if (sortMenuRef.value && !sortMenuRef.value.contains(e.target as Node)) {
+    sortMenuOpen.value = false;
+  }
+}
+
+onMounted(() => document.addEventListener('click', onClickOutside));
+onUnmounted(() => document.removeEventListener('click', onClickOutside));
 </script>
 
 <style scoped>
-.toolbar-wrapper {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  margin-left: -1rem;
-  margin-right: -1rem;
-  padding: 0.75rem 1rem;
-  background: rgba(13, 13, 13, 0.75);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.3s ease;
-}
-
-@media (min-width: 640px) {
-  .toolbar-wrapper {
-    margin-left: -1.5rem;
-    margin-right: -1.5rem;
-    padding: 1rem 1.5rem;
-  }
-}
-
-@media (min-width: 1024px) {
-  .toolbar-wrapper {
-    margin-left: -2rem;
-    margin-right: -2rem;
-    padding: 1rem 2rem;
-  }
-}
-
-.toolbar {
-  display: flex;
-  position: relative;
-  max-width: 80rem;
-  margin: 0 auto;
-}
-
-.tb-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 9999px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #86868b;
-  background: rgba(44, 44, 46, 0.6);
-  border: 1px solid rgba(56, 56, 58, 0.8);
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
-}
-
-.tb-btn:hover:not(:disabled) {
-  color: #f5f5f7;
-  border-color: #86868b;
-}
-
-.tb-btn:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
-.tb-btn:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.tb-label {
-  display: none;
-}
-
-@media (min-width: 640px) {
-  .tb-label {
-    display: inline;
-  }
-}
-
 .tb-spin {
   animation: tb-spin 1s linear infinite;
 }
@@ -211,47 +181,18 @@ function handleSave() {
 
 @keyframes tb-bounce-anim {
   0% { transform: scale(1); }
-  40% { transform: scale(1.15); }
+  40% { transform: scale(1.2); }
   100% { transform: scale(1); }
 }
 
-.tb-save.tb-dirty {
-  border-color: rgba(245, 150, 170, 0.55);
-  background: rgba(245, 150, 170, 0.08);
-  color: #F596AA;
-  animation: tb-pulse 2.2s ease-in-out infinite;
+.menu-enter-active,
+.menu-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.tb-save.tb-dirty:hover {
-  border-color: rgba(245, 150, 170, 0.9);
-  background: rgba(245, 150, 170, 0.14);
-}
-
-@keyframes tb-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 150, 170, 0.35); }
-  50% { box-shadow: 0 0 0 4px rgba(245, 150, 170, 0); }
-}
-
-.tb-success {
-  background: rgba(16, 185, 129, 0.15) !important;
-  border-color: rgba(16, 185, 129, 0.4) !important;
-  color: #34d399 !important;
-}
-
-.tb-error {
-  background: rgba(239, 68, 68, 0.15) !important;
-  border-color: rgba(239, 68, 68, 0.4) !important;
-  color: #f87171 !important;
-}
-
-.slide-fade-enter-active,
-.slide-fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-fade-enter-from,
-.slide-fade-leave-to {
-  transform: translateX(10px);
+.menu-enter-from,
+.menu-leave-to {
   opacity: 0;
+  transform: scale(0.95);
 }
 </style>

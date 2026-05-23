@@ -1,15 +1,16 @@
 <template>
   <div
     :class="[
-      'card glass p-5 cursor-pointer select-none space-y-2 relative group border border-transparent hover:border-[#F596AA]/30 transition-all duration-300',
+      'card glass p-5 cursor-pointer select-none relative group border border-transparent hover:border-[#F596AA]/30 transition-all duration-300',
       menuOpen ? 'z-50' : 'z-10 hover:z-20'
     ]"
     @click="$emit('click')"
   >
     <!-- Background highlight on hover -->
-    <div class="absolute inset-0 rounded-[inherit] bg-[#F596AA]/[0.03] shadow-[inset_0_0_20px_rgba(245,150,170,0.05)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+    <div class="absolute inset-0 rounded-[20px] bg-[#F596AA]/[0.03] shadow-[inset_0_0_20px_rgba(245,150,170,0.05)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
 
-    <div class="relative z-20 flex items-center gap-4">
+    <div class="relative flex flex-col h-full space-y-2">
+      <div class="relative z-20 flex items-center gap-4">
       <div class="flex items-center gap-2 min-w-0 flex-1">
         <span class="card-title text-lg font-semibold text-[#f5f5f7] truncate group-hover:text-[#F596AA] transition-colors">{{ title }}</span>
         <span class="text-[#86868b] font-mono text-sm select-none">.json</span>
@@ -19,9 +20,10 @@
         <slot name="actions"></slot>
         <button
           @click.stop="$emit('edit')"
-          class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#F596AA] transition-colors cursor-pointer"
+          class="flex items-center justify-center gap-1.5 w-8 h-8 md:w-auto md:h-auto md:px-3 md:py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#F596AA] transition-colors cursor-pointer"
+          title="编辑"
         >
-          <Pencil :size="14" />编辑
+          <Pencil :size="14" /><span class="hidden md:inline">编辑</span>
         </button>
 
         <!-- ⋯ Menu -->
@@ -53,12 +55,13 @@
       </div>
     </div>
 
-    <div class="relative z-10 flex items-center gap-2">
-      <span v-if="note" class="text-[#86868b] text-xs truncate">{{ note }}</span>
-      <span v-else class="text-[#48484a] text-xs italic">无备注</span>
-      <div class="flex-1"></div>
-      <span class="bg-[#2c2c2e] text-[#86868b] text-xs rounded-full px-2.5 py-1 flex items-center gap-1 border border-white/5"><ArrowDownToLine :size="12"/> {{ inboundCount }}</span>
-      <span class="bg-[#2c2c2e] text-[#86868b] text-xs rounded-full px-2.5 py-1 flex items-center gap-1 border border-white/5"><ArrowUpFromLine :size="12"/> {{ outboundCount }}</span>
+      <div class="relative z-10 flex items-center gap-2">
+        <span v-if="note" class="text-[#86868b] text-xs truncate">{{ note }}</span>
+        <span v-else class="text-[#48484a] text-xs italic">无备注</span>
+        <div class="flex-1"></div>
+        <span class="bg-[#2c2c2e] text-[#86868b] text-xs rounded-full px-2.5 py-1 flex items-center gap-1 border border-white/5"><ArrowDownToLine :size="12"/> {{ inboundCount }}</span>
+        <span class="bg-[#2c2c2e] text-[#86868b] text-xs rounded-full px-2.5 py-1 flex items-center gap-1 border border-white/5"><ArrowUpFromLine :size="12"/> {{ outboundCount }}</span>
+      </div>
     </div>
   </div>
 </template>

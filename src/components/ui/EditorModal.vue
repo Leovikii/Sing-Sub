@@ -3,10 +3,10 @@
     <Transition name="modal">
       <div
         v-if="isOpen"
-        class="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-6 bg-[#121212]/90 backdrop-blur-lg"
+        class="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-6 bg-[#121212]/80 backdrop-blur-md"
         @click.self="closeModal"
       >
-        <div class="modal-panel w-full md:max-w-4xl md:max-h-[88vh] max-h-[92vh] bg-[#1c1c1e] border border-[#38383a] md:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col overflow-hidden relative">
+        <div class="modal-panel w-full md:max-w-4xl md:max-h-[88vh] max-h-[92vh] bg-[#1c1c1e] border border-[#38383a] md:rounded-2xl rounded-t-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden relative">
           <!-- Header -->
           <div class="flex items-center justify-between gap-3 p-4 border-b border-[#38383a] bg-[#0a0a0a]/60 backdrop-blur-xl shrink-0 z-10">
             <div class="flex items-center gap-2 min-w-0 flex-1">

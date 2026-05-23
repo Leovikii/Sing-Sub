@@ -27,19 +27,19 @@
         :saveState="saveStatus"
         :refreshing="refreshing"
         :isDirty="isDirty"
+        v-model:sortType="currentSort"
         @refresh="handleGlobalRefresh"
         @add="handleGlobalAdd"
         @sort="handleGlobalSort"
         @save="handleGlobalSave"
       />
 
-      <div class="relative overflow-hidden min-h-[500px]">
-        <transition :name="transitionName" mode="out-in">
-          <div v-if="activeTab === 'config'" key="config" class="space-y-6">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <transition name="fade-scale" mode="out-in">
+        <div v-if="activeTab === 'config'" key="config" class="space-y-6">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ProfileEditor
                 v-for="(profile, pIndex) in stateData.profiles"
-                :key="profile.name || pIndex"
+                :key="pIndex"
                 :profile="profile"
                 :index="pIndex"
                 :availableNodes="availableAssets.nodes"
@@ -64,8 +64,7 @@
               @status="(t, m) => showStatus(t, m, 5000)"
             />
           </div>
-        </transition>
-      </div>
+      </transition>
 
       <AppDock v-model:activeTab="activeTab" />
     </template>
@@ -113,6 +112,7 @@ const stateData = ref<StateData | null>(null);
 const fileSha = ref<string | null>(null);
 const loadingData = ref(false);
 const saveStatus = ref<'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error'>('idle');
+const currentSort = ref<'name' | 'created' | 'updated'>('name');
 const statusMessage = ref('');
 const refreshing = ref(false);
 const isInitializing = ref(true);
@@ -126,13 +126,7 @@ const previewLoading = ref(false);
 const availableAssets = ref<{ nodes: any[], templates: string[] }>({ nodes: [], templates: [] });
 
 const activeTab = ref<'config' | 'nodes'>('config');
-const transitionName = ref('slide-left');
 const nodesManagerRef = ref<any>(null);
-
-watch(activeTab, (newVal, oldVal) => {
-  if (oldVal === 'config' && newVal === 'nodes') transitionName.value = 'slide-left';
-  else if (oldVal === 'nodes' && newVal === 'config') transitionName.value = 'slide-right';
-});
 
 const isDirty = ref(false);
 let suppressDirty = false;
@@ -407,28 +401,19 @@ function handleGlobalRefresh() {
 </script>
 
 <style>
-.slide-left-enter-active,
-.slide-left-leave-active,
-.slide-right-enter-active,
-.slide-right-leave-active {
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.fade-scale-enter-active,
+.fade-scale-leave-active {
+  transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1), transform 0.25s cubic-bezier(0.2, 0, 0, 1);
+  will-change: opacity, transform;
 }
 
-.slide-left-enter-from {
+.fade-scale-enter-from {
   opacity: 0;
-  transform: translateX(20px);
-}
-.slide-left-leave-to {
-  opacity: 0;
-  transform: translateX(-20px);
+  transform: scale(0.98) translateY(10px);
 }
 
-.slide-right-enter-from {
+.fade-scale-leave-to {
   opacity: 0;
-  transform: translateX(-20px);
-}
-.slide-right-leave-to {
-  opacity: 0;
-  transform: translateX(20px);
+  transform: scale(0.98);
 }
 </style>

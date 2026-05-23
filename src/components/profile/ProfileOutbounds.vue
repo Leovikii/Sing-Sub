@@ -18,18 +18,15 @@
       :key="group.tag"
       class="bg-[#2c2c2e]/40 border border-[#38383a] rounded-xl p-4 transition-all"
     >
-      <div class="flex items-center gap-4">
+      <div class="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-start gap-y-3 gap-x-4">
         <!-- Left: Tag -->
-        <div class="w-32 shrink-0 font-medium text-[#f5f5f7] truncate" :title="group.tag">
+        <div class="w-auto md:w-32 shrink-0 font-medium text-[#f5f5f7] truncate order-1" :title="group.tag">
           {{ group.tag }}
         </div>
-
-        <!-- Right: Content -->
-        <div class="flex-1 flex items-center justify-end gap-2 min-w-0">
           
           <!-- Edit Mode -->
           <template v-if="isEditing(group.tag)">
-            <div class="flex-1 flex items-center gap-2">
+            <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex items-center gap-2">
               <AppleSelect
                 v-model="getTempFilters(group.tag)[0].action"
                 :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
@@ -42,7 +39,7 @@
               @click="confirmEdit(group.tag)"
               :disabled="!getTempFilters(group.tag)[0].keyword.trim()"
               :class="[
-                'px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0 self-center flex items-center gap-1.5',
+                'order-2 md:order-3 ml-auto md:ml-0 px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0 flex items-center gap-1.5',
                 getTempFilters(group.tag)[0].keyword.trim() 
                   ? 'bg-[#F596AA]/10 text-[#F596AA] hover:bg-[#F596AA]/20 cursor-pointer' 
                   : 'bg-[#2c2c2e] text-[#86868b] border border-[#38383a] cursor-not-allowed'
@@ -56,18 +53,23 @@
           <!-- Confirmed Mode -->
           <template v-else-if="getRule(group.tag)">
             <!-- Micro Cards -->
-            <div class="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+            <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex flex-wrap md:flex-nowrap items-center gap-1.5 md:overflow-x-auto no-scrollbar py-1">
               <template v-if="getMatchedNodes(group.tag).length > 0">
                 <span
-                  v-for="(node, idx) in getMatchedNodes(group.tag).slice(0, 5)"
+                  v-for="(node, idx) in getMatchedNodes(group.tag).slice(0, 10)"
                   :key="idx"
-                  class="inline-flex items-center rounded-full whitespace-nowrap border border-[#F596AA]/20 overflow-hidden"
+                  class="inline-flex items-center gap-1.5 rounded-full whitespace-nowrap bg-[#F596AA]/5 px-2 py-1"
                 >
-                  <span class="px-1.5 py-1 bg-[#38383a] text-[#86868b] text-[10px] font-bold uppercase leading-none">{{ node.type }}</span>
-                  <span class="px-2 py-1 bg-[#F596AA]/10 text-[#F596AA] text-xs font-medium leading-none">{{ node.tag }}</span>
+                  <span 
+                    class="w-4 h-4 flex items-center justify-center rounded-full text-white text-[10px] font-black uppercase"
+                    :class="getProtocolColor(node.type)"
+                  >
+                    {{ node.type.charAt(0) }}
+                  </span>
+                  <span class="text-[#f5f5f7] text-xs font-medium">{{ node.tag }}</span>
                 </span>
-                <span v-if="getMatchedNodes(group.tag).length > 5" class="px-2 py-0.5 rounded-full bg-[#38383a] text-[#86868b] text-xs font-medium whitespace-nowrap">
-                  +{{ getMatchedNodes(group.tag).length - 5 }}
+                <span v-if="getMatchedNodes(group.tag).length > 10" class="px-2 py-0.5 rounded-full bg-[#38383a] text-[#86868b] text-xs font-medium whitespace-nowrap">
+                  +{{ getMatchedNodes(group.tag).length - 10 }}
                 </span>
               </template>
               <span v-else-if="getRule(group.tag)" class="text-sm text-[#86868b] italic">无匹配节点</span>
@@ -77,7 +79,7 @@
             <!-- Actions -->
             <button
               @click="clearRule(group.tag)"
-              class="px-4 py-2 bg-[#2c2c2e] hover:bg-[#ff6961]/10 border border-[#38383a] hover:border-[#ff6961]/30 text-[#86868b] hover:text-[#ff6961] rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0 ml-2"
+              class="order-2 md:order-3 ml-auto md:ml-0 px-3 py-1.5 bg-[#2c2c2e] hover:bg-[#ff6961]/10 border border-[#38383a] hover:border-[#ff6961]/30 text-[#86868b] hover:text-[#ff6961] rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0"
             >
               <Trash2 class="w-4 h-4" />
               <span class="hidden md:inline">删除</span>
@@ -88,14 +90,13 @@
             <!-- Insert Button -->
             <button
               @click="startEdit(group.tag)"
-              class="px-4 py-2 bg-[#2c2c2e] hover:bg-[#38383a] border border-[#38383a] text-[#f5f5f7] rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0"
+              class="order-2 md:order-3 ml-auto md:ml-0 px-4 py-2 bg-[#2c2c2e] hover:bg-[#38383a] border border-[#38383a] text-[#f5f5f7] rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0"
             >
               <Plus class="w-4 h-4" />
               <span class="hidden md:inline">插入节点</span>
             </button>
           </template>
 
-        </div>
       </div>
     </div>
   </div>
@@ -227,6 +228,18 @@ function getMatchedNodes(tag: string): { tag: string; type: string }[] {
   }
   
   return result;
+}
+
+function getProtocolColor(type: string) {
+  if (!type) return 'bg-[#F596AA]';
+  const t = type.toLowerCase();
+  if (t === 'vless' || t === 'vmess') return 'bg-emerald-500';
+  if (t === 'trojan') return 'bg-blue-500';
+  if (t === 'shadowsocks' || t === 'ss') return 'bg-amber-500';
+  if (t === 'anytls') return 'bg-purple-500';
+  if (t === 'hysteria' || t === 'hysteria2') return 'bg-orange-500';
+  if (t === 'wireguard' || t === 'wg') return 'bg-red-500';
+  return 'bg-[#F596AA]';
 }
 
 </script>
