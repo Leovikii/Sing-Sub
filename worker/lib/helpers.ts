@@ -23,6 +23,13 @@ export async function seedRepository(session: RepoSession): Promise<void> {
       const defaultNodes = JSON.stringify({ inbounds: [], outbounds: [] }, null, 2);
       await putFileContent(nodesPath, session, defaultNodes, null, 'Auto-create default nodes.json');
     }
+    
+    const templatesPath = 'sing-sub/templates/template.json';
+    const templatesFile = await fetchFileContent(templatesPath, session);
+    if (!templatesFile) {
+      const defaultTemplate = JSON.stringify({}, null, 2);
+      await putFileContent(templatesPath, session, defaultTemplate, null, 'Auto-create default template.json');
+    }
   } catch {
     // Ignore seed errors to not block the main flow
   }
@@ -38,6 +45,28 @@ export async function rebuildWithWarning(
     if (file) {
       const state = JSON.parse(file.content) as StateData;
       await buildAllProfiles(state.profiles, session, subToken, env);
+    }
+  } catch (e) {
+    return { warning: e instanceof Error ? e.message : 'Build failed' };
+  }
+  return {};
+}
+
+export async function rebuildSingleWithWarning(
+  session: RepoSession,
+  subToken: string,
+  env: Env,
+  profileName: string
+): Promise<{ warning?: string }> {
+  try {
+    const file = await fetchFileContent(RULES_PATH, session);
+    if (file) {
+      const state = JSON.parse(file.content) as StateData;
+      const profile = state.profiles.find(p => p.name === profileName);
+      if (profile) {
+        const config = await import('./builder').then(m => m.buildProfile(profile, session));
+        await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
+      }
     }
   } catch (e) {
     return { warning: e instanceof Error ? e.message : 'Build failed' };

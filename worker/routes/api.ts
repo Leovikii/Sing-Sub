@@ -4,10 +4,10 @@ import {
   createSession, deleteSession, requireAuth,
   sessionCookieHeader, clearSessionCookieHeader,
 } from '../lib/auth';
-import { fetchUser, fetchFileContent, putFileContent, fetchDirectoryContents, type RepoSession } from '../lib/github';
+import { fetchUser, fetchFileContent, putFileContent, deleteFileContent, fetchDirectoryContents, type RepoSession } from '../lib/github';
 import { buildAllProfiles } from '../lib/builder';
 import { jsonResponse, errorResponse } from '../lib/security';
-import { generateHex, toRepoSession, rebuildWithWarning, cleanupSubToken, seedRepository } from '../lib/helpers';
+import { generateHex, toRepoSession, rebuildWithWarning, rebuildSingleWithWarning, cleanupSubToken, seedRepository } from '../lib/helpers';
 
 const RULES_PATH = 'sing-sub/rules.json';
 
@@ -181,6 +181,18 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
 
   const session = toRepoSession(auth.settings);
 
+  let healed = false;
+  const [nodes, templates] = await Promise.all([
+    fetchDirectoryContents('sing-sub/nodes', session),
+    fetchDirectoryContents('sing-sub/templates', session),
+  ]);
+  
+  if (nodes.length === 0 || templates.length === 0) {
+    const { seedRepository } = await import('../lib/helpers');
+    await seedRepository(session);
+    healed = true;
+  }
+
   const file = await fetchFileContent(RULES_PATH, session);
   if (!file) return errorResponse('No rules found', 404);
 
@@ -193,21 +205,32 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
     return jsonResponse({ state, sha: file.sha, warning: msg });
   }
 
-  return jsonResponse({ state, sha: file.sha });
+  const responsePayload: any = { state, sha: file.sha };
+  if (healed) responsePayload.warning = '检测到节点目录缺失，已自动为您重建初始结构';
+  
+  return jsonResponse(responsePayload);
 }
 
 export async function handlePutState(request: Request, env: Env): Promise<Response> {
   const auth = await requireAuth(request, env);
   if (auth instanceof Response) return auth;
 
-  const { state, sha } = await request.json() as { state: StateData; sha: string | null };
+  const { state, sha, profileName } = await request.json() as { state: StateData; sha: string | null; profileName?: string };
 
   const session = toRepoSession(auth.settings);
 
   const content = JSON.stringify(state, null, 2);
   const result = await putFileContent(RULES_PATH, session, content, sha, 'Update rules via Sing-Sub');
 
-  const { warning } = await rebuildWithWarning(session, auth.settings.subToken, env);
+  let warning;
+  if (profileName) {
+    const res = await rebuildSingleWithWarning(session, auth.settings.subToken, env, profileName);
+    warning = res.warning;
+  } else {
+    const res = await rebuildWithWarning(session, auth.settings.subToken, env);
+    warning = res.warning;
+  }
+  
   if (warning) return jsonResponse({ sha: result.sha, warning });
 
   return jsonResponse({ sha: result.sha });
@@ -216,6 +239,17 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
 export async function handlePreview(request: Request, env: Env, name: string): Promise<Response> {
   const auth = await requireAuth(request, env);
   if (auth instanceof Response) return auth;
+
+  if (request.method === 'POST') {
+    const profile = await request.json() as Profile;
+    const session = toRepoSession(auth.settings);
+    try {
+      const config = await import('../lib/builder').then(m => m.buildProfile(profile, session));
+      return jsonResponse({ content: config });
+    } catch (e: any) {
+      return errorResponse(`Preview build failed: ${e.message}`, 400);
+    }
+  }
 
   if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
     return errorResponse('Invalid profile name', 400);
@@ -234,16 +268,94 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const session = toRepoSession(auth.settings);
 
   // Fetch both directories concurrently
-  const [nodes, templates] = await Promise.all([
+  let [nodes, templates] = await Promise.all([
     fetchDirectoryContents('sing-sub/nodes', session),
     fetchDirectoryContents('sing-sub/templates', session),
   ]);
 
+  let healed = false;
+  if (nodes.length === 0 || templates.length === 0) {
+    const { seedRepository } = await import('../lib/helpers');
+    await seedRepository(session);
+    healed = true;
+    
+    // Re-fetch after healing
+    [nodes, templates] = await Promise.all([
+      fetchDirectoryContents('sing-sub/nodes', session),
+      fetchDirectoryContents('sing-sub/templates', session),
+    ]);
+  }
+
   // Filter to only include JSON files
   const filterJson = (paths: string[]) => paths.filter(p => p.toLowerCase().endsWith('.json'));
 
+  const jsonNodes = filterJson(nodes);
+  
+  // Parse nodes for metadata
+  const nodesWithMeta = await Promise.all(jsonNodes.map(async path => {
+    try {
+      const file = await fetchFileContent(path, session);
+      if (file && file.content) {
+        const data = JSON.parse(file.content);
+        return {
+          path,
+          inboundsCount: Array.isArray(data.inbounds) ? data.inbounds.length : 0,
+          outboundsCount: Array.isArray(data.outbounds) ? data.outbounds.length : 0,
+          tags: Array.isArray(data.outbounds) ? data.outbounds.map((o: any) => o.tag).filter(Boolean).slice(0, 5) : []
+        };
+      }
+    } catch { /* ignore parse errors */ }
+    return { path, inboundsCount: 0, outboundsCount: 0, tags: [] };
+  }));
+
   return jsonResponse({
-    nodes: filterJson(nodes),
+    nodes: nodesWithMeta,
     templates: filterJson(templates),
+    warning: healed ? '检测到节点目录缺失，已自动为您重建初始结构' : undefined
   });
+}
+
+export async function handleGetFile(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  const url = new URL(request.url);
+  const path = url.searchParams.get('path');
+  if (!path) return errorResponse('Missing path parameter', 400);
+
+  const session = toRepoSession(auth.settings);
+  const file = await fetchFileContent(path, session);
+  if (!file) return errorResponse('File not found', 404);
+
+  return jsonResponse({ content: file.content, sha: file.sha });
+}
+
+export async function handlePutFile(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  const { path, content, sha, message } = await request.json() as { path: string; content: string; sha?: string; message?: string };
+  if (!path || content === undefined) return errorResponse('Missing path or content', 400);
+
+  const session = toRepoSession(auth.settings);
+  await putFileContent(path, session, content, sha || null, message || `Update ${path}`);
+  return jsonResponse({ success: true });
+}
+
+export async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  const url = new URL(request.url);
+  const path = url.searchParams.get('path');
+  if (!path) return errorResponse('Missing path parameter', 400);
+
+  const session = toRepoSession(auth.settings);
+  
+  // Need to get SHA first to delete
+  const file = await fetchFileContent(path, session);
+  if (!file) return errorResponse('File not found', 404);
+
+  await deleteFileContent(path, session, file.sha, `Delete ${path}`);
+  return jsonResponse({ success: true });
 }

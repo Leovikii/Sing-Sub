@@ -26,7 +26,15 @@
             <div class="flex items-center gap-2 shrink-0">
               <slot name="header-actions"></slot>
 
-              <!-- Default Save & Close -->
+              <button
+                v-if="showSave && isDirty"
+                @click="$emit('reset')"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors bg-[#2c2c2e] text-[#86868b] border border-[#38383a] hover:text-[#f5f5f7] cursor-pointer"
+                title="复位"
+              >
+                <RotateCcw :size="14" /> <span class="hidden md:inline">复位</span>
+              </button>
+
               <button
                 v-if="showSave"
                 @click="$emit('save')"
@@ -38,7 +46,7 @@
                 title="保存"
               >
                 <Loader2 v-if="isSaving" :size="14" class="animate-spin" />
-                <Save v-else :size="14" /> {{ saveText }}
+                <Save v-else :size="14" /> <span class="hidden md:inline">{{ saveText }}</span>
               </button>
 
               <button
@@ -62,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { X, Save, Loader2 } from 'lucide-vue-next';
+import { X, Save, Loader2, RotateCcw } from 'lucide-vue-next';
 
 defineProps<{
   isOpen: boolean;
@@ -79,11 +87,11 @@ const emit = defineEmits<{
   (e: 'update:isOpen', value: boolean): void;
   (e: 'update:title', value: string): void;
   (e: 'save'): void;
+  (e: 'reset'): void;
   (e: 'close'): void;
 }>();
 
 function closeModal() {
-  emit('update:isOpen', false);
   emit('close');
 }
 </script>

@@ -18,12 +18,19 @@ function parseKeywords(str: string): string[] {
   return str ? str.split(',').map(k => k.trim()).filter(Boolean) : [];
 }
 
-function matchesFilter(tag: string, include: string, exclude: string): boolean {
-  const incKws = parseKeywords(include);
-  const excKws = parseKeywords(exclude);
-  const isIncluded = incKws.length === 0 || incKws.some(kw => tag.includes(kw));
-  const isExcluded = excKws.length > 0 && excKws.some(kw => tag.includes(kw));
-  return isIncluded && !isExcluded;
+function applyFilters<T extends { tag?: string }>(nodes: T[], filters: { action: 'include' | 'exclude'; keyword: string }[]): T[] {
+  let result = [...nodes];
+  for (const filter of filters) {
+    if (!filter || !filter.action) continue;
+    const kws = parseKeywords(filter.keyword);
+    if (kws.length === 0) continue;
+    if (filter.action === 'include') {
+      result = result.filter(n => n.tag && kws.some(kw => n.tag!.includes(kw)));
+    } else if (filter.action === 'exclude') {
+      result = result.filter(n => n.tag && !kws.some(kw => n.tag!.includes(kw)));
+    }
+  }
+  return result;
 }
 
 function normalizeArray<T>(data: unknown, key: string): T[] {
@@ -67,20 +74,22 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
 
   if (nodesData) {
     const inboundsArray = normalizeArray<Inbound>(nodesData, 'inbounds');
-    let filtered: Inbound[] = [];
-
+    let templateInbounds = Array.isArray(template.inbounds) ? template.inbounds : [];
     if (profile.inboundRules && profile.inboundRules.length > 0) {
-      filtered = inboundsArray.filter(inbound => {
-        if (!inbound.tag) return false;
-        return profile.inboundRules.some(rule =>
-          matchesFilter(inbound.tag!, rule.include, rule.exclude)
-        );
+      profile.inboundRules.forEach(rule => {
+        if (!rule.tag || !rule.filters) return;
+        const matched = applyFilters(inboundsArray, rule.filters);
+        if (matched.length > 0) {
+          const idx = templateInbounds.findIndex((i: any) => i.tag === rule.tag);
+          if (idx !== -1) {
+            templateInbounds.splice(idx + 1, 0, ...matched);
+          } else {
+            templateInbounds.push(...matched);
+          }
+        }
       });
-    }
-
-    if (filtered.length > 0) {
-      const existingInbounds = Array.isArray(template.inbounds) ? template.inbounds : [];
-      template.inbounds = [...existingInbounds, ...filtered];
+      // Remove duplicates by JSON stringification or just Set if exact object refs
+      template.inbounds = Array.from(new Set(templateInbounds));
     }
   }
 
@@ -96,9 +105,8 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
 
       templateOutbounds.forEach(outbound => {
         const rule = profile.rules.find(r => r.group === outbound.tag);
-        if (rule && Array.isArray(outbound.outbounds)) {
-          const matched = outboundsArray
-            .filter(n => n.tag && matchesFilter(n.tag, rule.include, rule.exclude));
+        if (rule && Array.isArray(outbound.outbounds) && rule.filters) {
+          const matched = applyFilters(outboundsArray, rule.filters);
           outbound.outbounds.push(...matched.map(n => n.tag!));
           matched.forEach(n => matchedOutbounds.add(n));
         }

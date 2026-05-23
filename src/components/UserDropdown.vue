@@ -7,7 +7,7 @@
     leave-from-class="opacity-100 translate-y-0 scale-100"
     leave-to-class="opacity-0 -translate-y-2 scale-95"
   >
-    <div v-if="visible" ref="panelRef" class="absolute right-0 top-full mt-2 w-80 z-50 rounded-2xl border border-[#38383a] shadow-2xl glass p-5 space-y-4">
+    <div v-if="visible" ref="panelRef" class="absolute right-0 top-full mt-2 w-80 z-[60] rounded-2xl border border-[#38383a] shadow-2xl glass p-5 space-y-4">
       <div class="flex items-center gap-3">
         <img v-if="user" :src="user.avatar_url" class="w-12 h-12 rounded-full border-2 border-[#38383a]" />
         <div>
@@ -49,8 +49,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { Shuffle } from 'lucide-vue-next';
-import AppleInput from './AppleInput.vue';
-import AppleButton from './AppleButton.vue';
+import AppleInput from './ui/AppleInput.vue';
+import AppleButton from './ui/AppleButton.vue';
 import type { UserSettings, GithubUser } from '../types';
 
 const props = defineProps<{

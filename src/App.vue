@@ -57,10 +57,11 @@
             </div>
           </div>
           <div v-else-if="activeTab === 'nodes'" key="nodes" class="space-y-6">
-            <NodesManager 
+            <NodesManager
               ref="nodesManagerRef"
-              :nodes="availableAssets.nodes" 
-              @refresh="refreshAssets" 
+              :nodes="availableAssets.nodes"
+              @refresh="refreshAssets"
+              @status="(t, m) => showStatus(t, m, 5000)"
             />
           </div>
         </transition>
@@ -93,14 +94,14 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, nextTick } from 'vue';
 import { Loader2 } from 'lucide-vue-next';
-import AppHeader from './components/AppHeader.vue';
+import AppHeader from './components/layout/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
 import ProfileEditor from './components/ProfileEditor.vue';
-import PreviewModal from './components/PreviewModal.vue';
-import ConfirmModal from './components/ConfirmModal.vue';
-import TopToolbar from './components/TopToolbar.vue';
-import StatusToast from './components/StatusToast.vue';
-import AppDock from './components/AppDock.vue';
+import PreviewModal from './components/ui/PreviewModal.vue';
+import ConfirmModal from './components/ui/ConfirmModal.vue';
+import TopToolbar from './components/layout/TopToolbar.vue';
+import StatusToast from './components/ui/StatusToast.vue';
+import AppDock from './components/layout/AppDock.vue';
 import NodesManager from './components/NodesManager.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';

@@ -99,9 +99,13 @@ export function useApi() {
     return apiCall('/api/assets');
   }
 
+  async function getFile(path: string): Promise<{ content: string; sha: string }> {
+    return apiCall(`/api/file?path=${encodeURIComponent(path)}`);
+  }
+
   return {
     user, settings,
     login, logout, getSettings, saveSettings, deleteSettings,
-    getState, saveState, rebuild, getPreview, postPreview, getAssets,
+    getState, saveState, rebuild, getPreview, postPreview, getAssets, getFile,
   };
 }

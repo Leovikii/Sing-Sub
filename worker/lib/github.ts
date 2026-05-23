@@ -104,3 +104,21 @@ export async function putFileContent(
   const result = await res.json() as { content: { sha: string } };
   return { sha: result.content.sha };
 }
+
+export async function deleteFileContent(
+  filePath: string,
+  session: RepoSession,
+  sha: string,
+  message: string
+): Promise<void> {
+  const body = { message, sha };
+  const res = await repoFetch(`contents/${filePath}`, session, {
+    method: 'DELETE',
+    body,
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`GitHub DELETE failed (${res.status}): ${err}`);
+  }
+}

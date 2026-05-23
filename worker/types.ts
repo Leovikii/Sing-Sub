@@ -21,8 +21,8 @@ export interface Profile {
   note?: string;
   templateUrl: string;
   nodesPath: string;
-  rules: { group: string; include: string; exclude: string }[];
-  inboundRules: { include: string; exclude: string }[];
+  rules: { group: string; filters: { action: 'include' | 'exclude'; keyword: string }[] }[];
+  inboundRules: { tag: string; filters: { action: 'include' | 'exclude'; keyword: string }[] }[];
 }
 
 export interface StateData {

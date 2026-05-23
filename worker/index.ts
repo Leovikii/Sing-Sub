@@ -1,7 +1,8 @@
 import type { Env } from './types';
 import {
   handleLogin, handleLogout, handleGetSettings, handlePutSettings,
-  handleDeleteSettings, handleGetState, handlePutState, handleRebuild, handlePreview, handleGetAssets
+  handleDeleteSettings, handleGetState, handlePutState, handleRebuild, handlePreview, handleGetAssets,
+  handleGetFile, handlePutFile, handleDeleteFile
 } from './routes/api';
 import { handleSubscription } from './routes/sub';
 import { addSecurityHeaders, errorResponse } from './lib/security';
@@ -34,8 +35,16 @@ export default {
       } else if (path.startsWith('/api/preview/') && method === 'GET') {
         const name = path.slice(13).replace(/\.json$/, '');
         response = await handlePreview(request, env, name);
+      } else if (path === '/api/preview' && method === 'POST') {
+        response = await handlePreview(request, env, '');
       } else if (path === '/api/assets' && method === 'GET') {
         response = await handleGetAssets(request, env);
+      } else if (path === '/api/file' && method === 'GET') {
+        response = await handleGetFile(request, env);
+      } else if (path === '/api/file' && method === 'PUT') {
+        response = await handlePutFile(request, env);
+      } else if (path === '/api/file' && method === 'DELETE') {
+        response = await handleDeleteFile(request, env);
       } else if (path.startsWith('/sub/') && path.endsWith('.json') && method === 'GET') {
         const parts = path.slice(5, -5).split('/');
         if (parts.length === 2) {

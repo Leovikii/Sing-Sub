@@ -31,37 +31,44 @@
       extension=".json"
       :isDirty="isEditorDirty || isNameDirty"
       :isSaving="isSaving"
-      :showSave="true"
+      :showSave="isEditorDirty || isNameDirty"
       saveText="保存"
       @save="saveNodeCode"
+      @reset="resetNodeCode"
       @close="closeEditor"
     >
-      <!-- Editor Error -->
-      <div v-if="editorError" class="bg-[#ff6961]/10 text-[#ff6961] p-3 text-sm flex items-center gap-2 border-b border-[#ff6961]/20">
-        <AlertCircle :size="16" /> {{ editorError }}
-      </div>
-
       <!-- Editor Body -->
-      <div class="flex-1 relative bg-[#0d0d0d]">
+      <div class="flex-1 relative bg-[#0d0d0d] min-h-[60vh] flex flex-col">
         <div v-if="isLoadingNode" class="absolute inset-0 flex flex-col justify-center items-center z-10 bg-[#0d0d0d]/80 backdrop-blur-sm">
           <Loader2 class="w-8 h-8 text-[#F596AA] animate-spin mb-4" />
           <span class="text-[#86868b]">加载文件内容中...</span>
         </div>
         <textarea
           v-model="editorContent"
-          class="absolute inset-0 w-full h-full p-6 bg-transparent text-[#a1a1aa] font-mono text-sm leading-relaxed resize-none outline-none selection:bg-[#F596AA]/30 selection:text-[#f5f5f7]"
+          class="flex-1 w-full h-full p-6 bg-transparent text-[#a1a1aa] font-mono text-sm leading-relaxed resize-none outline-none selection:bg-[#F596AA]/30 selection:text-[#f5f5f7]"
           spellcheck="false"
         ></textarea>
       </div>
     </EditorModal>
+
+    <!-- Confirm Modal -->
+    <ConfirmModal
+      :visible="showConfirm"
+      :title="confirmTitle"
+      :message="confirmMessage"
+      :confirmText="confirmBtnText"
+      @confirm="executeConfirm"
+      @cancel="showConfirm = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Loader2, AlertCircle, Trash2 } from 'lucide-vue-next';
-import FileCard from './FileCard.vue';
-import EditorModal from './EditorModal.vue';
+import { Loader2, Trash2 } from 'lucide-vue-next';
+import FileCard from './ui/FileCard.vue';
+import EditorModal from './ui/EditorModal.vue';
+import ConfirmModal from './ui/ConfirmModal.vue';
 
 const props = defineProps<{
   nodes: any[];
@@ -69,18 +76,29 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'refresh': [];
+  'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
 }>();
 
 const editingNode = ref<any | null>(null);
 const editorContent = ref('');
 const originalContent = ref('');
-const editorError = ref('');
 const isLoadingNode = ref(false);
 const isSaving = ref(false);
 const fileSha = ref<string | null>(null);
 
 const isEditorDirty = ref(false);
 const localNodeName = ref('');
+
+const showConfirm = ref(false);
+const confirmTitle = ref('');
+const confirmMessage = ref('');
+const confirmBtnText = ref('');
+let confirmAction: (() => void) | null = null;
+
+function executeConfirm() {
+  if (confirmAction) confirmAction();
+  showConfirm.value = false;
+}
 
 const isNameDirty = computed(() => {
   if (!editingNode.value) return false;
@@ -94,9 +112,11 @@ const nodeMenuItems = [
 
 function handleNodeAction(action: string, node: any) {
   if (action === 'remove') {
-    if (confirm(`确定要删除 ${getBasename(node.path)} 吗？此操作无法撤销。`)) {
-      deleteNodeFile(node.path);
-    }
+    confirmTitle.value = '删除确认';
+    confirmMessage.value = `确定要删除 ${getBasename(node.path)} 吗？此操作无法撤销。`;
+    confirmBtnText.value = '删除';
+    confirmAction = () => deleteNodeFile(node.path);
+    showConfirm.value = true;
   }
 }
 
@@ -105,10 +125,11 @@ async function deleteNodeFile(path: string) {
     await fetch(`/api/file?path=${encodeURIComponent(path)}`, {
       method: 'DELETE',
     });
+    emit('status', 'success', `成功删除文件 ${getBasename(path)}`);
     emit('refresh');
   } catch (e: any) {
     console.error(e);
-    alert('删除失败: ' + e.message);
+    emit('status', 'error', '删除失败: ' + e.message);
   }
 }
 
@@ -118,22 +139,12 @@ function getBasename(path: string) {
 
 watch(editorContent, (newVal) => {
   isEditorDirty.value = newVal !== originalContent.value;
-  // Clear error when user types to try fixing json
-  if (editorError.value) {
-    try {
-      JSON.parse(newVal);
-      editorError.value = '';
-    } catch {
-      // still invalid
-    }
-  }
 });
 
 async function editNode(node: any) {
   editingNode.value = node;
   localNodeName.value = getBasename(node.path).replace(/\.json$/, '');
   isLoadingNode.value = true;
-  editorError.value = '';
   editorContent.value = '';
   originalContent.value = '';
   isEditorDirty.value = false;
@@ -146,17 +157,33 @@ async function editNode(node: any) {
     editorContent.value = data.content;
     fileSha.value = data.sha;
   } catch (e: any) {
-    editorError.value = '加载失败: ' + e.message;
+    emit('status', 'error', '加载失败: ' + e.message);
   } finally {
     isLoadingNode.value = false;
   }
 }
 
 function closeEditor() {
-  if (isEditorDirty.value) {
-    if (!confirm('有未保存的修改，确定放弃并关闭吗？')) return;
+  if (isEditorDirty.value || isNameDirty.value) {
+    confirmTitle.value = '未保存的修改';
+    confirmMessage.value = '有未保存的修改，确定放弃并关闭吗？';
+    confirmBtnText.value = '确定关闭';
+    confirmAction = () => {
+      isEditorDirty.value = false;
+      editingNode.value = null;
+    };
+    showConfirm.value = true;
+    return;
   }
   editingNode.value = null;
+}
+
+function resetNodeCode() {
+  editorContent.value = originalContent.value;
+  if (editingNode.value && !editingNode.value.isNew) {
+    localNodeName.value = getBasename(editingNode.value.path).replace(/\.json$/, '');
+  }
+  isEditorDirty.value = false;
 }
 
 async function saveNodeCode() {
@@ -164,12 +191,11 @@ async function saveNodeCode() {
     // Validate JSON
     JSON.parse(editorContent.value);
   } catch (e: any) {
-    editorError.value = 'JSON 语法错误: ' + e.message;
+    emit('status', 'error', 'JSON 语法错误: ' + e.message);
     return;
   }
 
   isSaving.value = true;
-  editorError.value = '';
 
   try {
     const newPath = `sing-sub/nodes/${localNodeName.value}.json`;
@@ -199,12 +225,12 @@ async function saveNodeCode() {
         });
       } catch (deleteErr) {
         console.error('Failed to delete old file after rename:', deleteErr);
-        // It's a non-fatal error for the save, but we should probably warn
       }
     }
     
     isEditorDirty.value = false;
     originalContent.value = editorContent.value;
+    emit('status', 'success', '保存成功');
     
     // Refresh the nodes list to update counts
     emit('refresh');
@@ -212,7 +238,7 @@ async function saveNodeCode() {
     // Close editor on success
     editingNode.value = null;
   } catch (e: any) {
-    editorError.value = '保存失败: ' + e.message;
+    emit('status', 'error', '保存失败: ' + e.message);
   } finally {
     isSaving.value = false;
   }
@@ -226,7 +252,6 @@ function createNode() {
   fileSha.value = null;
   isEditorDirty.value = true;
   isLoadingNode.value = false;
-  editorError.value = '';
 }
 
 defineExpose({ createNode });

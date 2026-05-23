@@ -30,8 +30,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import AppleInput from './AppleInput.vue';
-import AppleButton from './AppleButton.vue';
+import AppleInput from './ui/AppleInput.vue';
+import AppleButton from './ui/AppleButton.vue';
 import type { SetupData } from '../types';
 
 const props = defineProps<{

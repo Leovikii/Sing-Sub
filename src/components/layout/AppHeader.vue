@@ -35,8 +35,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import UserDropdown from './UserDropdown.vue';
-import type { GithubUser, UserSettings } from '../types';
+import UserDropdown from '../UserDropdown.vue';
+import type { GithubUser, UserSettings } from '../../types';
 
 defineProps<{
   user: GithubUser | null;

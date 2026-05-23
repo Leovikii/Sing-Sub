@@ -1,18 +1,22 @@
 <template>
   <div
-    class="card glass p-5 cursor-pointer select-none space-y-2 relative overflow-hidden group border border-transparent hover:border-[#F596AA]/30 transition-all duration-300"
+    :class="[
+      'card glass p-5 cursor-pointer select-none space-y-2 relative group border border-transparent hover:border-[#F596AA]/30 transition-all duration-300',
+      menuOpen ? 'z-50' : 'z-10 hover:z-20'
+    ]"
     @click="$emit('click')"
   >
     <!-- Background highlight on hover -->
-    <div class="absolute inset-0 bg-gradient-to-br from-[#F596AA]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+    <div class="absolute inset-0 rounded-[inherit] bg-[#F596AA]/[0.03] shadow-[inset_0_0_20px_rgba(245,150,170,0.05)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
 
-    <div class="relative z-10 flex items-center gap-4">
+    <div class="relative z-20 flex items-center gap-4">
       <div class="flex items-center gap-2 min-w-0 flex-1">
         <span class="card-title text-lg font-semibold text-[#f5f5f7] truncate group-hover:text-[#F596AA] transition-colors">{{ title }}</span>
         <span class="text-[#86868b] font-mono text-sm select-none">.json</span>
       </div>
 
       <div class="flex items-center gap-2 shrink-0">
+        <slot name="actions"></slot>
         <button
           @click.stop="$emit('edit')"
           class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#F596AA] transition-colors cursor-pointer"
