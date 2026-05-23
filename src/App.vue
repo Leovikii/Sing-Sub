@@ -27,32 +27,46 @@
         :saveState="saveStatus"
         :refreshing="refreshing"
         :isDirty="isDirty"
-        @refresh="handleRefresh"
-        @add="addProfile"
-        @sort="sortProfiles"
-        @save="handleSave"
+        @refresh="handleGlobalRefresh"
+        @add="handleGlobalAdd"
+        @sort="handleGlobalSort"
+        @save="handleGlobalSave"
       />
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProfileEditor
-          v-for="(profile, pIndex) in stateData.profiles"
-          :key="pIndex"
-          :profile="profile"
-          :index="pIndex"
-          :availableNodes="availableAssets.nodes"
-          :availableTemplates="availableAssets.templates"
-          :copyStatus="!!copyStatus[pIndex]"
-          :expanded="expandedIndex === pIndex"
-          :saveState="saveStatus"
-          :isDirty="isDirty"
-          @update:expanded="toggleExpand(pIndex)"
-          @preview="handlePreview"
-          @copyLink="handleCopyLink"
-          @remove="removeProfile"
-          @duplicate="duplicateProfile"
-          @save="handleSave"
-        />
+      <div class="relative overflow-hidden min-h-[500px]">
+        <transition :name="transitionName" mode="out-in">
+          <div v-if="activeTab === 'config'" key="config" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ProfileEditor
+                v-for="(profile, pIndex) in stateData.profiles"
+                :key="profile.name || pIndex"
+                :profile="profile"
+                :index="pIndex"
+                :availableNodes="availableAssets.nodes"
+                :availableTemplates="availableAssets.templates"
+                :copyStatus="!!copyStatus[pIndex]"
+                :expanded="expandedIndex === pIndex"
+                :globalSaveState="saveStatus"
+                @update:expanded="toggleExpand(pIndex)"
+                @preview="handlePreview"
+                @copyLink="handleCopyLink"
+                @remove="removeProfile"
+                @duplicate="duplicateProfile"
+                @save="handleSaveProfile"
+              />
+            </div>
+          </div>
+          <div v-else-if="activeTab === 'nodes'" key="nodes" class="space-y-6">
+            <NodesManager 
+              ref="nodesManagerRef"
+              :nodes="availableAssets.nodes" 
+              @refresh="refreshAssets" 
+            />
+          </div>
+        </transition>
       </div>
+
+      <AppDock v-model:activeTab="activeTab" />
     </template>
 
     <PreviewModal
@@ -86,10 +100,12 @@ import PreviewModal from './components/PreviewModal.vue';
 import ConfirmModal from './components/ConfirmModal.vue';
 import TopToolbar from './components/TopToolbar.vue';
 import StatusToast from './components/StatusToast.vue';
+import AppDock from './components/AppDock.vue';
+import NodesManager from './components/NodesManager.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v2.2.2';
+const APP_VERSION = 'v3.0.0-beta';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
@@ -106,7 +122,16 @@ const expandedIndex = ref<number | null>(null);
 const previewTitle = ref('');
 const previewContent = ref('');
 const previewLoading = ref(false);
-const availableAssets = ref<{ nodes: string[], templates: string[] }>({ nodes: [], templates: [] });
+const availableAssets = ref<{ nodes: any[], templates: string[] }>({ nodes: [], templates: [] });
+
+const activeTab = ref<'config' | 'nodes'>('config');
+const transitionName = ref('slide-left');
+const nodesManagerRef = ref<any>(null);
+
+watch(activeTab, (newVal, oldVal) => {
+  if (oldVal === 'config' && newVal === 'nodes') transitionName.value = 'slide-left';
+  else if (oldVal === 'nodes' && newVal === 'config') transitionName.value = 'slide-right';
+});
 
 const isDirty = ref(false);
 let suppressDirty = false;
@@ -138,11 +163,11 @@ function setStateData(state: StateData) {
   });
 }
 
-watch(stateData, () => {
+watch(() => stateData.value?.profiles.map(p => p.name).join(','), () => {
   if (suppressDirty) return;
   if (!stateData.value) return;
   isDirty.value = true;
-}, { deep: true });
+});
 
 function normalizeProfiles(state: StateData): StateData {
   state.profiles = state.profiles.map((p: any) => ({
@@ -241,6 +266,24 @@ async function handleSave() {
   }
 }
 
+async function handleSaveProfile(profileName: string) {
+  if (!stateData.value) return;
+  saveStatus.value = 'saving';
+  statusMessage.value = '';
+  try {
+    const data = await saveState(stateData.value, fileSha.value, profileName);
+    fileSha.value = data.sha;
+    isDirty.value = false;
+    if (data.warning) {
+      showStatus('warning', '配置已保存，但构建失败: ' + data.warning, 5000);
+    } else {
+      showStatus('success', '局部保存成功，配置已更新', 3000);
+    }
+  } catch (e: any) {
+    showStatus('error', e.message || '保存失败', 5000);
+  }
+}
+
 async function handleRefresh() {
   if (refreshing.value) return;
   refreshing.value = true;
@@ -268,7 +311,8 @@ async function handlePreview(name: string) {
   showPreviewModal.value = true;
   previewLoading.value = true;
   try {
-    previewContent.value = await getPreview(name);
+    const data = await getPreview(name);
+    previewContent.value = data.content;
   } catch {
     previewContent.value = '构建预览失败，请检查配置。';
   } finally {
@@ -276,14 +320,17 @@ async function handlePreview(name: string) {
   }
 }
 
-async function handleCopyLink(name: string, index: number) {
+async function handleCopyLink(name: string) {
   const token = settings.value?.subToken;
   if (!token) return;
   const url = `${window.location.origin}/sub/${token}/${name}.json`;
   try {
     await navigator.clipboard.writeText(url);
-    copyStatus.value[index] = true;
-    setTimeout(() => { copyStatus.value[index] = false; }, 2000);
+    const idx = stateData.value!.profiles.findIndex(p => p.name === name);
+    if (idx >= 0) {
+      copyStatus.value[idx] = true;
+      setTimeout(() => { copyStatus.value[idx] = false; }, 2000);
+    }
   } catch {
     showStatus('error', '复制失败', 3000);
   }
@@ -305,10 +352,10 @@ function removeProfile(index: number) {
   stateData.value.profiles.splice(index, 1);
 }
 
-function duplicateProfile(index: number) {
+function duplicateProfile(source: Profile) {
   if (!stateData.value) return;
-  const source = stateData.value.profiles[index];
   if (!source) return;
+  const index = stateData.value.profiles.findIndex(p => p.name === source.name);
   const copy: Profile = JSON.parse(JSON.stringify(source));
   copy.name = `${source.name || 'untitled'}_copy`;
   stateData.value.profiles.splice(index + 1, 0, copy);
@@ -332,4 +379,55 @@ function sortProfiles() {
 function toggleExpand(index: number) {
   expandedIndex.value = expandedIndex.value === index ? null : index;
 }
+
+async function handleGlobalAdd() {
+  if (activeTab.value === 'config') {
+    addProfile();
+  } else if (activeTab.value === 'nodes') {
+    if (nodesManagerRef.value) {
+      nodesManagerRef.value.createNode();
+    }
+  }
+}
+
+function handleGlobalSort() {
+  if (activeTab.value === 'config') sortProfiles();
+  // Nodes sort if implemented
+}
+
+function handleGlobalSave() {
+  if (activeTab.value === 'config') handleSave();
+}
+
+function handleGlobalRefresh() {
+  handleRefresh();
+  refreshAssets();
+}
 </script>
+
+<style>
+.slide-left-enter-active,
+.slide-left-leave-active,
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slide-left-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+.slide-left-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.slide-right-enter-from {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+.slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+</style>

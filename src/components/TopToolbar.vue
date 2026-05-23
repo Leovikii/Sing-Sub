@@ -33,41 +33,44 @@
           <span class="tb-label">新建</span>
         </button>
 
-        <button
-          @click="handleSave"
-          :disabled="saveState !== 'idle'"
-          :class="[
-            'tb-btn tb-save',
-            {
-              'tb-dirty': isDirty && saveState === 'idle',
-              'tb-success': saveState === 'success',
-              'tb-error': saveState === 'error',
-            },
-          ]"
-          title="保存所有配置"
-        >
-          <Loader2
-            v-if="saveState === 'saving'"
-            :size="16"
-            class="tb-spin text-[#F596AA]"
-          />
-          <Check
-            v-else-if="saveState === 'success'"
-            :size="16"
-            class="text-emerald-400"
-          />
-          <X
-            v-else-if="saveState === 'error'"
-            :size="16"
-            class="text-red-400"
-          />
-          <Save
-            v-else
-            :size="16"
-            :class="isDirty ? 'text-[#F596AA]' : 'text-[#86868b]'"
-          />
-          <span class="tb-label">保存</span>
-        </button>
+        <Transition name="slide-fade">
+          <button
+            v-show="isDirty || saveState !== 'idle'"
+            @click="handleSave"
+            :disabled="saveState !== 'idle'"
+            :class="[
+              'tb-btn tb-save',
+              {
+                'tb-dirty': isDirty && saveState === 'idle',
+                'tb-success': saveState === 'success',
+                'tb-error': saveState === 'error',
+              },
+            ]"
+            title="保存所有配置"
+          >
+            <Loader2
+              v-if="saveState === 'saving'"
+              :size="16"
+              class="tb-spin text-[#F596AA]"
+            />
+            <Check
+              v-else-if="saveState === 'success'"
+              :size="16"
+              class="text-emerald-400"
+            />
+            <X
+              v-else-if="saveState === 'error'"
+              :size="16"
+              class="text-red-400"
+            />
+            <Save
+              v-else
+              :size="16"
+              :class="isDirty ? 'text-[#F596AA]' : 'text-[#86868b]'"
+            />
+            <span class="tb-label">保存</span>
+          </button>
+        </Transition>
       </div>
     </div>
   </div>
@@ -120,31 +123,38 @@ function handleSave() {
 .toolbar-wrapper {
   position: sticky;
   top: 0;
-  z-index: 30;
-  padding-top: 4px;
-  padding-bottom: 8px;
-  background: linear-gradient(to bottom, rgba(18, 18, 18, 0.95) 0%, rgba(18, 18, 18, 0.7) 80%, transparent 100%);
+  z-index: 50;
+  margin-left: -1rem;
+  margin-right: -1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(13, 13, 13, 0.75);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+}
+
+@media (min-width: 640px) {
+  .toolbar-wrapper {
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    padding: 1rem 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .toolbar-wrapper {
+    margin-left: -2rem;
+    margin-right: -2rem;
+    padding: 1rem 2rem;
+  }
 }
 
 .toolbar {
-  background: rgba(30, 30, 32, 0.78);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  display: flex;
   position: relative;
-}
-
-.toolbar::after {
-  content: '';
-  position: absolute;
-  left: 12%;
-  right: 12%;
-  bottom: -10px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(245, 150, 170, 0.45), transparent);
-  pointer-events: none;
+  max-width: 80rem;
+  margin: 0 auto;
 }
 
 .tb-btn {
@@ -232,5 +242,16 @@ function handleSave() {
   background: rgba(239, 68, 68, 0.15) !important;
   border-color: rgba(239, 68, 68, 0.4) !important;
   color: #f87171 !important;
+}
+
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateX(10px);
+  opacity: 0;
 }
 </style>

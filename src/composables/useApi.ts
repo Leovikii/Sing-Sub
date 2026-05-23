@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import type { UserSettings, SetupData, StateData, GithubUser } from '../types';
+import type { UserSettings, SetupData, StateData, GithubUser, Profile } from '../types';
 
 export function useApi() {
   const user = ref<GithubUser | null>(null);
@@ -67,10 +67,10 @@ export function useApi() {
     return apiCall('/api/state');
   }
 
-  async function saveState(state: StateData, sha: string | null): Promise<{ sha: string; warning?: string }> {
+  async function saveState(state: StateData, sha: string | null, profileName?: string): Promise<{ sha: string; warning?: string }> {
     return apiCall('/api/state', {
       method: 'PUT',
-      body: JSON.stringify({ state, sha }),
+      body: JSON.stringify({ state, sha, profileName }),
     });
   }
 
@@ -78,18 +78,30 @@ export function useApi() {
     return apiCall('/api/rebuild', { method: 'POST' });
   }
 
-  async function getPreview(name: string): Promise<string> {
-    const data = await apiCall(`/api/preview/${name}`);
-    return data.content;
+  async function getPreview(name: string): Promise<{ content: string }> {
+    return apiCall(`/api/preview/${name}.json`);
   }
 
-  async function getAssets(): Promise<{ nodes: string[], templates: string[] }> {
+  async function postPreview(profile: Profile): Promise<{ content: string }> {
+    const res = await fetch('/api/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Preview failed');
+    }
+    return res.json();
+  }
+
+  async function getAssets(): Promise<{ nodes: any[], templates: string[] }> {
     return apiCall('/api/assets');
   }
 
   return {
     user, settings,
     login, logout, getSettings, saveSettings, deleteSettings,
-    getState, saveState, rebuild, getPreview, getAssets,
+    getState, saveState, rebuild, getPreview, postPreview, getAssets,
   };
 }

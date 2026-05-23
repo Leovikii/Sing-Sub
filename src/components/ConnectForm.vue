@@ -1,6 +1,6 @@
 <template>
-  <div class="max-w-md mx-auto mt-16 relative z-10">
-    <AppleCard class="space-y-8 shadow-2xl">
+  <div class="max-w-md mx-auto mt-20">
+    <div class="glass p-8 space-y-8 shadow-2xl">
       <div class="text-center space-y-2">
         <h2 class="text-2xl font-semibold text-[#f5f5f7]">连接 GitHub 仓库</h2>
         <p class="text-sm text-[#86868b]">关联私有仓库以管理订阅配置</p>
@@ -24,13 +24,12 @@
           <a href="https://github.com/Leovikii/Sing-Sub" target="_blank" rel="noopener" class="text-[#F596AA] hover:underline">查看源码</a>
         </p>
       </div>
-    </AppleCard>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import AppleCard from './AppleCard.vue';
 import AppleInput from './AppleInput.vue';
 import AppleButton from './AppleButton.vue';
 import type { SetupData } from '../types';

@@ -12,15 +12,19 @@ export interface SetupData {
   pat: string;
 }
 
+export interface FilterAction {
+  action: 'include' | 'exclude';
+  keyword: string;
+}
+
 export interface Rule {
   group: string;
-  include: string;
-  exclude: string;
+  filters: FilterAction[];
 }
 
 export interface InboundRule {
-  include: string;
-  exclude: string;
+  tag: string;
+  filters: FilterAction[];
 }
 
 export interface Profile {

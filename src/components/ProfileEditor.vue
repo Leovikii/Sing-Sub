@@ -1,126 +1,50 @@
 <template>
-  <!-- Compact Card -->
-  <div
-    ref="cardRef"
-    class="card glass p-5 cursor-pointer select-none space-y-2"
+  <FileCard
+    :title="profile.name || 'untitled'"
+    :note="profile.note"
+    :inboundCount="inboundCount"
+    :outboundCount="outboundCount"
+    :menuItems="cardMenuItems"
     @click="handleCardClick"
-  >
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2 min-w-0 flex-1">
-        <span class="card-title text-lg font-semibold text-[#f5f5f7] truncate">{{ profile.name || 'untitled' }}</span>
-        <span class="text-[#86868b] font-mono text-sm select-none">.json</span>
-      </div>
-
-      <div class="flex items-center gap-2 shrink-0">
-        <button
-          @click.stop="openModal"
-          class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#86868b] transition-colors cursor-pointer"
-        >
-          <Pencil :size="14" />编辑
-        </button>
-        <button
-          @click.stop="$emit('copyLink', profile.name, index)"
-          class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#86868b] transition-colors cursor-pointer"
-        >
-          <component :is="copyStatus ? Check : Link" :size="14" />{{ copyStatus ? '已复制' : '复制链接' }}
-        </button>
-
-        <!-- ⋯ Menu -->
-        <div class="relative ml-1" ref="menuRef">
-          <button
-            @click.stop="menuOpen = !menuOpen"
-            :class="['w-8 h-8 flex items-center justify-center rounded-full bg-[#2c2c2e] border transition-colors cursor-pointer', menuOpen ? 'border-[#F596AA] text-[#F596AA]' : 'border-[#38383a] text-[#86868b] hover:text-[#f5f5f7]']"
-            title="更多操作"
-          >
-            <MoreHorizontal :size="16" />
-          </button>
-          <Transition name="menu">
-            <div
-              v-if="menuOpen"
-              @click.stop
-              class="absolute right-0 top-full mt-2 w-40 rounded-xl bg-[#1c1c1e] border border-[#38383a] shadow-2xl overflow-hidden z-30"
-            >
-              <button
-                @click="handleDuplicate"
-                class="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors cursor-pointer"
-              >
-                <Copy :size="14" class="text-[#86868b]" />复制配置
-              </button>
-              <div class="h-px bg-[#38383a]"></div>
-              <button
-                @click="handleRemove"
-                class="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-[#ff6961] hover:bg-[#ff6961]/10 transition-colors cursor-pointer"
-              >
-                <Trash2 :size="14" />移除
-              </button>
-            </div>
-          </Transition>
-        </div>
-      </div>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <span v-if="profile.note" class="text-[#86868b] text-xs truncate">{{ profile.note }}</span>
-      <span v-else class="text-[#48484a] text-xs italic">无备注</span>
-      <div class="flex-1"></div>
-      <span class="bg-[#2c2c2e] text-[#86868b] text-xs rounded-full px-2.5 py-1">入站 {{ inboundCount }}</span>
-      <span class="bg-[#2c2c2e] text-[#86868b] text-xs rounded-full px-2.5 py-1">出站 {{ outboundCount }}</span>
-    </div>
-
-    <div class="flex md:hidden items-center gap-2 pt-1">
-      <button
-        @click.stop="openModal"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#86868b] transition-colors cursor-pointer"
-      >
-        <Pencil :size="14" />编辑
-      </button>
-      <button
-        @click.stop="$emit('copyLink', profile.name, index)"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#86868b] transition-colors cursor-pointer"
-      >
-        <component :is="copyStatus ? Check : Link" :size="14" />{{ copyStatus ? '已复制' : '复制链接' }}
-      </button>
-    </div>
-  </div>
+    @edit="openModal"
+    @action="handleCardAction"
+  />
 
   <!-- Edit Modal -->
-  <Teleport to="body">
-    <Transition name="modal">
-      <div
-        v-if="isOpen"
-        class="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-6 bg-[#121212]/90 backdrop-blur-lg"
-        @click.self="closeModal"
+  <EditorModal
+    :isOpen="isOpen"
+    @update:isOpen="isOpen = $event"
+    :title="profile.name"
+    @update:title="profile.name = $event"
+    :editableTitle="true"
+    extension=".json"
+    :isDirty="isLocalDirty"
+    :isSaving="false"
+    :showSave="!isCodeMode && isLocalDirty"
+    saveText="保存局部"
+    @save="handleSave"
+    @close="closeModal"
+  >
+    <template #header-actions>
+      <button
+        @click="toggleCodeMode"
+        :class="['flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer', isCodeMode ? 'bg-[#F596AA]/20 text-[#F596AA] border border-[#F596AA]/40' : 'text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#86868b]']"
+        title="实时预览"
       >
-        <div
-          ref="panelRef"
-          class="modal-panel w-full md:max-w-3xl md:max-h-[88vh] max-h-[92vh] bg-[#1c1c1e] border border-[#38383a] md:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col overflow-hidden"
-        >
-          <!-- Header -->
-          <div class="flex items-center justify-between gap-3 p-4 border-b border-[#38383a] bg-[#0a0a0a]/40 shrink-0">
-            <div class="flex items-center gap-2 min-w-0 flex-1">
-              <span class="text-[#f5f5f7] font-semibold truncate">{{ profile.name || 'untitled' }}</span>
-              <span class="text-[#86868b] font-mono text-sm select-none">.json</span>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <button
-                @click="handleDuplicate"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#F596AA] bg-[#2c2c2e] border border-[#38383a] hover:border-[#F596AA]/40 transition-colors cursor-pointer"
-                title="复制此配置"
-              >
-                <Copy :size="14" />复制此配置
-              </button>
-              <button
-                @click="closeModal"
-                class="w-8 h-8 flex items-center justify-center rounded-full text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors cursor-pointer"
-                title="关闭"
-              >
-                <X :size="16" />
-              </button>
-            </div>
-          </div>
+        <Code :size="14" /> {{ isCodeMode ? '退出预览' : '实时预览' }}
+      </button>
+      <button
+        @click="handleDuplicate"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#F596AA] bg-[#2c2c2e] border border-[#38383a] hover:border-[#F596AA]/40 transition-colors cursor-pointer"
+        title="复制此配置"
+      >
+        <Copy :size="14" />复制此配置
+      </button>
+    </template>
 
-          <!-- Body -->
-          <div class="flex-1 overflow-auto">
+    <template #default>
+      <!-- Visual Editor -->
+      <div v-show="!isCodeMode" class="flex-1 overflow-auto">
             <div class="p-5 sm:p-6 space-y-6">
               <!-- Profile name -->
               <div class="border-b border-[#38383a] pb-6">
@@ -169,94 +93,130 @@
                 </div>
               </div>
 
-              <!-- Rules tabs -->
-              <div class="border border-[#38383a] rounded-2xl overflow-hidden bg-[#1c1c1e]/50">
-                <div class="flex border-b border-[#38383a] bg-[#121212]/50">
-                  <button
-                    @click="activeTab = 'inbound'"
-                    :class="['flex-1 py-3 text-sm font-medium transition-colors outline-none cursor-pointer', activeTab === 'inbound' ? 'text-[#F596AA] bg-[#2c2c2e] border-b-2 border-[#F596AA]' : 'text-[#86868b] hover:text-[#f5f5f7] border-b-2 border-transparent']"
-                  >入站节点规则筛选</button>
-                  <button
-                    @click="activeTab = 'outbound'"
-                    :class="['flex-1 py-3 text-sm font-medium transition-colors outline-none cursor-pointer', activeTab === 'outbound' ? 'text-[#F596AA] bg-[#2c2c2e] border-b-2 border-[#F596AA]' : 'text-[#86868b] hover:text-[#f5f5f7] border-b-2 border-transparent']"
-                  >出站节点分组映射</button>
-                </div>
+        <!-- Inbound Rules -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-[#f5f5f7] flex items-center gap-2"><ArrowDownToLine :size="18" class="text-[#F596AA]" /> 入站节点插入 (Inbounds)</h3>
+            <button @click="addInboundRule" class="flex items-center gap-1 text-sm text-[#F596AA] hover:text-[#f5f5f7] transition-colors">
+              <Plus :size="14" /> 插入入站
+            </button>
+          </div>
+          
+          <div v-if="!profile.inboundRules || profile.inboundRules.length === 0" class="text-sm text-[#86868b] italic py-4 text-center border border-dashed border-[#38383a] rounded-xl bg-[#2c2c2e]/30">
+            无需插入额外入站节点。
+          </div>
 
-                <div class="p-4 sm:p-5">
-                  <!-- Inbound rules -->
-                  <div v-show="activeTab === 'inbound'" class="space-y-4">
-                    <div v-for="(irule, irIndex) in profile.inboundRules" :key="irIndex" class="flex flex-col sm:flex-row gap-3 bg-[#2c2c2e] p-3 rounded-xl border border-[#38383a] shadow-sm">
-                      <div class="flex flex-col sm:flex-row gap-3 flex-1">
-                        <AppleInput v-model="irule.include" placeholder="包含关键字" class="flex-1" />
-                        <AppleInput v-model="irule.exclude" placeholder="排除关键字" class="flex-1" />
-                      </div>
-                      <button @click="profile.inboundRules.splice(irIndex, 1)" class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 self-end sm:self-center cursor-pointer">
-                        <Trash2 class="w-4 h-4" />
-                      </button>
-                    </div>
-                    <AppleButton @click="profile.inboundRules.push({ include: '', exclude: '' })" variant="secondary" class="w-full !py-2 text-sm border border-dashed border-[#38383a] bg-transparent text-[#86868b] hover:text-[#f5f5f7] hover:border-[#86868b]">
-                      + 添加入站筛选规则
-                    </AppleButton>
-                  </div>
-
-                  <!-- Outbound rules -->
-                  <div v-show="activeTab === 'outbound'" class="space-y-4">
-                    <div v-for="(rule, rIndex) in profile.rules" :key="rIndex" class="flex flex-col sm:flex-row gap-3 bg-[#2c2c2e] p-3 rounded-xl border border-[#38383a] shadow-sm">
-                      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
-                        <AppleInput v-model="rule.group" placeholder="分组 Tag" />
-                        <AppleInput v-model="rule.include" placeholder="包含关键字" />
-                        <AppleInput v-model="rule.exclude" placeholder="排除关键字" />
-                      </div>
-                      <button @click="profile.rules.splice(rIndex, 1)" class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 self-end sm:self-center cursor-pointer">
-                        <Trash2 class="w-4 h-4" />
-                      </button>
-                    </div>
-                    <AppleButton @click="profile.rules.push({ group: '', include: '', exclude: '' })" variant="secondary" class="w-full !py-2 text-sm border border-dashed border-[#38383a] bg-transparent text-[#86868b] hover:text-[#f5f5f7] hover:border-[#86868b]">
-                      + 添加出站分组规则
-                    </AppleButton>
-                  </div>
+          <div v-else class="space-y-4">
+            <div v-for="(rule, iIndex) in profile.inboundRules" :key="'in_'+iIndex" class="bg-[#2c2c2e]/40 border border-[#38383a] rounded-xl p-4 space-y-4">
+              <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 flex-1">
+                  <span class="text-sm font-medium text-[#f5f5f7] shrink-0">插入到模板位置:</span>
+                  <AppleSelect
+                    v-model="rule.tag"
+                    :options="templateInboundOptions"
+                    placeholder="选择模板中的 Inbound Tag..."
+                    class="flex-1"
+                  />
                 </div>
+                <button @click="removeInboundRule(iIndex)" class="p-2 text-[#86868b] hover:text-[#ff6961] hover:bg-[#ff6961]/10 rounded-full transition-colors">
+                  <Trash2 :size="16" />
+                </button>
+              </div>
+              
+              <div class="space-y-2 pl-4 border-l-2 border-[#38383a]">
+                <div v-for="(filter, fIndex) in rule.filters" :key="'f_'+fIndex" class="flex items-center gap-2">
+                  <AppleSelect
+                    v-model="filter.action"
+                    :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
+                    class="w-24 shrink-0"
+                  />
+                  <AppleInput v-model="filter.keyword" placeholder="关键词，多个用逗号隔开" class="flex-1" />
+                  <button @click="removeInboundFilter(iIndex, fIndex)" class="p-1.5 text-[#86868b] hover:text-[#ff6961] transition-colors rounded-full">
+                    <X :size="14" />
+                  </button>
+                </div>
+                <button @click="addInboundFilter(iIndex)" class="text-xs font-medium text-[#F596AA] hover:text-[#f5f5f7] flex items-center gap-1 mt-2">
+                  <Plus :size="12" /> 添加过滤条件
+                </button>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Footer (sticky save) -->
-          <div class="flex items-center justify-end gap-3 p-4 border-t border-[#38383a] bg-[#0a0a0a]/40 shrink-0">
-            <span v-if="isDirty && saveState === 'idle'" class="text-xs text-[#F596AA] mr-auto flex items-center gap-1.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-[#F596AA] animate-pulse"></span>
-              有未保存更改
-            </span>
-            <button
-              @click="handleSave"
-              :disabled="saveState !== 'idle'"
-              :class="[
-                'modal-save-btn',
-                {
-                  'modal-save-dirty': isDirty && saveState === 'idle',
-                  'modal-save-success': saveState === 'success',
-                  'modal-save-error': saveState === 'error',
-                },
-              ]"
-            >
-              <Loader2 v-if="saveState === 'saving'" :size="14" class="modal-save-spin" />
-              <Check v-else-if="saveState === 'success'" :size="14" />
-              <X v-else-if="saveState === 'error'" :size="14" />
-              <Save v-else :size="14" />
-              <span>{{ saveLabel }}</span>
+        <!-- Outbound Rules -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-[#f5f5f7] flex items-center gap-2"><ArrowUpFromLine :size="18" class="text-[#F596AA]" /> 出站节点插入 (Outbounds)</h3>
+            <button @click="addRule" class="flex items-center gap-1 text-sm text-[#F596AA] hover:text-[#f5f5f7] transition-colors">
+              <Plus :size="14" /> 插入出站
             </button>
           </div>
+
+          <div v-if="!profile.rules || profile.rules.length === 0" class="text-sm text-[#86868b] italic py-4 text-center border border-dashed border-[#38383a] rounded-xl bg-[#2c2c2e]/30">
+            无需插入额外出站节点。
+          </div>
+
+          <div v-else class="space-y-4">
+            <div v-for="(rule, rIndex) in profile.rules" :key="rIndex" class="bg-[#2c2c2e]/40 border border-[#38383a] rounded-xl p-4 space-y-4">
+              <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 flex-1">
+                  <span class="text-sm font-medium text-[#f5f5f7] shrink-0">插入到模板位置:</span>
+                  <AppleSelect
+                    v-model="rule.group"
+                    :options="templateOutboundOptions"
+                    placeholder="选择模板中的 Outbound Tag..."
+                    class="flex-1"
+                  />
+                </div>
+                <button @click="removeRule(rIndex)" class="p-2 text-[#86868b] hover:text-[#ff6961] hover:bg-[#ff6961]/10 rounded-full transition-colors">
+                  <Trash2 :size="16" />
+                </button>
+              </div>
+              
+              <div class="space-y-2 pl-4 border-l-2 border-[#38383a]">
+                <div v-for="(filter, fIndex) in rule.filters" :key="fIndex" class="flex items-center gap-2">
+                  <AppleSelect
+                    v-model="filter.action"
+                    :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
+                    class="w-24 shrink-0"
+                  />
+                  <AppleInput v-model="filter.keyword" placeholder="关键词，多个用逗号隔开" class="flex-1" />
+                  <button @click="removeFilter(rIndex, fIndex)" class="p-1.5 text-[#86868b] hover:text-[#ff6961] transition-colors rounded-full">
+                    <X :size="14" />
+                  </button>
+                </div>
+                <button @click="addFilter(rIndex)" class="text-xs font-medium text-[#F596AA] hover:text-[#f5f5f7] flex items-center gap-1 mt-2">
+                  <Plus :size="12" /> 添加过滤条件
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
+            </div>
+          </div>
+      <!-- Code Preview -->
+      <div v-show="isCodeMode" class="flex-1 overflow-auto flex flex-col bg-[#121212]">
+        <div v-if="previewLoading" class="flex-1 flex flex-col items-center justify-center">
+          <Loader2 class="w-8 h-8 text-[#F596AA] animate-spin mb-4" />
+          <span class="text-[#86868b]">构建配置中...</span>
+        </div>
+        <div v-else-if="previewError" class="flex-1 p-6 text-[#ff6961]">
+          <h3 class="font-bold mb-2">构建失败:</h3>
+          <pre class="text-sm whitespace-pre-wrap">{{ previewError }}</pre>
+        </div>
+        <pre v-else class="flex-1 p-6 text-[#a1a1aa] font-mono text-sm leading-relaxed overflow-auto selection:bg-[#F596AA]/30 selection:text-[#f5f5f7]">{{ previewContent }}</pre>
       </div>
-    </Transition>
-  </Teleport>
+    </template>
+  </EditorModal>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import { Pencil, Link, Check, Trash2, Copy, X, Save, Loader2 } from 'lucide-vue-next';
+import { Trash2, Copy, X, Loader2, Code, Plus, ArrowDownToLine, ArrowUpFromLine } from 'lucide-vue-next';
 import AppleInput from './AppleInput.vue';
-import AppleButton from './AppleButton.vue';
 import AppleSelect from './AppleSelect.vue';
+import FileCard from './FileCard.vue';
+import EditorModal from './EditorModal.vue';
 import type { Profile } from '../types';
 
 const props = defineProps<{
@@ -266,16 +226,14 @@ const props = defineProps<{
   availableTemplates?: string[];
   copyStatus: boolean;
   expanded?: boolean;
-  saveState: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
-  isDirty: boolean;
 }>();
 
 const emit = defineEmits<{
   preview: [name: string];
   copyLink: [name: string, index: number];
   remove: [index: number];
-  duplicate: [index: number];
-  save: [];
+  duplicate: [profile: Profile];
+  save: [name: string];
   'update:expanded': [value: boolean];
 }>();
 
@@ -284,9 +242,106 @@ const isOpen = computed({
   set: (v) => emit('update:expanded', v),
 });
 
-const activeTab = ref<'inbound' | 'outbound'>('inbound');
-const inboundCount = computed(() => props.profile.inboundRules.length);
-const outboundCount = computed(() => props.profile.rules.length);
+
+const inboundCount = computed(() => props.profile.inboundRules?.length || 0);
+const outboundCount = computed(() => props.profile.rules?.length || 0);
+
+const cardMenuItems = [
+  { label: '复制配置', action: 'duplicate', icon: Copy },
+  { label: '删除配置', action: 'remove', icon: Trash2, danger: true },
+];
+
+const originalProfileStr = ref(JSON.stringify(props.profile));
+const isLocalDirty = computed(() => JSON.stringify(props.profile) !== originalProfileStr.value);
+
+function handleCardAction(action: string) {
+  if (action === 'duplicate') emit('duplicate', props.profile);
+  if (action === 'remove') emit('remove', props.index);
+}
+
+const isCodeMode = ref(false);
+const previewContent = ref('');
+const previewLoading = ref(false);
+const previewError = ref('');
+
+async function toggleCodeMode() {
+  isCodeMode.value = !isCodeMode.value;
+  if (isCodeMode.value) {
+    previewLoading.value = true;
+    previewError.value = '';
+    try {
+      const res = await fetch(`/api/file?path=${encodeURIComponent('sing-sub/profiles/' + props.profile.name + '.json')}`);
+      if (!res.ok) throw new Error('Preview not found');
+      const data = await res.json();
+      previewContent.value = data.content;
+    } catch (e: any) {
+      previewError.value = 'Failed to load preview: ' + e.message;
+    } finally {
+      previewLoading.value = false;
+    }
+  }
+}
+
+const templateInboundOptions = ref<{label: string, value: string}[]>([]);
+const templateOutboundOptions = ref<{label: string, value: string}[]>([]);
+
+watch(() => props.profile.templateUrl, async (url) => {
+  if (url) {
+    try {
+      const res = await fetch(`/api/file?path=${encodeURIComponent(url)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const content = JSON.parse(data.content);
+        if (content.inbounds) {
+          templateInboundOptions.value = content.inbounds
+            .filter((i: any) => i.tag)
+            .map((i: any) => ({ label: i.tag, value: i.tag }));
+        }
+        if (content.outbounds) {
+          templateOutboundOptions.value = content.outbounds
+            .filter((o: any) => o.tag)
+            .map((o: any) => ({ label: o.tag, value: o.tag }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch template tags', e);
+    }
+  }
+}, { immediate: true });
+
+function addInboundRule() {
+  if (!props.profile.inboundRules) props.profile.inboundRules = [];
+  props.profile.inboundRules.push({ tag: '', filters: [{ action: 'include', keyword: '' }] });
+}
+
+function removeInboundRule(index: number) {
+  props.profile.inboundRules.splice(index, 1);
+}
+
+function addInboundFilter(ruleIndex: number) {
+  props.profile.inboundRules[ruleIndex].filters.push({ action: 'include', keyword: '' });
+}
+
+function removeInboundFilter(ruleIndex: number, filterIndex: number) {
+  props.profile.inboundRules[ruleIndex].filters.splice(filterIndex, 1);
+}
+
+function addRule() {
+  if (!props.profile.rules) props.profile.rules = [];
+  props.profile.rules.push({ group: '', filters: [{ action: 'include', keyword: '' }] });
+}
+
+function removeRule(index: number) {
+  props.profile.rules.splice(index, 1);
+}
+
+function addFilter(ruleIndex: number) {
+  props.profile.rules[ruleIndex].filters.push({ action: 'include', keyword: '' });
+}
+
+function removeFilter(ruleIndex: number, filterIndex: number) {
+  props.profile.rules[ruleIndex].filters.splice(filterIndex, 1);
+}
 
 function extractFilename(path: string) {
   return path.split('/').pop() || path;
@@ -327,26 +382,6 @@ function cancelCustomTemplate() {
 
 const menuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
-const cardRef = ref<HTMLElement | null>(null);
-const panelRef = ref<HTMLElement | null>(null);
-
-const saveLabel = computed(() => {
-  switch (props.saveState) {
-    case 'saving': return '保存中…';
-    case 'success': return '已保存';
-    case 'error': return '失败';
-    default: return props.isDirty ? '保存全部' : '保存';
-  }
-});
-
-function applyOrigin() {
-  if (!cardRef.value || !panelRef.value) return;
-  const cr = cardRef.value.getBoundingClientRect();
-  const pr = panelRef.value.getBoundingClientRect();
-  const ox = cr.left + cr.width / 2 - pr.left;
-  const oy = cr.top + cr.height / 2 - pr.top;
-  panelRef.value.style.transformOrigin = `${ox}px ${oy}px`;
-}
 
 function openModal() {
   if (menuOpen.value) return;
@@ -359,25 +394,20 @@ function handleCardClick() {
 }
 
 function closeModal() {
-  applyOrigin();
+  if (isLocalDirty.value) {
+    if (!confirm('有未保存的更改，确定关闭吗？')) return;
+  }
   isOpen.value = false;
 }
 
 function handleDuplicate() {
-  menuOpen.value = false;
-  applyOrigin();
   isOpen.value = false;
-  emit('duplicate', props.index);
-}
-
-function handleRemove() {
-  menuOpen.value = false;
-  emit('remove', props.index);
+  emit('duplicate', props.profile);
 }
 
 function handleSave() {
-  if (props.saveState !== 'idle') return;
-  emit('save');
+  emit('save', props.profile.name);
+  originalProfileStr.value = JSON.stringify(props.profile);
 }
 
 function onDocumentClick(e: MouseEvent) {
@@ -401,7 +431,6 @@ watch(isOpen, (open) => {
   if (open) {
     document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', onKeydown);
-    requestAnimationFrame(applyOrigin);
   } else {
     document.body.style.overflow = '';
     document.removeEventListener('keydown', onKeydown);
