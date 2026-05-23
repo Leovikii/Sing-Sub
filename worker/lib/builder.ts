@@ -55,8 +55,13 @@ async function fetchRepoJson(path: string, session: RepoSession): Promise<unknow
 }
 
 export async function buildProfile(profile: Profile, session: RepoSession): Promise<string> {
+  const templateUrl = profile.templateUrl;
+  const isExternalTemplate = templateUrl.startsWith('http://') || templateUrl.startsWith('https://');
+
   const [template, nodesData] = await Promise.all([
-    fetchJson(profile.templateUrl) as Promise<Record<string, unknown>>,
+    (isExternalTemplate 
+      ? fetchJson(templateUrl) 
+      : fetchRepoJson(templateUrl, session)) as Promise<Record<string, unknown>>,
     fetchRepoJson(profile.nodesPath, session),
   ]);
 

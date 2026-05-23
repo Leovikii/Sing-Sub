@@ -1,7 +1,7 @@
 import type { Env } from './types';
 import {
   handleLogin, handleLogout, handleGetSettings, handlePutSettings,
-  handleDeleteSettings, handleGetState, handlePutState, handleRebuild, handlePreview
+  handleDeleteSettings, handleGetState, handlePutState, handleRebuild, handlePreview, handleGetAssets
 } from './routes/api';
 import { handleSubscription } from './routes/sub';
 import { addSecurityHeaders, errorResponse } from './lib/security';
@@ -34,6 +34,8 @@ export default {
       } else if (path.startsWith('/api/preview/') && method === 'GET') {
         const name = path.slice(13).replace(/\.json$/, '');
         response = await handlePreview(request, env, name);
+      } else if (path === '/api/assets' && method === 'GET') {
+        response = await handleGetAssets(request, env);
       } else if (path.startsWith('/sub/') && path.endsWith('.json') && method === 'GET') {
         const parts = path.slice(5, -5).split('/');
         if (parts.length === 2) {

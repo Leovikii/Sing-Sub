@@ -1,6 +1,6 @@
 import type { Env, UserSettings, StateData } from '../types';
 import type { RepoSession } from './github';
-import { fetchFileContent } from './github';
+import { fetchFileContent, putFileContent } from './github';
 import { buildAllProfiles } from './builder';
 
 const RULES_PATH = 'sing-sub/rules.json';
@@ -13,6 +13,19 @@ export function generateHex(byteLength: number): string {
 
 export function toRepoSession(settings: UserSettings): RepoSession {
   return { owner: settings.owner, repo: settings.repo, pat: settings.pat };
+}
+
+export async function seedRepository(session: RepoSession): Promise<void> {
+  try {
+    const nodesPath = 'sing-sub/nodes/nodes.json';
+    const nodesFile = await fetchFileContent(nodesPath, session);
+    if (!nodesFile) {
+      const defaultNodes = JSON.stringify({ inbounds: [], outbounds: [] }, null, 2);
+      await putFileContent(nodesPath, session, defaultNodes, null, 'Auto-create default nodes.json');
+    }
+  } catch {
+    // Ignore seed errors to not block the main flow
+  }
 }
 
 export async function rebuildWithWarning(

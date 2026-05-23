@@ -142,13 +142,29 @@
               <!-- Template URL and file paths -->
               <div class="space-y-6">
                 <div class="space-y-2">
-                  <label class="text-sm font-medium text-[#86868b]">公开模板 URL</label>
-                  <AppleInput v-model="profile.templateUrl" placeholder="https://raw.githubusercontent.com/..." />
+                  <label class="text-sm font-medium text-[#86868b]">配置模板</label>
+                  <AppleSelect
+                    v-if="!isCustomTemplate"
+                    :modelValue="profile.templateUrl"
+                    @update:modelValue="onTemplateSelect"
+                    :options="templateOptions"
+                    placeholder="选择一个模板..."
+                  />
+                  <div v-else class="flex gap-2 items-center">
+                    <AppleInput v-model="profile.templateUrl" placeholder="https://..." class="flex-1" />
+                    <button @click="cancelCustomTemplate" title="删除自定义模板并返回选择" class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 cursor-pointer">
+                      <Trash2 class="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div class="grid grid-cols-1 gap-6">
                   <div class="space-y-2">
-                    <label class="text-sm font-medium text-[#86868b]">节点文件路径</label>
-                    <AppleInput v-model="profile.nodesPath" placeholder="例如: sing-sub/nodes.json (必填)" />
+                    <label class="text-sm font-medium text-[#86868b]">节点配置</label>
+                    <AppleSelect
+                      v-model="profile.nodesPath"
+                      :options="nodeOptions"
+                      placeholder="选择一个节点文件..."
+                    />
                   </div>
                 </div>
               </div>
@@ -174,7 +190,9 @@
                         <AppleInput v-model="irule.include" placeholder="包含关键字" class="flex-1" />
                         <AppleInput v-model="irule.exclude" placeholder="排除关键字" class="flex-1" />
                       </div>
-                      <button @click="profile.inboundRules.splice(irIndex, 1)" class="w-8 h-8 flex items-center justify-center rounded-full bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 self-end sm:self-center cursor-pointer">✕</button>
+                      <button @click="profile.inboundRules.splice(irIndex, 1)" class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 self-end sm:self-center cursor-pointer">
+                        <Trash2 class="w-4 h-4" />
+                      </button>
                     </div>
                     <AppleButton @click="profile.inboundRules.push({ include: '', exclude: '' })" variant="secondary" class="w-full !py-2 text-sm border border-dashed border-[#38383a] bg-transparent text-[#86868b] hover:text-[#f5f5f7] hover:border-[#86868b]">
                       + 添加入站筛选规则
@@ -189,7 +207,9 @@
                         <AppleInput v-model="rule.include" placeholder="包含关键字" />
                         <AppleInput v-model="rule.exclude" placeholder="排除关键字" />
                       </div>
-                      <button @click="profile.rules.splice(rIndex, 1)" class="w-8 h-8 flex items-center justify-center rounded-full bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 self-end sm:self-center cursor-pointer">✕</button>
+                      <button @click="profile.rules.splice(rIndex, 1)" class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 self-end sm:self-center cursor-pointer">
+                        <Trash2 class="w-4 h-4" />
+                      </button>
                     </div>
                     <AppleButton @click="profile.rules.push({ group: '', include: '', exclude: '' })" variant="secondary" class="w-full !py-2 text-sm border border-dashed border-[#38383a] bg-transparent text-[#86868b] hover:text-[#f5f5f7] hover:border-[#86868b]">
                       + 添加出站分组规则
@@ -233,14 +253,17 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import { Pencil, Link, Check, Trash2, MoreHorizontal, Copy, X, Save, Loader2 } from 'lucide-vue-next';
+import { Pencil, Link, Check, Trash2, Copy, X, Save, Loader2 } from 'lucide-vue-next';
 import AppleInput from './AppleInput.vue';
 import AppleButton from './AppleButton.vue';
+import AppleSelect from './AppleSelect.vue';
 import type { Profile } from '../types';
 
 const props = defineProps<{
   profile: Profile;
   index: number;
+  availableNodes?: string[];
+  availableTemplates?: string[];
   copyStatus: boolean;
   expanded?: boolean;
   saveState: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
@@ -264,6 +287,47 @@ const isOpen = computed({
 const activeTab = ref<'inbound' | 'outbound'>('inbound');
 const inboundCount = computed(() => props.profile.inboundRules.length);
 const outboundCount = computed(() => props.profile.rules.length);
+
+function extractFilename(path: string) {
+  return path.split('/').pop() || path;
+}
+
+const nodeOptions = computed(() => {
+  const opts = (props.availableNodes || []).map(p => ({ label: extractFilename(p), value: p }));
+  if (props.profile.nodesPath && !opts.find(o => o.value === props.profile.nodesPath)) {
+    opts.unshift({ label: extractFilename(props.profile.nodesPath), value: props.profile.nodesPath });
+  }
+  return opts;
+});
+
+const isCustomTemplate = ref(false);
+
+watch(() => props.profile.templateUrl, (newVal) => {
+  if (newVal && props.availableTemplates && !props.availableTemplates.includes(newVal)) {
+    isCustomTemplate.value = true;
+  }
+}, { immediate: true });
+
+const templateOptions = computed(() => {
+  const opts = (props.availableTemplates || []).map(p => ({ label: extractFilename(p), value: p }));
+  opts.push({ label: '自定义 URL...', value: '__custom__' });
+  return opts;
+});
+
+function onTemplateSelect(val: string) {
+  if (val === '__custom__') {
+    isCustomTemplate.value = true;
+    props.profile.templateUrl = '';
+  } else {
+    isCustomTemplate.value = false;
+    props.profile.templateUrl = val;
+  }
+}
+
+function cancelCustomTemplate() {
+  isCustomTemplate.value = false;
+  props.profile.templateUrl = (props.availableTemplates && props.availableTemplates.length > 0) ? props.availableTemplates[0] : '';
+}
 
 const menuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);

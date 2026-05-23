@@ -83,9 +83,13 @@ export function useApi() {
     return data.content;
   }
 
+  async function getAssets(): Promise<{ nodes: string[], templates: string[] }> {
+    return apiCall('/api/assets');
+  }
+
   return {
     user, settings,
     login, logout, getSettings, saveSettings, deleteSettings,
-    getState, saveState, rebuild, getPreview,
+    getState, saveState, rebuild, getPreview, getAssets,
   };
 }

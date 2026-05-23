@@ -66,6 +66,18 @@ export async function fetchFileContent(
   return { content: decodeGithubContent(data.content), sha: data.sha };
 }
 
+export async function fetchDirectoryContents(
+  dirPath: string,
+  session: RepoSession
+): Promise<string[]> {
+  const res = await repoFetch(`contents/${dirPath}`, session);
+  if (!res.ok) return []; // Return empty array if directory doesn't exist (e.g. 404)
+  const data = await res.json() as Array<{ name: string; path: string; type: string }>;
+  if (!Array.isArray(data)) return [];
+  // Return only file paths, ignore subdirectories
+  return data.filter(item => item.type === 'file').map(item => item.path);
+}
+
 export async function putFileContent(
   filePath: string,
   session: RepoSession,

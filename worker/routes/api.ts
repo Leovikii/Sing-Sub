@@ -4,10 +4,10 @@ import {
   createSession, deleteSession, requireAuth,
   sessionCookieHeader, clearSessionCookieHeader,
 } from '../lib/auth';
-import { fetchUser, fetchFileContent, putFileContent, type RepoSession } from '../lib/github';
+import { fetchUser, fetchFileContent, putFileContent, fetchDirectoryContents, type RepoSession } from '../lib/github';
 import { buildAllProfiles } from '../lib/builder';
 import { jsonResponse, errorResponse } from '../lib/security';
-import { generateHex, toRepoSession, rebuildWithWarning, cleanupSubToken } from '../lib/helpers';
+import { generateHex, toRepoSession, rebuildWithWarning, cleanupSubToken, seedRepository } from '../lib/helpers';
 
 const RULES_PATH = 'sing-sub/rules.json';
 
@@ -43,7 +43,9 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     await env.SESSIONS.put(`sub:${subToken}`, JSON.stringify({ owner, repo }));
   }
 
-  const { warning } = await rebuildWithWarning({ owner, repo, pat }, subToken, env);
+  const session = { owner, repo, pat };
+  await seedRepository(session);
+  const { warning } = await rebuildWithWarning(session, subToken, env);
 
   const sessionId = await createSession(owner, repo, env);
 
@@ -135,6 +137,9 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
   }
 
   const session: RepoSession = { owner, repo, pat: effectivePat };
+  if (isRepoChange) {
+    await seedRepository(session);
+  }
   const { warning } = await rebuildWithWarning(session, subToken, env);
 
   return jsonResponse(
@@ -220,4 +225,25 @@ export async function handlePreview(request: Request, env: Env, name: string): P
   if (!cached) return errorResponse('该配置尚未构建，请先保存或刷新', 404);
 
   return jsonResponse({ content: cached });
+}
+
+export async function handleGetAssets(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  const session = toRepoSession(auth.settings);
+
+  // Fetch both directories concurrently
+  const [nodes, templates] = await Promise.all([
+    fetchDirectoryContents('sing-sub/nodes', session),
+    fetchDirectoryContents('sing-sub/templates', session),
+  ]);
+
+  // Filter to only include JSON files
+  const filterJson = (paths: string[]) => paths.filter(p => p.toLowerCase().endsWith('.json'));
+
+  return jsonResponse({
+    nodes: filterJson(nodes),
+    templates: filterJson(templates),
+  });
 }

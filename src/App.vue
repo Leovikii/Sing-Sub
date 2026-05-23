@@ -39,6 +39,8 @@
           :key="pIndex"
           :profile="profile"
           :index="pIndex"
+          :availableNodes="availableAssets.nodes"
+          :availableTemplates="availableAssets.templates"
           :copyStatus="!!copyStatus[pIndex]"
           :expanded="expandedIndex === pIndex"
           :saveState="saveStatus"
@@ -87,7 +89,7 @@ import StatusToast from './components/StatusToast.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v2.2.1';
+const APP_VERSION = 'v2.2.2';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
@@ -104,6 +106,7 @@ const expandedIndex = ref<number | null>(null);
 const previewTitle = ref('');
 const previewContent = ref('');
 const previewLoading = ref(false);
+const availableAssets = ref<{ nodes: string[], templates: string[] }>({ nodes: [], templates: [] });
 
 const isDirty = ref(false);
 let suppressDirty = false;
@@ -116,7 +119,15 @@ function showStatus(state: 'success' | 'warning' | 'error', msg: string, duratio
   statusTimer = setTimeout(() => { saveStatus.value = 'idle'; }, duration);
 }
 
-const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getPreview } = useApi();
+const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getPreview, getAssets } = useApi();
+
+async function refreshAssets() {
+  try {
+    availableAssets.value = await getAssets();
+  } catch {
+    availableAssets.value = { nodes: [], templates: [] };
+  }
+}
 
 function setStateData(state: StateData) {
   suppressDirty = true;
@@ -146,7 +157,7 @@ onMounted(async () => {
   try {
     const s = await getSettings();
     if (s) {
-      const data = await getState();
+      const [data] = await Promise.all([getState(), refreshAssets()]);
       setStateData(data.state);
       fileSha.value = data.sha;
     }
@@ -159,7 +170,7 @@ async function handleSetup() {
   loadingData.value = true;
   try {
     const result = await login(setupData);
-    const data = await getState();
+    const [data] = await Promise.all([getState(), refreshAssets()]);
     setStateData(data.state);
     fileSha.value = data.sha;
     setupData.pat = '';
