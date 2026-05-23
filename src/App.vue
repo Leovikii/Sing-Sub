@@ -105,7 +105,7 @@ import NodesManager from './components/NodesManager.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v3.0.0-beta';
+const APP_VERSION = 'v3.0.0-beta.2';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
