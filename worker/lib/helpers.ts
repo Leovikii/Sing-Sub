@@ -76,6 +76,16 @@ export async function seedRepository(session: RepoSession): Promise<void> {
       const defaultTemplate = JSON.stringify({}, null, 2);
       await putFileContent(templatesPath, session, defaultTemplate, null, 'Auto-create default template.json');
     }
+
+    const configsPath = 'sing-sub/configs/.gitkeep';
+    const configsFile = await fetchFileContent(configsPath, session);
+    if (!configsFile) {
+      // Check if any json configs exist to avoid unnecessary commit if folder already has stuff
+      const existingConfigs = await fetchDirectoryContents('sing-sub/configs', session);
+      if (existingConfigs.length === 0) {
+        await putFileContent(configsPath, session, 'keep', null, 'Auto-create configs directory');
+      }
+    }
   } catch {
     // Ignore seed errors to not block the main flow
   }
