@@ -1,15 +1,14 @@
-import type { Env, UserSettings, StateData, Profile } from '../types';
+import type { Env, UserSettings, Profile } from '../types';
 import type { RepoSession } from './github';
-import { fetchFileContent, putFileContent, fetchDirectoryContents } from './github';
-import { buildAllProfiles } from './builder';
+import { fetchFileContent, fetchDirectoryContents } from './github';
+import { buildAllProfiles, buildProfile } from './builder';
 
-const RULES_PATH = 'sing-sub/rules.json';
 
 export async function fetchAllProfiles(session: RepoSession): Promise<Profile[]> {
   let profiles: Profile[] = [];
   try {
     const files = await fetchDirectoryContents('sing-sub/configs', session);
-    const jsonFiles = files.filter(f => f.toLowerCase().endsWith('.json'));
+    const jsonFiles = (files || []).filter(f => f.toLowerCase().endsWith('.json'));
     
     await Promise.all(jsonFiles.map(async path => {
       try {
@@ -21,15 +20,6 @@ export async function fetchAllProfiles(session: RepoSession): Promise<Profile[]>
     }));
   } catch {}
 
-  if (profiles.length === 0) {
-    try {
-      const file = await fetchFileContent(RULES_PATH, session);
-      if (file && file.content) {
-        const state = JSON.parse(file.content) as StateData;
-        if (state.profiles) profiles = state.profiles;
-      }
-    } catch {}
-  }
   return profiles;
 }
 
@@ -41,13 +31,6 @@ export async function fetchProfile(session: RepoSession, profileName: string): P
     }
   } catch {}
 
-  try {
-    const file = await fetchFileContent(RULES_PATH, session);
-    if (file && file.content) {
-      const state = JSON.parse(file.content) as StateData;
-      return state.profiles.find(p => p.name === profileName) || null;
-    }
-  } catch {}
   return null;
 }
 
@@ -59,36 +42,6 @@ export function generateHex(byteLength: number): string {
 
 export function toRepoSession(settings: UserSettings): RepoSession {
   return { owner: settings.owner, repo: settings.repo, pat: settings.pat };
-}
-
-export async function seedRepository(session: RepoSession): Promise<void> {
-  try {
-    const nodesPath = 'sing-sub/nodes/nodes.json';
-    const nodesFile = await fetchFileContent(nodesPath, session);
-    if (!nodesFile) {
-      const defaultNodes = JSON.stringify({ inbounds: [], outbounds: [] }, null, 2);
-      await putFileContent(nodesPath, session, defaultNodes, null, 'Auto-create default nodes.json');
-    }
-    
-    const templatesPath = 'sing-sub/templates/template.json';
-    const templatesFile = await fetchFileContent(templatesPath, session);
-    if (!templatesFile) {
-      const defaultTemplate = JSON.stringify({}, null, 2);
-      await putFileContent(templatesPath, session, defaultTemplate, null, 'Auto-create default template.json');
-    }
-
-    const configsPath = 'sing-sub/configs/.gitkeep';
-    const configsFile = await fetchFileContent(configsPath, session);
-    if (!configsFile) {
-      // Check if any json configs exist to avoid unnecessary commit if folder already has stuff
-      const existingConfigs = await fetchDirectoryContents('sing-sub/configs', session);
-      if (existingConfigs.length === 0) {
-        await putFileContent(configsPath, session, 'keep', null, 'Auto-create configs directory');
-      }
-    }
-  } catch {
-    // Ignore seed errors to not block the main flow
-  }
 }
 
 export async function rebuildWithWarning(
@@ -116,7 +69,7 @@ export async function rebuildSingleWithWarning(
   try {
     const profile = await fetchProfile(session, profileName);
     if (profile) {
-      const config = await import('./builder').then(m => m.buildProfile(profile, session));
+      const config = await buildProfile(profile, session);
       await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
     }
   } catch (e) {
@@ -128,7 +81,7 @@ export async function rebuildSingleWithWarning(
 export async function cleanupSubToken(token: string, env: Env): Promise<void> {
   await env.SESSIONS.delete(`sub:${token}`);
   const list = await env.SESSIONS.list({ prefix: `config:${token}:` });
-  await Promise.all(list.keys.map(k => env.SESSIONS.delete(k.name)));
+  await Promise.all(list.keys.map((k: any) => env.SESSIONS.delete(k.name)));
 }
 
 export function subscriptionResponse(config: string): Response {

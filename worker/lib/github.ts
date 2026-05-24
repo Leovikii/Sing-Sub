@@ -69,9 +69,10 @@ export async function fetchFileContent(
 export async function fetchDirectoryContents(
   dirPath: string,
   session: RepoSession
-): Promise<string[]> {
+): Promise<string[] | null> {
   const res = await repoFetch(`contents/${dirPath}`, session);
-  if (!res.ok) return []; // Return empty array if directory doesn't exist (e.g. 404)
+  if (res.status === 404) return []; // Directory doesn't exist
+  if (!res.ok) return null; // Other error, rate limit, etc.
   const data = await res.json() as Array<{ name: string; path: string; type: string }>;
   if (!Array.isArray(data)) return [];
   // Return only file paths, ignore subdirectories

@@ -1,12 +1,10 @@
-import type { Env, StateData, Profile } from '../types';
+import type { Env } from '../types';
 import { getUserSettings } from '../lib/auth';
 import { buildProfile } from '../lib/builder';
-import { fetchFileContent } from '../lib/github';
 import { errorResponse } from '../lib/security';
-import { toRepoSession, subscriptionResponse } from '../lib/helpers';
+import { toRepoSession, subscriptionResponse, fetchProfile } from '../lib/helpers';
 
 const ALLOWED_UA_PATTERNS = ['sing-box', 'SFI', 'SFA', 'SFM', 'SFT'];
-const RULES_PATH = 'sing-sub/rules.json';
 const SAFE_TOKEN = /^[a-zA-Z0-9_-]+$/;
 
 export async function handleSubscription(
@@ -37,7 +35,6 @@ export async function handleSubscription(
   }
 
   const session = toRepoSession(settings);
-  const { fetchProfile } = await import('../lib/helpers');
   const profile = await fetchProfile(session, name);
   
   if (!profile) return errorResponse('Profile not found', 404);
