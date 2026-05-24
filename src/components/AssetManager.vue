@@ -1,57 +1,58 @@
 <template>
-  <div class="nodes-manager space-y-6">
-
-
-    <!-- Nodes List -->
+  <div class="asset-manager space-y-6">
+    <!-- Assets List -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <FileCard
-        v-for="node in nodes"
-        :key="node.path"
-        :title="getBasename(node.path)"
-        :inboundCount="node.inboundsCount"
-        :outboundCount="node.outboundsCount"
-        icon="network"
-        tag="NODE"
-        tagStyle="bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20"
-        :menuItems="nodeMenuItems"
-        @click="openPreview(node)"
-        @edit="editNode(node)"
-        @action="(act) => handleNodeAction(act, node)"
+        v-for="file in files"
+        :key="file.path"
+        :title="getBasename(file.path)"
+        :inboundCount="file.inboundsCount"
+        :outboundCount="file.outboundsCount"
+        :icon="type === 'node' ? 'network' : 'layout-template'"
+        :tag="type === 'node' ? 'NODE' : 'TEMPLATE'"
+        :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'"
+        :menuItems="fileMenuItems"
+        @click="openPreview(file)"
+        @edit="editFile(file)"
+        @action="(act) => handleFileAction(act, file)"
       />
     </div>
 
     <!-- Preview Modal -->
     <PreviewModal
-      :visible="!!previewNode"
-      :title="previewNode ? getBasename(previewNode.path).replace(/\.json$/, '') : ''"
+      :visible="!!previewFile"
+      :title="previewFile ? getBasename(previewFile.path).replace(/\.json$/, '') : ''"
       :content="previewContent"
-      :loading="isLoadingNode"
+      :loading="isLoading"
       @close="closePreview"
     />
 
-    <div v-if="nodes.length === 0" class="text-center py-20 text-[#86868b]">
-      暂无节点文件，仓库初始化可能正在进行中。
+    <div v-if="files.length === 0" class="text-center py-20 text-[#86868b]">
+      {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : '暂无模板文件。' }}
     </div>
 
-    <!-- Node Editor Modal -->
+    <!-- Editor Modal -->
     <EditorModal
-      :isOpen="!!editingNode"
+      :isOpen="!!editingFile"
       @update:isOpen="val => { if (!val) closeEditor() }"
-      :title="localNodeName"
-      @update:title="localNodeName = $event"
+      :title="localFileName"
+      @update:title="localFileName = $event"
+      :note="localFileNote"
+      @update:note="localFileNote = $event"
       :editableTitle="true"
+      :editableNote="true"
       extension=".json"
-      :isDirty="isEditorDirty || isNameDirty"
+      :isDirty="isEditorDirty || isNameDirty || isNoteDirty"
       :isSaving="isSaving"
-      :showSave="isEditorDirty || isNameDirty"
+      :showSave="isEditorDirty || isNameDirty || isNoteDirty"
       saveText="保存"
-      @save="saveNodeCode"
-      @reset="resetNodeCode"
+      @save="saveFileCode"
+      @reset="resetFileCode"
       @close="closeEditor"
     >
       <CodeEditor
         v-model="editorContent"
-        :loading="isLoadingNode"
+        :loading="isLoading"
         loadingText="读取中..."
         class="min-h-[60vh]"
       />
@@ -79,7 +80,8 @@ import ConfirmModal from './ui/ConfirmModal.vue';
 import CodeEditor from './ui/CodeEditor.vue';
 
 const props = defineProps<{
-  nodes: any[];
+  files: any[];
+  type: 'node' | 'template';
 }>();
 
 const emit = defineEmits<{
@@ -87,17 +89,19 @@ const emit = defineEmits<{
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
 }>();
 
-const editingNode = ref<any>(null);
-const previewNode = ref<any>(null);
+const editingFile = ref<any>(null);
+const previewFile = ref<any>(null);
 const editorContent = ref('');
 const previewContent = ref('');
 const originalContent = ref('');
-const isLoadingNode = ref(false);
+const isLoading = ref(false);
 const isSaving = ref(false);
 const fileSha = ref<string | null>(null);
 
 const isEditorDirty = ref(false);
-const localNodeName = ref('');
+const localFileName = ref('');
+const localFileNote = ref('');
+const originalFileNote = ref('');
 
 const showConfirm = ref(false);
 const confirmTitle = ref('');
@@ -111,48 +115,53 @@ function executeConfirm() {
 }
 
 const isNameDirty = computed(() => {
-  if (!editingNode.value) return false;
-  if (editingNode.value.isNew) return true;
-  return localNodeName.value !== getBasename(editingNode.value.path).replace(/\.json$/, '');
+  if (!editingFile.value) return false;
+  if (editingFile.value.isNew) return true;
+  return localFileName.value !== getBasename(editingFile.value.path).replace(/\.json$/, '');
 });
 
-async function openPreview(node: any) {
-  previewNode.value = node;
-  isLoadingNode.value = true;
+const isNoteDirty = computed(() => {
+  if (!editingFile.value) return false;
+  return localFileNote.value !== originalFileNote.value;
+});
+
+async function openPreview(file: any) {
+  previewFile.value = file;
+  isLoading.value = true;
   previewContent.value = '';
   
   try {
-    const res = await fetch(`/api/file?path=${encodeURIComponent(node.path)}`);
+    const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
     if (!res.ok) throw new Error('Failed to load file');
     const data = await res.json();
     previewContent.value = data.content;
   } catch (e: any) {
     emit('status', 'error', '加载失败: ' + e.message);
   } finally {
-    isLoadingNode.value = false;
+    isLoading.value = false;
   }
 }
 
 function closePreview() {
-  previewNode.value = null;
+  previewFile.value = null;
   previewContent.value = '';
 }
 
-const nodeMenuItems = [
+const fileMenuItems = [
   { label: '删除文件', action: 'remove', icon: Trash2, danger: true },
 ];
 
-function handleNodeAction(action: string, node: any) {
+function handleFileAction(action: string, file: any) {
   if (action === 'remove') {
     confirmTitle.value = '删除确认';
-    confirmMessage.value = `确定要删除 ${getBasename(node.path)} 吗？此操作无法撤销。`;
+    confirmMessage.value = `确定要删除 ${getBasename(file.path)} 吗？此操作无法撤销。`;
     confirmBtnText.value = '删除';
-    confirmAction = () => deleteNodeFile(node.path);
+    confirmAction = () => deleteFile(file.path);
     showConfirm.value = true;
   }
 }
 
-async function deleteNodeFile(path: string) {
+async function deleteFile(path: string) {
   try {
     await fetch(`/api/file?path=${encodeURIComponent(path)}`, {
       method: 'DELETE',
@@ -173,65 +182,87 @@ watch(editorContent, (newVal) => {
   isEditorDirty.value = newVal !== originalContent.value;
 });
 
-async function editNode(node: any) {
-  editingNode.value = node;
-  localNodeName.value = getBasename(node.path).replace(/\.json$/, '');
-  isLoadingNode.value = true;
+async function editFile(file: any) {
+  editingFile.value = file;
+  localFileName.value = getBasename(file.path).replace(/\.json$/, '');
+  isLoading.value = true;
   editorContent.value = '';
   originalContent.value = '';
   isEditorDirty.value = false;
   
   try {
-    const res = await fetch(`/api/file?path=${encodeURIComponent(node.path)}`);
+    const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
     if (!res.ok) throw new Error('Failed to load file');
     const data = await res.json();
     originalContent.value = data.content;
     editorContent.value = data.content;
     fileSha.value = data.sha;
+    
+    // Parse note if possible
+    try {
+      const parsed = JSON.parse(data.content);
+      originalFileNote.value = parsed.note || parsed._note || '';
+      localFileNote.value = originalFileNote.value;
+    } catch {
+      originalFileNote.value = '';
+      localFileNote.value = '';
+    }
+    
   } catch (e: any) {
     emit('status', 'error', '加载失败: ' + e.message);
   } finally {
-    isLoadingNode.value = false;
+    isLoading.value = false;
   }
 }
 
 function closeEditor() {
-  if (isEditorDirty.value || isNameDirty.value) {
+  if (isEditorDirty.value || isNameDirty.value || isNoteDirty.value) {
     confirmTitle.value = '未保存的修改';
     confirmMessage.value = '有未保存的修改，确定放弃并关闭吗？';
     confirmBtnText.value = '确定关闭';
     confirmAction = () => {
       isEditorDirty.value = false;
-      editingNode.value = null;
+      editingFile.value = null;
     };
     showConfirm.value = true;
     return;
   }
-  editingNode.value = null;
+  editingFile.value = null;
 }
 
-function resetNodeCode() {
+function resetFileCode() {
   editorContent.value = originalContent.value;
-  if (editingNode.value && !editingNode.value.isNew) {
-    localNodeName.value = getBasename(editingNode.value.path).replace(/\.json$/, '');
+  if (editingFile.value && !editingFile.value.isNew) {
+    localFileName.value = getBasename(editingFile.value.path).replace(/\.json$/, '');
   }
+  localFileNote.value = originalFileNote.value;
   isEditorDirty.value = false;
 }
 
-async function saveNodeCode() {
+async function saveFileCode() {
+  let parsed: any;
   try {
-    // Validate JSON
-    JSON.parse(editorContent.value);
+    parsed = JSON.parse(editorContent.value);
   } catch (e: any) {
     emit('status', 'error', 'JSON 语法错误: ' + e.message);
     return;
   }
 
+  // Inject note
+  if (localFileNote.value) {
+    parsed.note = localFileNote.value;
+  } else {
+    delete parsed.note;
+    delete parsed._note;
+  }
+  editorContent.value = JSON.stringify(parsed, null, 2);
+
   isSaving.value = true;
 
   try {
-    const newPath = `sing-sub/nodes/${localNodeName.value}.json`;
-    const isRename = newPath !== editingNode.value.path && !editingNode.value.isNew;
+    const dir = props.type === 'node' ? 'nodes' : 'templates';
+    const newPath = `sing-sub/${dir}/${localFileName.value}.json`;
+    const isRename = newPath !== editingFile.value.path && !editingFile.value.isNew;
 
     const res = await fetch('/api/file', {
       method: 'PUT',
@@ -239,8 +270,8 @@ async function saveNodeCode() {
       body: JSON.stringify({
         path: newPath,
         content: editorContent.value,
-        sha: isRename ? null : fileSha.value, // If renaming, it's a new file, so no sha.
-        message: `${editingNode.value.isNew ? 'Create' : 'Update'} ${localNodeName.value}.json via Sing-Sub Node Manager`
+        sha: isRename ? null : fileSha.value,
+        message: `${editingFile.value.isNew ? 'Create' : 'Update'} ${localFileName.value}.json via Sing-Sub Asset Manager`
       })
     });
     
@@ -249,10 +280,9 @@ async function saveNodeCode() {
       throw new Error(data.error || '保存失败');
     }
 
-    // If it was a rename, we must delete the old file
     if (isRename && fileSha.value) {
       try {
-        await fetch(`/api/file?path=${encodeURIComponent(editingNode.value.path)}`, {
+        await fetch(`/api/file?path=${encodeURIComponent(editingFile.value.path)}`, {
           method: 'DELETE',
         });
       } catch (deleteErr) {
@@ -262,13 +292,10 @@ async function saveNodeCode() {
     
     isEditorDirty.value = false;
     originalContent.value = editorContent.value;
+    originalFileNote.value = localFileNote.value;
     emit('status', 'success', '保存成功');
-    
-    // Refresh the nodes list to update counts
     emit('refresh');
-    
-    // Close editor on success
-    editingNode.value = null;
+    editingFile.value = null;
   } catch (e: any) {
     emit('status', 'error', '保存失败: ' + e.message);
   } finally {
@@ -276,17 +303,19 @@ async function saveNodeCode() {
   }
 }
 
-function createNode() {
-  editingNode.value = { path: 'sing-sub/nodes/new_node.json', isNew: true };
-  localNodeName.value = 'new_node';
+function createFile() {
+  const dir = props.type === 'node' ? 'nodes' : 'templates';
+  const newName = props.type === 'node' ? 'new_node' : 'new_template';
+  editingFile.value = { path: `sing-sub/${dir}/${newName}.json`, isNew: true };
+  localFileName.value = newName;
+  localFileNote.value = '';
+  originalFileNote.value = '';
   editorContent.value = '{\n  "inbounds": [],\n  "outbounds": []\n}';
   originalContent.value = editorContent.value;
   fileSha.value = null;
   isEditorDirty.value = true;
-  isLoadingNode.value = false;
+  isLoading.value = false;
 }
 
-defineExpose({ createNode });
+defineExpose({ createFile });
 </script>
-
-

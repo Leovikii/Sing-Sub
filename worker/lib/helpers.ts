@@ -1,9 +1,55 @@
-import type { Env, UserSettings, StateData } from '../types';
+import type { Env, UserSettings, StateData, Profile } from '../types';
 import type { RepoSession } from './github';
-import { fetchFileContent, putFileContent } from './github';
+import { fetchFileContent, putFileContent, fetchDirectoryContents } from './github';
 import { buildAllProfiles } from './builder';
 
 const RULES_PATH = 'sing-sub/rules.json';
+
+export async function fetchAllProfiles(session: RepoSession): Promise<Profile[]> {
+  let profiles: Profile[] = [];
+  try {
+    const files = await fetchDirectoryContents('sing-sub/configs', session);
+    const jsonFiles = files.filter(f => f.toLowerCase().endsWith('.json'));
+    
+    await Promise.all(jsonFiles.map(async path => {
+      try {
+        const file = await fetchFileContent(path, session);
+        if (file && file.content) {
+          profiles.push(JSON.parse(file.content));
+        }
+      } catch {}
+    }));
+  } catch {}
+
+  if (profiles.length === 0) {
+    try {
+      const file = await fetchFileContent(RULES_PATH, session);
+      if (file && file.content) {
+        const state = JSON.parse(file.content) as StateData;
+        if (state.profiles) profiles = state.profiles;
+      }
+    } catch {}
+  }
+  return profiles;
+}
+
+export async function fetchProfile(session: RepoSession, profileName: string): Promise<Profile | null> {
+  try {
+    const file = await fetchFileContent(`sing-sub/configs/${profileName}.json`, session);
+    if (file && file.content) {
+      return JSON.parse(file.content);
+    }
+  } catch {}
+
+  try {
+    const file = await fetchFileContent(RULES_PATH, session);
+    if (file && file.content) {
+      const state = JSON.parse(file.content) as StateData;
+      return state.profiles.find(p => p.name === profileName) || null;
+    }
+  } catch {}
+  return null;
+}
 
 export function generateHex(byteLength: number): string {
   const bytes = new Uint8Array(byteLength);
@@ -41,10 +87,9 @@ export async function rebuildWithWarning(
   env: Env,
 ): Promise<{ warning?: string }> {
   try {
-    const file = await fetchFileContent(RULES_PATH, session);
-    if (file) {
-      const state = JSON.parse(file.content) as StateData;
-      await buildAllProfiles(state.profiles, session, subToken, env);
+    const profiles = await fetchAllProfiles(session);
+    if (profiles.length > 0) {
+      await buildAllProfiles(profiles, session, subToken, env);
     }
   } catch (e) {
     return { warning: e instanceof Error ? e.message : 'Build failed' };
@@ -59,14 +104,10 @@ export async function rebuildSingleWithWarning(
   profileName: string
 ): Promise<{ warning?: string }> {
   try {
-    const file = await fetchFileContent(RULES_PATH, session);
-    if (file) {
-      const state = JSON.parse(file.content) as StateData;
-      const profile = state.profiles.find(p => p.name === profileName);
-      if (profile) {
-        const config = await import('./builder').then(m => m.buildProfile(profile, session));
-        await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
-      }
+    const profile = await fetchProfile(session, profileName);
+    if (profile) {
+      const config = await import('./builder').then(m => m.buildProfile(profile, session));
+      await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
     }
   } catch (e) {
     return { warning: e instanceof Error ? e.message : 'Build failed' };

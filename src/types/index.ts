@@ -27,6 +27,16 @@ export interface InboundRule {
   filters: FilterAction[];
 }
 
+export interface Rule {
+  group: string;
+  filters: FilterAction[];
+}
+
+export interface InboundRule {
+  tag: string;
+  filters: FilterAction[];
+}
+
 export interface Profile {
   name: string;
   note?: string;
@@ -34,6 +44,7 @@ export interface Profile {
   nodesPath: string;
   rules: Rule[];
   inboundRules: InboundRule[];
+  overrides?: Record<string, unknown>;
   created_at?: number;
   updated_at?: number;
 }

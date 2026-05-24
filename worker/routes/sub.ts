@@ -37,11 +37,9 @@ export async function handleSubscription(
   }
 
   const session = toRepoSession(settings);
-  const file = await fetchFileContent(RULES_PATH, session);
-  if (!file) return errorResponse('Rules not found', 404);
-
-  const state = JSON.parse(file.content) as StateData;
-  const profile = state.profiles.find((p: Profile) => p.name === name);
+  const { fetchProfile } = await import('../lib/helpers');
+  const profile = await fetchProfile(session, name);
+  
   if (!profile) return errorResponse('Profile not found', 404);
 
   const config = await buildProfile(profile, session);

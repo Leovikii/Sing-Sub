@@ -14,6 +14,28 @@ interface Inbound {
   [key: string]: unknown;
 }
 
+function isObject(item: any): boolean {
+  return (item && typeof item === 'object' && !Array.isArray(item));
+}
+
+function deepMerge<T extends Record<string, any>>(target: T, source: Record<string, any>): T {
+  const output = { ...target };
+  if (isObject(target) && isObject(source)) {
+    Object.keys(source).forEach(key => {
+      if (isObject(source[key])) {
+        if (!(key in target)) {
+          Object.assign(output, { [key]: source[key] });
+        } else {
+          (output as any)[key] = deepMerge((target as any)[key], source[key]);
+        }
+      } else {
+        Object.assign(output, { [key]: source[key] });
+      }
+    });
+  }
+  return output;
+}
+
 function parseKeywords(str: string): string[] {
   return str ? str.split(',').map(k => k.trim()).filter(Boolean) : [];
 }
@@ -65,7 +87,7 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
   const templateUrl = profile.templateUrl;
   const isExternalTemplate = templateUrl.startsWith('http://') || templateUrl.startsWith('https://');
 
-  const [template, nodesData] = await Promise.all([
+  let [template, nodesData] = await Promise.all([
     (isExternalTemplate 
       ? fetchJson(templateUrl) 
       : fetchRepoJson(templateUrl, session)) as Promise<Record<string, unknown>>,
@@ -116,6 +138,10 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
         templateOutbounds.push(...Array.from(matchedOutbounds));
       }
     }
+  }
+
+  if (profile.overrides) {
+    template = deepMerge(template, profile.overrides);
   }
 
   return JSON.stringify(template, null, 2);

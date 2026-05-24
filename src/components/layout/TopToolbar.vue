@@ -1,56 +1,9 @@
 <template>
-  <div class="flex items-center justify-between mb-6">
-    <!-- Left: Sort (Minimalist Text Dropdown Style) -->
-    <div class="relative z-50" ref="sortMenuRef">
-      <button
-        @click.stop="sortMenuOpen = !sortMenuOpen"
-        class="flex items-center gap-1.5 text-xs font-medium transition-colors cursor-pointer outline-none"
-        :class="sortMenuOpen ? 'text-[#f5f5f7]' : 'text-[#86868b] hover:text-[#f5f5f7]'"
-        title="更改排序方式"
-      >
-        <span class="inline-block" :class="{ 'tb-bounce': sortBounce }">
-          <Clock v-if="sortType === 'updated'" :size="16" />
-          <Calendar v-else-if="sortType === 'created'" :size="16" />
-          <ArrowDownAZ v-else :size="16" />
-        </span>
-        <span>{{ currentSortLabel }}</span>
-        <ChevronDown :size="14" class="transition-transform duration-200" :class="{ 'rotate-180': sortMenuOpen }" />
-      </button>
-
-      <Transition name="menu">
-        <div
-          v-if="sortMenuOpen"
-          @click.stop
-          class="absolute left-0 top-full mt-2 w-44 rounded-xl bg-[#1c1c1e] border border-[#38383a] shadow-[0_8px_30px_rgba(0,0,0,0.5)] overflow-hidden transform origin-top-left"
-        >
-          <button
-            v-for="opt in sortOptions"
-            :key="opt.value"
-            @click="selectSort(opt.value)"
-            class="w-full flex items-center gap-2 px-3 py-2.5 text-sm transition-colors cursor-pointer"
-            :class="opt.value === sortType ? 'bg-[#F596AA]/10 text-[#F596AA]' : 'text-[#f5f5f7] hover:bg-[#2c2c2e]'"
-          >
-            <Check :size="14" :class="opt.value === sortType ? 'opacity-100' : 'opacity-0'" />
-            {{ opt.label }}
-          </button>
-        </div>
-      </Transition>
-    </div>
-
+  <div class="flex items-center justify-end mb-6">
     <!-- Right: Unified Action Island -->
     <div class="flex items-center gap-1 p-1 bg-[#1c1c1e]/80 backdrop-blur-xl border border-[#38383a] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
-      <button
-        @click="handleRefresh"
-        :disabled="refreshing"
-        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        title="刷新"
-      >
-        <RefreshCw :size="14" :class="{ 'tb-spin text-[#F596AA]': refreshing }" />
-        <span class="hidden md:inline">刷新</span>
-      </button>
-
-      <div class="w-px h-3.5 bg-[#38383a] mx-0.5"></div>
-
+      
+      <!-- Dynamic Buttons (Left side to prevent pushing static buttons) -->
       <button
         v-if="isDirty"
         @click="$emit('reset')"
@@ -81,6 +34,21 @@
         <span class="hidden md:inline">保存</span>
       </button>
 
+      <div v-if="isDirty || saveState !== 'idle'" class="w-px h-3.5 bg-[#38383a] mx-0.5"></div>
+
+      <!-- Static Buttons -->
+      <button
+        @click="handleRefresh"
+        :disabled="refreshing"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        title="刷新"
+      >
+        <RefreshCw :size="14" :class="{ 'tb-spin text-[#F596AA]': refreshing }" />
+        <span class="hidden md:inline">刷新</span>
+      </button>
+
+      <div class="w-px h-3.5 bg-[#38383a] mx-0.5"></div>
+
       <button
         @click="handleAdd"
         class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[#F596AA] text-[#121212] hover:bg-[#F596AA]/90 transition-colors shadow-md shadow-[#F596AA]/20 cursor-pointer"
@@ -94,50 +62,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { RefreshCw, Plus, ArrowDownAZ, Save, Check, X, Loader2, RotateCcw, Clock, Calendar, ChevronDown } from 'lucide-vue-next';
+import { ref } from 'vue';
+import { RefreshCw, Plus, Save, Check, X, Loader2, RotateCcw } from 'lucide-vue-next';
 
 const props = defineProps<{
   saveState: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
   refreshing: boolean;
   isDirty: boolean;
-  sortType: 'name' | 'updated' | 'created';
 }>();
 
 const emit = defineEmits<{
   refresh: [];
   add: [];
-  'update:sortType': [value: 'name' | 'updated' | 'created'];
   save: [];
   reset: [];
 }>();
 
 const addBounce = ref(false);
-const sortBounce = ref(false);
-
-const sortMenuOpen = ref(false);
-const sortMenuRef = ref<HTMLElement | null>(null);
-
-const sortOptions = [
-  { label: '按更新时间排序', value: 'updated' as const },
-  { label: '按创建时间排序', value: 'created' as const },
-  { label: '按字母顺序排序', value: 'name' as const }
-];
-
-const currentSortLabel = computed(() => {
-  return sortOptions.find(o => o.value === props.sortType)?.label || '按更新时间排序';
-});
-
-function selectSort(val: 'name' | 'updated' | 'created') {
-  if (val === props.sortType) {
-    sortMenuOpen.value = false;
-    return;
-  }
-  sortBounce.value = true;
-  setTimeout(() => { sortBounce.value = false; }, 300);
-  emit('update:sortType', val);
-  sortMenuOpen.value = false;
-}
 
 function handleRefresh() {
   if (props.refreshing) return;
@@ -154,15 +95,6 @@ function handleSave() {
   if (props.saveState !== 'idle') return;
   emit('save');
 }
-
-function onClickOutside(e: MouseEvent) {
-  if (sortMenuRef.value && !sortMenuRef.value.contains(e.target as Node)) {
-    sortMenuOpen.value = false;
-  }
-}
-
-onMounted(() => document.addEventListener('click', onClickOutside));
-onUnmounted(() => document.removeEventListener('click', onClickOutside));
 </script>
 
 <style scoped>
