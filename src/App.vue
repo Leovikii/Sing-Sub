@@ -27,10 +27,8 @@
         :saveState="saveStatus"
         :refreshing="refreshing"
         :isDirty="isDirty"
-        v-model:sortType="currentSort"
         @refresh="handleGlobalRefresh"
         @add="handleGlobalAdd"
-        @sort="handleGlobalSort"
         @save="handleGlobalSave"
       />
 
@@ -120,7 +118,6 @@ const stateData = ref<StateData | null>(null);
 const fileSha = ref<string | null>(null);
 const loadingData = ref(false);
 const saveStatus = ref<'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error'>('idle');
-const currentSort = ref<'name' | 'created' | 'updated'>('name');
 const statusMessage = ref('');
 const refreshing = ref(false);
 const isInitializing = ref(true);
@@ -366,20 +363,6 @@ function duplicateProfile(source: Profile) {
   expandedIndex.value = index + 1;
 }
 
-function sortProfiles() {
-  if (!stateData.value) return;
-  const expandedName = expandedIndex.value !== null
-    ? stateData.value.profiles[expandedIndex.value]?.name ?? null
-    : null;
-  stateData.value.profiles.sort((a, b) =>
-    (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
-  );
-  if (expandedName !== null) {
-    const newIndex = stateData.value.profiles.findIndex(p => p.name === expandedName);
-    expandedIndex.value = newIndex >= 0 ? newIndex : null;
-  }
-}
-
 function toggleExpand(index: number) {
   expandedIndex.value = expandedIndex.value === index ? null : index;
 }
@@ -392,11 +375,6 @@ async function handleGlobalAdd() {
       assetManagerRef.value.createFile();
     }
   }
-}
-
-function handleGlobalSort() {
-  if (activeTab.value === 'config') sortProfiles();
-  // Assets sort if implemented
 }
 
 function handleGlobalSave() {

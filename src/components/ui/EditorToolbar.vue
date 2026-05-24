@@ -20,29 +20,25 @@
       </button>
     </div>
 
-    <!-- Search group -->
+    <!-- Search/Replace group -->
     <div class="flex items-center gap-1 bg-[#0a0a0a] rounded-lg p-1 border border-[#2c2c2e] ml-auto">
-      <button @click="$emit('search')" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0" title="查找 (Ctrl+F)">
+      <button @click="$emit('replace')" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0" title="查找/替换 (Ctrl+F/H)">
         <Search class="w-4 h-4" />
-        <span class="hidden sm:inline text-xs font-medium">查找</span>
-      </button>
-      <button @click="$emit('replace')" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0" title="替换 (Ctrl+H)">
-        <Replace class="w-4 h-4" />
-        <span class="hidden sm:inline text-xs font-medium">替换</span>
+        <span class="hidden sm:inline text-xs font-medium">查找 / 替换</span>
       </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Undo2, Redo2, Wand2, Search, Replace } from 'lucide-vue-next';
+import { Undo2, Redo2, Wand2, Search } from 'lucide-vue-next';
 
 defineProps<{
   canUndo?: boolean;
   canRedo?: boolean;
 }>();
 
-defineEmits(['undo', 'redo', 'format', 'search', 'replace']);
+defineEmits(['undo', 'redo', 'format', 'replace']);
 </script>
 
 <style scoped>

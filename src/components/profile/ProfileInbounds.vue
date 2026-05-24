@@ -48,14 +48,11 @@
             <!-- Micro Cards -->
             <div class="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
               <template v-if="matchedNodes.length > 0">
-                <span
+                <NodeMicroCard
                   v-for="(node, idx) in matchedNodes.slice(0, 5)"
                   :key="idx"
-                  class="inline-flex items-stretch rounded-full whitespace-nowrap border border-[#F596AA]/20 overflow-hidden"
-                >
-                  <span class="px-1.5 py-0.5 flex items-center justify-center bg-[#38383a] text-[#86868b] text-[10px] font-bold uppercase">{{ node.type }}</span>
-                  <span class="px-2 py-0.5 flex items-center justify-center bg-[#F596AA]/10 text-[#F596AA] text-xs font-medium">{{ node.tag }}</span>
-                </span>
+                  :node="{ type: node.type || '', tag: node.tag }"
+                />
                 <span v-if="matchedNodes.length > 5" class="px-2 py-0.5 rounded-full bg-[#38383a] text-[#86868b] text-xs font-medium whitespace-nowrap">
                   +{{ matchedNodes.length - 5 }}
                 </span>
@@ -95,6 +92,7 @@ import { ref, computed } from 'vue';
 import { ArrowDownToLine, Plus, Trash2, Check } from 'lucide-vue-next';
 import AppleInput from '../ui/AppleInput.vue';
 import AppleSelect from '../ui/AppleSelect.vue';
+import NodeMicroCard from '../ui/NodeMicroCard.vue';
 import type { Profile, FilterAction } from '../../types';
 
 const props = defineProps<{

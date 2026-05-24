@@ -52,12 +52,10 @@
       </div>
 
       <!-- Raw JSON Editor -->
-      <div v-if="viewMode === 'code'" class="absolute inset-0 bg-[#0a0a0a] z-10">
+      <div v-if="viewMode === 'code'" class="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
         <CodeEditor
-          :key="initialCodeState || 'no-base'"
           v-model="editorContent"
-          :baseContent="initialCodeState"
-          class="absolute inset-0"
+          class="flex-1 min-h-0"
         />
       </div>
     </template>

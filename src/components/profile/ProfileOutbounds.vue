@@ -55,19 +55,11 @@
             <!-- Micro Cards -->
             <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex flex-wrap md:flex-nowrap items-center gap-1.5 md:overflow-x-auto no-scrollbar py-1">
               <template v-if="getMatchedNodes(group.tag).length > 0">
-                <span
+                <NodeMicroCard
                   v-for="(node, idx) in getMatchedNodes(group.tag).slice(0, 10)"
                   :key="idx"
-                  class="inline-flex items-center gap-1.5 rounded-full whitespace-nowrap bg-[#F596AA]/5 px-2 py-1"
-                >
-                  <span 
-                    class="w-4 h-4 flex items-center justify-center rounded-full text-white text-[10px] font-black uppercase"
-                    :class="getProtocolColor(node.type)"
-                  >
-                    {{ node.type.charAt(0) }}
-                  </span>
-                  <span class="text-[#f5f5f7] text-xs font-medium">{{ node.tag }}</span>
-                </span>
+                  :node="{ type: node.type || '', tag: node.tag }"
+                />
                 <span v-if="getMatchedNodes(group.tag).length > 10" class="px-2 py-0.5 rounded-full bg-[#38383a] text-[#86868b] text-xs font-medium whitespace-nowrap">
                   +{{ getMatchedNodes(group.tag).length - 10 }}
                 </span>
@@ -107,6 +99,7 @@ import { ref, computed } from 'vue';
 import { ArrowUpFromLine, Plus, Trash2, Check } from 'lucide-vue-next';
 import AppleInput from '../ui/AppleInput.vue';
 import AppleSelect from '../ui/AppleSelect.vue';
+import NodeMicroCard from '../ui/NodeMicroCard.vue';
 import type { Profile } from '../../types';
 
 const props = defineProps<{
@@ -228,18 +221,6 @@ function getMatchedNodes(tag: string): { tag: string; type: string }[] {
   }
   
   return result;
-}
-
-function getProtocolColor(type: string) {
-  if (!type) return 'bg-[#F596AA]';
-  const t = type.toLowerCase();
-  if (t === 'vless' || t === 'vmess') return 'bg-emerald-500';
-  if (t === 'trojan') return 'bg-blue-500';
-  if (t === 'shadowsocks' || t === 'ss') return 'bg-amber-500';
-  if (t === 'anytls') return 'bg-purple-500';
-  if (t === 'hysteria' || t === 'hysteria2') return 'bg-orange-500';
-  if (t === 'wireguard' || t === 'wg') return 'bg-red-500';
-  return 'bg-[#F596AA]';
 }
 
 </script>
