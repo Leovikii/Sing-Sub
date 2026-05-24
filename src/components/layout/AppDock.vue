@@ -1,6 +1,6 @@
 <template>
-  <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-    <div class="dock-container relative flex items-center p-1.5 rounded-full bg-[#1c1c1e]/70 backdrop-blur-2xl border border-white/10 shadow-2xl overflow-hidden">
+  <div class="fixed bottom-8 inset-x-0 flex justify-center pointer-events-none z-50">
+    <div class="dock-container relative flex items-center p-1.5 rounded-full bg-[#1c1c1e]/70 backdrop-blur-2xl border border-white/10 shadow-2xl overflow-hidden pointer-events-auto">
       <!-- Animated slider -->
       <div 
         class="absolute top-1.5 bottom-1.5 rounded-full bg-[#38383a] transition-all duration-300 ease-out z-0"

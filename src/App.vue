@@ -24,12 +24,14 @@
 
     <template v-else-if="stateData">
       <TopToolbar
-        :saveState="saveStatus"
+        :saveStatus="saveStatus"
+        :statusMessage="statusMessage"
         :refreshing="refreshing"
         :isDirty="isDirty"
         @refresh="handleGlobalRefresh"
         @add="handleGlobalAdd"
         @save="handleGlobalSave"
+        @reset="handleGlobalReset"
       />
 
       <transition name="fade-scale" mode="out-in">
@@ -37,14 +39,13 @@
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ProfileEditor
                 v-for="(profile, pIndex) in stateData.profiles"
-                :key="pIndex"
+                :key="profile.name"
                 :profile="profile"
                 :index="pIndex"
                 :availableNodes="availableAssets.nodes"
                 :availableTemplates="availableAssets.templates"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
-                :globalSaveState="saveStatus"
                 @update:expanded="toggleExpand(pIndex)"
                 @preview="handlePreview"
                 @copyLink="handleCopyLink"
@@ -92,7 +93,7 @@
       @cancel="showDisconnectConfirm = false"
     />
 
-    <StatusToast :status="saveStatus" :message="statusMessage" />
+
   </div>
 </template>
 
@@ -105,17 +106,15 @@ import ProfileEditor from './components/ProfileEditor.vue';
 import PreviewModal from './components/ui/PreviewModal.vue';
 import ConfirmModal from './components/ui/ConfirmModal.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
-import StatusToast from './components/ui/StatusToast.vue';
 import AppDock from './components/layout/AppDock.vue';
 import AssetManager from './components/AssetManager.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v3.0.0-beta.3';
+const APP_VERSION = 'v3.0.0-beta.4';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
-const fileSha = ref<string | null>(null);
 const loadingData = ref(false);
 const saveStatus = ref<'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error'>('idle');
 const statusMessage = ref('');
@@ -188,7 +187,6 @@ onMounted(async () => {
     if (s) {
       const [data] = await Promise.all([getState(), refreshAssets()]);
       setStateData(data.state);
-      fileSha.value = data.sha;
     }
   } catch { /* not logged in */ }
   isInitializing.value = false;
@@ -201,7 +199,6 @@ async function handleSetup() {
     const result = await login(setupData);
     const [data] = await Promise.all([getState(), refreshAssets()]);
     setStateData(data.state);
-    fileSha.value = data.sha;
     setupData.pat = '';
     if (result.warning) {
       showStatus('warning', '登录成功，但配置构建失败: ' + result.warning, 5000);
@@ -219,7 +216,6 @@ async function handleSaveSettings(newSettings: { owner: string; repo: string; pa
     const result = await saveSettings(newSettings);
     const data = await getState();
     setStateData(data.state);
-    fileSha.value = data.sha;
     if (result.warning) {
       showStatus('warning', '设置已保存，但配置构建失败: ' + result.warning, 5000);
     } else {
@@ -246,7 +242,6 @@ async function confirmDisconnect() {
   showDisconnectConfirm.value = false;
   await deleteSettings();
   stateData.value = null;
-  fileSha.value = null;
 }
 
 async function handleSave() {
@@ -254,8 +249,7 @@ async function handleSave() {
   saveStatus.value = 'saving';
   statusMessage.value = '';
   try {
-    const data = await saveState(stateData.value, fileSha.value);
-    fileSha.value = data.sha;
+    const data = await saveState(stateData.value, null);
     isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '规则已保存，但构建失败: ' + data.warning, 5000);
@@ -272,13 +266,12 @@ async function handleSaveProfile(profileName: string) {
   saveStatus.value = 'saving';
   statusMessage.value = '';
   try {
-    const data = await saveState(stateData.value, fileSha.value, profileName);
-    fileSha.value = data.sha;
+    const data = await saveState(stateData.value, null, profileName);
     isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '配置已保存，但构建失败: ' + data.warning, 5000);
     } else {
-      showStatus('success', '局部保存成功，配置已更新', 3000);
+      showStatus('success', '保存成功，配置已更新', 3000);
     }
   } catch (e: any) {
     showStatus('error', e.message || '保存失败', 5000);
@@ -293,7 +286,6 @@ async function handleRefresh() {
   try {
     const data = await rebuild();
     setStateData(data.state);
-    fileSha.value = data.sha;
     if (data.warning) {
       showStatus('warning', '刷新成功，但构建失败: ' + data.warning, 5000);
     } else {
@@ -384,6 +376,12 @@ function handleGlobalSave() {
 function handleGlobalRefresh() {
   handleRefresh();
   refreshAssets();
+}
+
+function handleGlobalReset() {
+  if (stateData.value) {
+    setStateData(JSON.parse(JSON.stringify(stateData.value)));
+  }
 }
 </script>
 

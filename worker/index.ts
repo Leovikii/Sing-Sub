@@ -45,6 +45,7 @@ export default {
         response = await handlePutFile(request, env);
       } else if (path === '/api/file' && method === 'DELETE') {
         response = await handleDeleteFile(request, env);
+
       } else if (path.startsWith('/sub/') && path.endsWith('.json') && method === 'GET') {
         const parts = path.slice(5, -5).split('/');
         if (parts.length === 2) {
@@ -64,4 +65,4 @@ export default {
 
     return addSecurityHeaders(response);
   },
-} satisfies ExportedHandler<Env>;
+}

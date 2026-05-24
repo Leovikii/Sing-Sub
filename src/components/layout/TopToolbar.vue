@@ -1,9 +1,36 @@
 <template>
-  <div class="flex items-center justify-end mb-6">
+  <div class="flex items-center justify-between mb-6">
+    <!-- Left: Status indicator -->
+    <div
+      class="flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300"
+      :class="saveStatus !== 'idle'
+        ? 'opacity-100 bg-[#1c1c1e]/60 border-[#2c2c2e] shadow-sm'
+        : 'opacity-0 pointer-events-none border-transparent'"
+    >
+      <span v-if="saveStatus !== 'idle'" class="relative flex h-2 w-2 shrink-0">
+        <span
+          v-if="saveStatus === 'saving' || saveStatus === 'refreshing'"
+          class="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping"
+          :class="saveStatus === 'saving' ? 'bg-[#F596AA]' : 'bg-blue-400'"
+        />
+        <span
+          class="relative inline-flex rounded-full h-2 w-2"
+          :class="{
+            'bg-[#F596AA]': saveStatus === 'saving',
+            'bg-blue-400': saveStatus === 'refreshing',
+            'bg-emerald-400': saveStatus === 'success',
+            'bg-amber-400': saveStatus === 'warning',
+            'bg-red-400': saveStatus === 'error',
+          }"
+        />
+      </span>
+      <span v-if="saveStatus !== 'idle'" class="text-xs text-[#a1a1a6] whitespace-nowrap">{{ displayMessage }}</span>
+    </div>
+
     <!-- Right: Unified Action Island -->
     <div class="flex items-center gap-1 p-1 bg-[#1c1c1e]/80 backdrop-blur-xl border border-[#38383a] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
-      
-      <!-- Dynamic Buttons (Left side to prevent pushing static buttons) -->
+
+      <!-- Dynamic Buttons -->
       <button
         v-if="isDirty"
         @click="$emit('reset')"
@@ -15,26 +42,26 @@
       </button>
 
       <button
-        v-show="isDirty || saveState !== 'idle'"
+        v-show="isDirty || saveStatus !== 'idle'"
         @click="handleSave"
-        :disabled="saveState !== 'idle'"
+        :disabled="saveStatus !== 'idle'"
         :class="[
           'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-          saveState === 'idle' ? 'bg-[#F596AA]/10 text-[#F596AA] hover:bg-[#F596AA]/20 shadow-sm shadow-[#F596AA]/10 cursor-pointer' : '',
-          saveState === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : '',
-          saveState === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : '',
-          saveState === 'saving' ? 'bg-[#2c2c2e] text-[#86868b] cursor-not-allowed' : ''
+          saveStatus === 'idle' ? 'bg-[#F596AA]/10 text-[#F596AA] hover:bg-[#F596AA]/20 shadow-sm shadow-[#F596AA]/10 cursor-pointer' : '',
+          saveStatus === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : '',
+          saveStatus === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : '',
+          saveStatus === 'saving' ? 'bg-[#2c2c2e] text-[#86868b] cursor-not-allowed' : ''
         ]"
         title="保存"
       >
-        <Loader2 v-if="saveState === 'saving'" :size="14" class="tb-spin text-[#F596AA]" />
-        <Check v-else-if="saveState === 'success'" :size="14" />
-        <X v-else-if="saveState === 'error'" :size="14" />
+        <Loader2 v-if="saveStatus === 'saving'" :size="14" class="tb-spin text-[#F596AA]" />
+        <Check v-else-if="saveStatus === 'success'" :size="14" />
+        <X v-else-if="saveStatus === 'error'" :size="14" />
         <Save v-else :size="14" />
         <span class="hidden md:inline">保存</span>
       </button>
 
-      <div v-if="isDirty || saveState !== 'idle'" class="w-px h-3.5 bg-[#38383a] mx-0.5"></div>
+      <div v-if="isDirty || saveStatus !== 'idle'" class="w-px h-3.5 bg-[#38383a] mx-0.5"></div>
 
       <!-- Static Buttons -->
       <button
@@ -62,11 +89,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { RefreshCw, Plus, Save, Check, X, Loader2, RotateCcw } from 'lucide-vue-next';
 
 const props = defineProps<{
-  saveState: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
+  saveStatus: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
+  statusMessage?: string;
   refreshing: boolean;
   isDirty: boolean;
 }>();
@@ -80,6 +108,17 @@ const emit = defineEmits<{
 
 const addBounce = ref(false);
 
+const displayMessage = computed(() => {
+  switch (props.saveStatus) {
+    case 'saving': return '正在保存...';
+    case 'refreshing': return '正在刷新...';
+    case 'success': return props.statusMessage || '操作成功';
+    case 'warning': return props.statusMessage || '操作完成，但有警告';
+    case 'error': return props.statusMessage || '操作失败';
+    default: return '';
+  }
+});
+
 function handleRefresh() {
   if (props.refreshing) return;
   emit('refresh');
@@ -92,7 +131,7 @@ function handleAdd() {
 }
 
 function handleSave() {
-  if (props.saveState !== 'idle') return;
+  if (props.saveStatus !== 'idle') return;
   emit('save');
 }
 </script>
@@ -115,16 +154,5 @@ function handleSave() {
   0% { transform: scale(1); }
   40% { transform: scale(1.2); }
   100% { transform: scale(1); }
-}
-
-.menu-enter-active,
-.menu-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.menu-enter-from,
-.menu-leave-to {
-  opacity: 0;
-  transform: scale(0.95);
 }
 </style>

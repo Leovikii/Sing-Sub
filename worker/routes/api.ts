@@ -1,4 +1,4 @@
-import type { Env, UserSettings, StateData } from '../types';
+import type { Env, UserSettings, StateData, Profile } from '../types';
 import {
   getSessionData, getUserSettings, putUserSettings,
   createSession, deleteSession, requireAuth,
@@ -7,9 +7,8 @@ import {
 import { fetchUser, fetchFileContent, putFileContent, deleteFileContent, fetchDirectoryContents, type RepoSession } from '../lib/github';
 import { buildAllProfiles } from '../lib/builder';
 import { jsonResponse, errorResponse } from '../lib/security';
-import { generateHex, toRepoSession, rebuildWithWarning, rebuildSingleWithWarning, cleanupSubToken, seedRepository } from '../lib/helpers';
+import { generateHex, toRepoSession, rebuildWithWarning, rebuildSingleWithWarning, cleanupSubToken, fetchAllProfiles } from '../lib/helpers';
 
-const RULES_PATH = 'sing-sub/rules.json';
 
 export async function handleLogin(request: Request, env: Env): Promise<Response> {
   const { owner, repo, pat } = await request.json() as {
@@ -44,7 +43,7 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
   }
 
   const session = { owner, repo, pat };
-  await seedRepository(session);
+
   const { warning } = await rebuildWithWarning(session, subToken, env);
 
   const sessionId = await createSession(owner, repo, env);
@@ -137,9 +136,7 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
   }
 
   const session: RepoSession = { owner, repo, pat: effectivePat };
-  if (isRepoChange) {
-    await seedRepository(session);
-  }
+
   const { warning } = await rebuildWithWarning(session, subToken, env);
 
   return jsonResponse(
@@ -166,7 +163,6 @@ export async function handleGetState(request: Request, env: Env): Promise<Respon
 
   const session = toRepoSession(auth.settings);
 
-  const { fetchAllProfiles } = await import('../lib/helpers');
   const profiles = await fetchAllProfiles(session);
 
   return jsonResponse({ state: { profiles }, sha: 'split' });
@@ -178,35 +174,16 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
 
   const session = toRepoSession(auth.settings);
 
-  let healed = false;
-  const [nodes, templates, configs] = await Promise.all([
-    fetchDirectoryContents('sing-sub/nodes', session),
-    fetchDirectoryContents('sing-sub/templates', session),
-    fetchDirectoryContents('sing-sub/configs', session),
-  ]);
-  
-  if (nodes.length === 0 || templates.length === 0 || configs.length === 0) {
-    const { seedRepository } = await import('../lib/helpers');
-    await seedRepository(session);
-    healed = true;
-  }
-
-  const file = await fetchFileContent(RULES_PATH, session);
-  if (!file) return errorResponse('No rules found', 404);
-
-  const state = JSON.parse(file.content) as StateData;
+  const profiles = await fetchAllProfiles(session);
 
   try {
-    await buildAllProfiles(state.profiles, session, auth.settings.subToken, env);
+    await buildAllProfiles(profiles, session, auth.settings.subToken, env);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Build failed';
-    return jsonResponse({ state, sha: file.sha, warning: msg });
+    return jsonResponse({ state: { profiles }, sha: 'split', warning: msg });
   }
 
-  const responsePayload: any = { state, sha: file.sha };
-  if (healed) responsePayload.warning = '检测到节点目录缺失，已自动为您重建初始结构';
-  
-  return jsonResponse(responsePayload);
+  return jsonResponse({ state: { profiles }, sha: 'split' });
 }
 export async function handlePutState(request: Request, env: Env): Promise<Response> {
   const auth = await requireAuth(request, env);
@@ -219,17 +196,17 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
   let existingJson: string[] = [];
   try {
     const existingFiles = await fetchDirectoryContents('sing-sub/configs', session);
-    existingJson = existingFiles.filter(p => p.toLowerCase().endsWith('.json'));
+    existingJson = (existingFiles || []).filter(p => p.toLowerCase().endsWith('.json'));
   } catch {}
 
-  const currentNames = state.profiles.map(p => p.name);
+  const currentNames = state.profiles.map((p: Profile) => p.name);
   const filesToDelete = existingJson.filter(p => {
     const name = p.split('/').pop()?.replace('.json', '');
     return !currentNames.includes(name || '');
   });
 
   // Write all current profiles
-  await Promise.all(state.profiles.map(async profile => {
+  await Promise.all(state.profiles.map(async (profile: Profile) => {
     const path = `sing-sub/configs/${profile.name}.json`;
     const content = JSON.stringify(profile, null, 2);
     // Passing null for SHA forces putFileContent to fetch it first, making it safe for updates
@@ -238,18 +215,12 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
 
   // Delete removed profiles
   if (filesToDelete.length > 0) {
-    const { deleteFileContent } = await import('../lib/github');
     await Promise.all(filesToDelete.map(async path => {
-      await deleteFileContent(path, session, `Delete config`);
+      const f = await fetchFileContent(path, session);
+      if (f) await deleteFileContent(path, session, f.sha, `Delete config`);
     }));
   }
 
-  // Delete legacy rules.json if it exists
-  try {
-    const { deleteFileContent, fetchFileContent } = await import('../lib/github');
-    const legacy = await fetchFileContent(RULES_PATH, session);
-    if (legacy) await deleteFileContent(RULES_PATH, session, `Delete legacy rules.json`);
-  } catch {}
 
   let warning;
   if (profileName) {
@@ -301,22 +272,10 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
     fetchDirectoryContents('sing-sub/configs', session),
   ]);
 
-  let healed = false;
-  if (nodes.length === 0 || templates.length === 0 || configs.length === 0) {
-    const { seedRepository } = await import('../lib/helpers');
-    await seedRepository(session);
-    healed = true;
-    
-    // Re-fetch after healing
-    [nodes, templates, configs] = await Promise.all([
-      fetchDirectoryContents('sing-sub/nodes', session),
-      fetchDirectoryContents('sing-sub/templates', session),
-      fetchDirectoryContents('sing-sub/configs', session),
-    ]);
-  }
+
 
   // Filter to only include JSON files
-  const filterJson = (paths: string[]) => paths.filter(p => p.toLowerCase().endsWith('.json'));
+  const filterJson = (paths: string[] | null) => (paths || []).filter(p => p.toLowerCase().endsWith('.json'));
 
   const jsonNodes = filterJson(nodes);
   const jsonTemplates = filterJson(templates);
@@ -345,7 +304,6 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   return jsonResponse({
     nodes: nodesWithMeta,
     templates: templatesWithMeta,
-    warning: healed ? '检测到节点目录缺失，已自动为您重建初始结构' : undefined
   });
 }
 
