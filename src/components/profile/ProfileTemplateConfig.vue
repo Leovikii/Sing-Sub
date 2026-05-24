@@ -57,10 +57,13 @@ const nodeOptions = computed(() => {
 });
 
 const templateOptions = computed(() => {
-  const opts = (props.availableTemplates || []).map(t => ({
-    label: t.replace('sing-sub/templates/', ''),
-    value: t,
-  }));
+  const opts = (props.availableTemplates || []).map(t => {
+    const path = typeof t === 'string' ? t : (t as any).path || '';
+    return {
+      label: path.replace('sing-sub/templates/', ''),
+      value: path,
+    };
+  });
   opts.push({ label: '使用自定义直链...', value: 'custom' });
   return opts;
 });

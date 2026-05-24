@@ -20,26 +20,26 @@
       </button>
 
       <button 
-        @click="$emit('update:activeTab', 'nodes')"
+        @click="$emit('update:activeTab', 'assets')"
         class="relative z-10 flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-6 py-2 rounded-full transition-colors duration-300"
-        :class="activeTab === 'nodes' ? 'text-[#F596AA]' : 'text-gray-400 hover:text-gray-200'"
+        :class="activeTab === 'assets' ? 'text-[#F596AA]' : 'text-gray-400 hover:text-gray-200'"
       >
-        <Server :size="18" />
-        <span class="text-[11px] md:text-sm font-medium leading-tight">节点</span>
+        <Box :size="18" />
+        <span class="text-[11px] md:text-sm font-medium leading-tight">组件</span>
       </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Settings2, Server } from 'lucide-vue-next';
+import { Settings2, Box } from 'lucide-vue-next';
 
 defineProps<{
-  activeTab: 'config' | 'nodes';
+  activeTab: 'config' | 'assets';
 }>();
 
 defineEmits<{
-  'update:activeTab': [value: 'config' | 'nodes'];
+  'update:activeTab': [value: 'config' | 'assets'];
 }>();
 </script>
 

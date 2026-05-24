@@ -23,6 +23,9 @@ export interface Profile {
   nodesPath: string;
   rules: { group: string; filters: { action: 'include' | 'exclude'; keyword: string }[] }[];
   inboundRules: { tag: string; filters: { action: 'include' | 'exclude'; keyword: string }[] }[];
+  overrides?: Record<string, unknown>;
+  created_at?: number;
+  updated_at?: number;
 }
 
 export interface StateData {

@@ -166,13 +166,10 @@ export async function handleGetState(request: Request, env: Env): Promise<Respon
 
   const session = toRepoSession(auth.settings);
 
-  const file = await fetchFileContent(RULES_PATH, session);
-  if (!file) {
-    return jsonResponse({ state: { profiles: [] }, sha: null });
-  }
+  const { fetchAllProfiles } = await import('../lib/helpers');
+  const profiles = await fetchAllProfiles(session);
 
-  const state = JSON.parse(file.content) as StateData;
-  return jsonResponse({ state, sha: file.sha });
+  return jsonResponse({ state: { profiles }, sha: 'split' });
 }
 
 export async function handleRebuild(request: Request, env: Env): Promise<Response> {
@@ -210,17 +207,48 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
   
   return jsonResponse(responsePayload);
 }
-
 export async function handlePutState(request: Request, env: Env): Promise<Response> {
   const auth = await requireAuth(request, env);
   if (auth instanceof Response) return auth;
 
-  const { state, sha, profileName } = await request.json() as { state: StateData; sha: string | null; profileName?: string };
-
+  const { state, profileName } = await request.json() as { state: StateData; profileName?: string };
   const session = toRepoSession(auth.settings);
 
-  const content = JSON.stringify(state, null, 2);
-  const result = await putFileContent(RULES_PATH, session, content, sha, 'Update rules via Sing-Sub');
+  // Read existing files to detect deletions
+  let existingJson: string[] = [];
+  try {
+    const existingFiles = await fetchDirectoryContents('sing-sub/configs', session);
+    existingJson = existingFiles.filter(p => p.toLowerCase().endsWith('.json'));
+  } catch {}
+
+  const currentNames = state.profiles.map(p => p.name);
+  const filesToDelete = existingJson.filter(p => {
+    const name = p.split('/').pop()?.replace('.json', '');
+    return !currentNames.includes(name || '');
+  });
+
+  // Write all current profiles
+  await Promise.all(state.profiles.map(async profile => {
+    const path = `sing-sub/configs/${profile.name}.json`;
+    const content = JSON.stringify(profile, null, 2);
+    // Passing null for SHA forces putFileContent to fetch it first, making it safe for updates
+    await putFileContent(path, session, content, null, `Update config ${profile.name}`);
+  }));
+
+  // Delete removed profiles
+  if (filesToDelete.length > 0) {
+    const { deleteFileContent } = await import('../lib/github');
+    await Promise.all(filesToDelete.map(async path => {
+      await deleteFileContent(path, session, `Delete config`);
+    }));
+  }
+
+  // Delete legacy rules.json if it exists
+  try {
+    const { deleteFileContent, fetchFileContent } = await import('../lib/github');
+    const legacy = await fetchFileContent(RULES_PATH, session);
+    if (legacy) await deleteFileContent(RULES_PATH, session, `Delete legacy rules.json`);
+  } catch {}
 
   let warning;
   if (profileName) {
@@ -231,9 +259,7 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
     warning = res.warning;
   }
   
-  if (warning) return jsonResponse({ sha: result.sha, warning });
-
-  return jsonResponse({ sha: result.sha });
+  return jsonResponse({ sha: 'split', warning });
 }
 
 export async function handlePreview(request: Request, env: Env, name: string): Promise<Response> {
@@ -290,9 +316,9 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const filterJson = (paths: string[]) => paths.filter(p => p.toLowerCase().endsWith('.json'));
 
   const jsonNodes = filterJson(nodes);
+  const jsonTemplates = filterJson(templates);
   
-  // Parse nodes for metadata
-  const nodesWithMeta = await Promise.all(jsonNodes.map(async path => {
+  const parseFileMeta = async (path: string) => {
     try {
       const file = await fetchFileContent(path, session);
       if (file && file.content) {
@@ -306,11 +332,16 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
       }
     } catch { /* ignore parse errors */ }
     return { path, inboundsCount: 0, outboundsCount: 0, tags: [] };
-  }));
+  };
+
+  const [nodesWithMeta, templatesWithMeta] = await Promise.all([
+    Promise.all(jsonNodes.map(parseFileMeta)),
+    Promise.all(jsonTemplates.map(parseFileMeta))
+  ]);
 
   return jsonResponse({
     nodes: nodesWithMeta,
-    templates: filterJson(templates),
+    templates: templatesWithMeta,
     warning: healed ? '检测到节点目录缺失，已自动为您重建初始结构' : undefined
   });
 }

@@ -56,10 +56,18 @@
               />
             </div>
           </div>
-          <div v-else-if="activeTab === 'nodes'" key="nodes" class="space-y-6">
-            <NodesManager
-              ref="nodesManagerRef"
-              :nodes="availableAssets.nodes"
+          <div v-else-if="activeTab === 'assets'" key="assets" class="space-y-6">
+            <div class="flex items-center justify-center mb-2">
+              <div class="flex items-center bg-[#1c1c1e] p-1 rounded-full border border-[#38383a] shadow-inner">
+                <button @click="assetType = 'node'" :class="assetType === 'node' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">节点 (Nodes)</button>
+                <button @click="assetType = 'template'" :class="assetType === 'template' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">模板 (Templates)</button>
+              </div>
+            </div>
+
+            <AssetManager
+              ref="assetManagerRef"
+              :type="assetType"
+              :files="assetType === 'node' ? availableAssets.nodes : availableAssets.templates"
               @refresh="refreshAssets"
               @status="(t, m) => showStatus(t, m, 5000)"
             />
@@ -101,7 +109,7 @@ import ConfirmModal from './components/ui/ConfirmModal.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
 import StatusToast from './components/ui/StatusToast.vue';
 import AppDock from './components/layout/AppDock.vue';
-import NodesManager from './components/NodesManager.vue';
+import AssetManager from './components/AssetManager.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
@@ -123,10 +131,11 @@ const expandedIndex = ref<number | null>(null);
 const previewTitle = ref('');
 const previewContent = ref('');
 const previewLoading = ref(false);
-const availableAssets = ref<{ nodes: any[], templates: string[] }>({ nodes: [], templates: [] });
+const availableAssets = ref<{ nodes: any[], templates: any[] }>({ nodes: [], templates: [] });
 
-const activeTab = ref<'config' | 'nodes'>('config');
-const nodesManagerRef = ref<any>(null);
+const activeTab = ref<'config' | 'assets'>('config');
+const assetType = ref<'node' | 'template'>('node');
+const assetManagerRef = ref<any>(null);
 
 const isDirty = ref(false);
 let suppressDirty = false;
@@ -378,16 +387,16 @@ function toggleExpand(index: number) {
 async function handleGlobalAdd() {
   if (activeTab.value === 'config') {
     addProfile();
-  } else if (activeTab.value === 'nodes') {
-    if (nodesManagerRef.value) {
-      nodesManagerRef.value.createNode();
+  } else if (activeTab.value === 'assets') {
+    if (assetManagerRef.value) {
+      assetManagerRef.value.createFile();
     }
   }
 }
 
 function handleGlobalSort() {
   if (activeTab.value === 'config') sortProfiles();
-  // Nodes sort if implemented
+  // Assets sort if implemented
 }
 
 function handleGlobalSave() {
