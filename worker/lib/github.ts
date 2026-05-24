@@ -85,11 +85,21 @@ export async function putFileContent(
   sha: string | null,
   message: string
 ): Promise<{ sha: string }> {
+  let fileSha = sha;
+  if (!fileSha) {
+    try {
+      const existing = await fetchFileContent(filePath, session);
+      if (existing) fileSha = existing.sha;
+    } catch (e) {
+      // Ignore if file doesn't exist
+    }
+  }
+
   const body: Record<string, unknown> = {
     message,
     content: encodeToBase64(content),
   };
-  if (sha) body.sha = sha;
+  if (fileSha) body.sha = fileSha;
 
   const res = await repoFetch(`contents/${filePath}`, session, {
     method: 'PUT',

@@ -179,12 +179,13 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
   const session = toRepoSession(auth.settings);
 
   let healed = false;
-  const [nodes, templates] = await Promise.all([
+  const [nodes, templates, configs] = await Promise.all([
     fetchDirectoryContents('sing-sub/nodes', session),
     fetchDirectoryContents('sing-sub/templates', session),
+    fetchDirectoryContents('sing-sub/configs', session),
   ]);
   
-  if (nodes.length === 0 || templates.length === 0) {
+  if (nodes.length === 0 || templates.length === 0 || configs.length === 0) {
     const { seedRepository } = await import('../lib/helpers');
     await seedRepository(session);
     healed = true;
@@ -293,22 +294,24 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
 
   const session = toRepoSession(auth.settings);
 
-  // Fetch both directories concurrently
-  let [nodes, templates] = await Promise.all([
+  // Fetch directories concurrently
+  let [nodes, templates, configs] = await Promise.all([
     fetchDirectoryContents('sing-sub/nodes', session),
     fetchDirectoryContents('sing-sub/templates', session),
+    fetchDirectoryContents('sing-sub/configs', session),
   ]);
 
   let healed = false;
-  if (nodes.length === 0 || templates.length === 0) {
+  if (nodes.length === 0 || templates.length === 0 || configs.length === 0) {
     const { seedRepository } = await import('../lib/helpers');
     await seedRepository(session);
     healed = true;
     
     // Re-fetch after healing
-    [nodes, templates] = await Promise.all([
+    [nodes, templates, configs] = await Promise.all([
       fetchDirectoryContents('sing-sub/nodes', session),
       fetchDirectoryContents('sing-sub/templates', session),
+      fetchDirectoryContents('sing-sub/configs', session),
     ]);
   }
 

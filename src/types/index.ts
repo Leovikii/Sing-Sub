@@ -27,15 +27,7 @@ export interface InboundRule {
   filters: FilterAction[];
 }
 
-export interface Rule {
-  group: string;
-  filters: FilterAction[];
-}
 
-export interface InboundRule {
-  tag: string;
-  filters: FilterAction[];
-}
 
 export interface Profile {
   name: string;

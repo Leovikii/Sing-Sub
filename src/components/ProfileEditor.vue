@@ -252,6 +252,16 @@ function handleLocalSave() {
   localProfile.value.name = localProfileName.value;
   localProfile.value.note = localProfileNote.value;
   
+  // Prune stale rules that no longer exist in the template
+  if (fetchedTemplateData.value && Array.isArray(fetchedTemplateData.value.outbounds)) {
+    const validTags = fetchedTemplateData.value.outbounds
+      .filter((o: any) => o.type === 'selector' && o.tag)
+      .map((o: any) => o.tag);
+    if (localProfile.value.rules) {
+      localProfile.value.rules = localProfile.value.rules.filter(r => validTags.includes(r.group));
+    }
+  }
+  
   // Mutate parent profile
   for (const key in props.profile) {
     if (Object.prototype.hasOwnProperty.call(props.profile, key)) {
