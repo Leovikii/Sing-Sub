@@ -5,9 +5,7 @@
       :appVersion="APP_VERSION"
       :settings="settings"
       :loading="loadingData"
-      @save="handleSaveSettings"
-      @disconnect="handleDisconnect"
-      @update:settings="handleUpdateSettings"
+      @open-settings="activeTab = 'settings'"
     />
 
     <div v-if="isInitializing" class="flex justify-center items-center py-32">
@@ -28,6 +26,9 @@
         :statusMessage="statusMessage"
         :refreshing="refreshing"
         :isDirty="isDirty"
+        :activeTab="activeTab"
+        :assetType="assetType"
+        @update:assetType="assetType = $event"
         @refresh="handleGlobalRefresh"
         @add="handleGlobalAdd"
         @save="handleGlobalSave"
@@ -39,7 +40,7 @@
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ProfileEditor
                 v-for="(profile, pIndex) in stateData.profiles"
-                :key="profile.name"
+                :key="profile.created_at || profile.name"
                 :profile="profile"
                 :index="pIndex"
                 :availableNodes="availableAssets.nodes"
@@ -56,14 +57,6 @@
             </div>
           </div>
           <div v-else-if="activeTab === 'assets'" key="assets" class="space-y-6">
-            <div class="flex items-center justify-center mb-2">
-              <div class="flex items-center bg-[#1c1c1e] p-1 rounded-full border border-[#38383a] shadow-inner">
-                <button @click="assetType = 'node'" :class="assetType === 'node' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">节点 (Nodes)</button>
-                <button @click="assetType = 'template'" :class="assetType === 'template' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">模板 (Templates)</button>
-                <button @click="assetType = 'patch'" :class="assetType === 'patch' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">补丁 (Patches)</button>
-              </div>
-            </div>
-
             <AssetManager
               ref="assetManagerRef"
               :type="assetType"
@@ -73,7 +66,17 @@
               @delete="markAssetForDeletion"
             />
           </div>
-      </transition>
+          <div v-else-if="activeTab === 'settings'" key="settings" class="space-y-6">
+            <SettingsView
+              :user="user"
+              :settings="settings"
+              :loading="loadingData"
+              @save="handleSaveSettings"
+              @disconnect="handleDisconnect"
+              @update:settings="handleUpdateSettings"
+            />
+          </div>
+        </transition>
 
       <AppDock v-model:activeTab="activeTab" />
     </template>
@@ -102,6 +105,7 @@ import ConfirmModal from './components/ui/ConfirmModal.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
 import AppDock from './components/layout/AppDock.vue';
 import AssetManager from './components/AssetManager.vue';
+import SettingsView from './components/SettingsView.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
@@ -120,7 +124,7 @@ const showDisconnectConfirm = ref(false);
 const expandedIndex = ref<number | null>(null);
 const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[] }>({ nodes: [], templates: [], patches: [] });
 
-const activeTab = ref<'config' | 'assets'>('config');
+const activeTab = ref<'config' | 'assets' | 'settings'>('config');
 const assetType = ref<'node' | 'template' | 'patch'>('node');
 const assetManagerRef = ref<any>(null);
 
@@ -150,6 +154,26 @@ async function refreshAssets() {
     availableAssets.value = data;
   } catch {
     availableAssets.value = { nodes: [], templates: [], patches: [] };
+  }
+  pruneStaleReferences();
+}
+
+function pruneStaleReferences() {
+  if (!stateData.value?.profiles) return;
+  const nodePaths = new Set(availableAssets.value.nodes.map((n: any) => n.path || n));
+  const templatePaths = new Set(availableAssets.value.templates.map((t: any) => t.path || t));
+  const patchPaths = new Set(availableAssets.value.patches.map((p: any) => p.path || p));
+
+  for (const profile of stateData.value.profiles) {
+    if (profile.nodesPath && !nodePaths.has(profile.nodesPath)) {
+      profile.nodesPath = '';
+    }
+    if (profile.templateUrl && !profile.templateUrl.startsWith('http') && !templatePaths.has(profile.templateUrl)) {
+      profile.templateUrl = '';
+    }
+    if (profile.patchUrl && !patchPaths.has(profile.patchUrl)) {
+      profile.patchUrl = '';
+    }
   }
 }
 
@@ -268,9 +292,9 @@ async function handleSaveProfile(profileName: string) {
   if (!stateData.value) return;
   saveStatus.value = 'saving';
   statusMessage.value = '';
+  suppressDirty = true;
   try {
     const data = await saveState(stateData.value, null, profileName);
-    isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '配置已保存，但构建失败: ' + data.warning, 5000);
     } else {
@@ -278,6 +302,11 @@ async function handleSaveProfile(profileName: string) {
     }
   } catch (e: any) {
     showStatus('error', e.message || '保存失败', 5000);
+  } finally {
+    nextTick(() => {
+      suppressDirty = false;
+      isDirty.value = false;
+    });
   }
 }
 
