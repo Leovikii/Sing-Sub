@@ -205,8 +205,21 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
     return !currentNames.includes(name || '');
   });
 
-  // Write all current profiles
-  await Promise.all(state.profiles.map(async (profile: Profile) => {
+  const existingNames = existingJson.map(p => p.split('/').pop()?.replace('.json', ''));
+
+  const profilesToUpdate = state.profiles.filter((profile: Profile) => {
+    // If profileName is explicitly provided, we MUST update it
+    if (profileName && profile.name === profileName) return true;
+    
+    // If it's a new profile (or renamed to a new name), we MUST create it
+    if (!existingNames.includes(profile.name || '')) return true;
+
+    // Otherwise, we don't need to write it
+    return false;
+  });
+
+  // Write selected profiles
+  await Promise.all(profilesToUpdate.map(async (profile: Profile) => {
     const path = `sing-sub/configs/${profile.name}.json`;
     const content = JSON.stringify(profile, null, 2);
     // Passing null for SHA forces putFileContent to fetch it first, making it safe for updates

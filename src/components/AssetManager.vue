@@ -12,20 +12,13 @@
         :tag="type === 'node' ? 'NODE' : 'TEMPLATE'"
         :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'"
         :menuItems="fileMenuItems"
-        @click="openPreview(file)"
+        @click="editFile(file, 'preview')"
         @edit="editFile(file)"
         @action="(act) => handleFileAction(act, file)"
       />
     </div>
 
-    <!-- Preview Modal -->
-    <PreviewModal
-      :visible="!!previewFile"
-      :title="previewFile ? getBasename(previewFile.path).replace(/\.json$/, '') : ''"
-      :content="previewContent"
-      :loading="isLoading"
-      @close="closePreview"
-    />
+
 
     <div v-if="files.length === 0" class="text-center py-20 text-[#86868b]">
       {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : '暂无模板文件。' }}
@@ -39,6 +32,8 @@
       @update:title="localFileName = $event"
       :note="localFileNote"
       @update:note="localFileNote = $event"
+      :viewMode="viewMode"
+      @update:viewMode="viewMode = $event"
       :editableTitle="true"
       :editableNote="true"
       extension=".json"
@@ -46,12 +41,14 @@
       :isSaving="isSaving"
       :showSave="isEditorDirty || isNameDirty || isNoteDirty"
       saveText="保存"
+      :showViewToggle="true"
       @save="saveFileCode"
       @reset="resetFileCode"
       @close="closeEditor"
     >
       <CodeEditor
         v-model="editorContent"
+        :readonly="viewMode === 'preview'"
         :loading="isLoading"
         loadingText="读取中..."
         class="min-h-[60vh]"
@@ -75,7 +72,6 @@ import { computed, ref, watch } from 'vue';
 import { Trash2 } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
-import PreviewModal from './ui/PreviewModal.vue';
 import ConfirmModal from './ui/ConfirmModal.vue';
 import CodeEditor from './ui/CodeEditor.vue';
 
@@ -90,9 +86,8 @@ const emit = defineEmits<{
 }>();
 
 const editingFile = ref<any>(null);
-const previewFile = ref<any>(null);
+const viewMode = ref<'preview' | 'edit'>('edit');
 const editorContent = ref('');
-const previewContent = ref('');
 const originalContent = ref('');
 const isLoading = ref(false);
 const isSaving = ref(false);
@@ -125,27 +120,7 @@ const isNoteDirty = computed(() => {
   return localFileNote.value !== originalFileNote.value;
 });
 
-async function openPreview(file: any) {
-  previewFile.value = file;
-  isLoading.value = true;
-  previewContent.value = '';
-  
-  try {
-    const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
-    if (!res.ok) throw new Error('Failed to load file');
-    const data = await res.json();
-    previewContent.value = data.content;
-  } catch (e: any) {
-    emit('status', 'error', '加载失败: ' + e.message);
-  } finally {
-    isLoading.value = false;
-  }
-}
 
-function closePreview() {
-  previewFile.value = null;
-  previewContent.value = '';
-}
 
 const fileMenuItems = [
   { label: '删除文件', action: 'remove', icon: Trash2, danger: true },
@@ -182,8 +157,9 @@ watch(editorContent, (newVal) => {
   isEditorDirty.value = newVal !== originalContent.value;
 });
 
-async function editFile(file: any) {
+async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
   editingFile.value = file;
+  viewMode.value = mode;
   localFileName.value = getBasename(file.path).replace(/\.json$/, '');
   isLoading.value = true;
   editorContent.value = '';
@@ -216,17 +192,7 @@ async function editFile(file: any) {
 }
 
 function closeEditor() {
-  if (isEditorDirty.value || isNameDirty.value || isNoteDirty.value) {
-    confirmTitle.value = '未保存的修改';
-    confirmMessage.value = '有未保存的修改，确定放弃并关闭吗？';
-    confirmBtnText.value = '确定关闭';
-    confirmAction = () => {
-      isEditorDirty.value = false;
-      editingFile.value = null;
-    };
-    showConfirm.value = true;
-    return;
-  }
+  isEditorDirty.value = false;
   editingFile.value = null;
 }
 
@@ -306,6 +272,7 @@ async function saveFileCode() {
 function createFile() {
   const dir = props.type === 'node' ? 'nodes' : 'templates';
   const newName = props.type === 'node' ? 'new_node' : 'new_template';
+  viewMode.value = 'edit';
   editingFile.value = { path: `sing-sub/${dir}/${newName}.json`, isNew: true };
   localFileName.value = newName;
   localFileNote.value = '';

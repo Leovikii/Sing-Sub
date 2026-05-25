@@ -47,7 +47,6 @@
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
                 @update:expanded="toggleExpand(pIndex)"
-                @preview="handlePreview"
                 @copyLink="handleCopyLink"
                 @remove="removeProfile"
                 @duplicate="duplicateProfile"
@@ -76,13 +75,6 @@
       <AppDock v-model:activeTab="activeTab" />
     </template>
 
-    <PreviewModal
-      :visible="showPreviewModal"
-      :title="previewTitle"
-      :content="previewContent"
-      :loading="previewLoading"
-      @close="showPreviewModal = false"
-    />
 
     <ConfirmModal
       :visible="showDisconnectConfirm"
@@ -103,7 +95,6 @@ import { Loader2 } from 'lucide-vue-next';
 import AppHeader from './components/layout/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
 import ProfileEditor from './components/ProfileEditor.vue';
-import PreviewModal from './components/ui/PreviewModal.vue';
 import ConfirmModal from './components/ui/ConfirmModal.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
 import AppDock from './components/layout/AppDock.vue';
@@ -115,18 +106,15 @@ const APP_VERSION = 'v3.0.0-beta.4';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
+const originalStateData = ref<StateData | null>(null);
 const loadingData = ref(false);
 const saveStatus = ref<'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error'>('idle');
 const statusMessage = ref('');
 const refreshing = ref(false);
 const isInitializing = ref(true);
 const copyStatus = ref<Record<number, boolean>>({});
-const showPreviewModal = ref(false);
 const showDisconnectConfirm = ref(false);
 const expandedIndex = ref<number | null>(null);
-const previewTitle = ref('');
-const previewContent = ref('');
-const previewLoading = ref(false);
 const availableAssets = ref<{ nodes: any[], templates: any[] }>({ nodes: [], templates: [] });
 
 const activeTab = ref<'config' | 'assets'>('config');
@@ -144,7 +132,7 @@ function showStatus(state: 'success' | 'warning' | 'error', msg: string, duratio
   statusTimer = setTimeout(() => { saveStatus.value = 'idle'; }, duration);
 }
 
-const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getPreview, getAssets } = useApi();
+const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets } = useApi();
 
 async function refreshAssets() {
   try {
@@ -156,6 +144,7 @@ async function refreshAssets() {
 
 function setStateData(state: StateData) {
   suppressDirty = true;
+  originalStateData.value = JSON.parse(JSON.stringify(state));
   stateData.value = normalizeProfiles(state);
   nextTick(() => {
     suppressDirty = false;
@@ -298,20 +287,6 @@ async function handleRefresh() {
   }
 }
 
-async function handlePreview(name: string) {
-  previewTitle.value = name;
-  previewContent.value = '';
-  showPreviewModal.value = true;
-  previewLoading.value = true;
-  try {
-    const data = await getPreview(name);
-    previewContent.value = data.content;
-  } catch {
-    previewContent.value = '构建预览失败，请检查配置。';
-  } finally {
-    previewLoading.value = false;
-  }
-}
 
 async function handleCopyLink(name: string) {
   const token = settings.value?.subToken;
@@ -379,8 +354,8 @@ function handleGlobalRefresh() {
 }
 
 function handleGlobalReset() {
-  if (stateData.value) {
-    setStateData(JSON.parse(JSON.stringify(stateData.value)));
+  if (originalStateData.value) {
+    setStateData(JSON.parse(JSON.stringify(originalStateData.value)));
   }
 }
 </script>
