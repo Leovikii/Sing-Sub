@@ -10,14 +10,24 @@ export async function fetchAllProfiles(session: RepoSession): Promise<Profile[]>
     const files = await fetchDirectoryContents('sing-sub/configs', session);
     const jsonFiles = (files || []).filter(f => f.toLowerCase().endsWith('.json'));
     
-    await Promise.all(jsonFiles.map(async path => {
+    const profileResults = await Promise.all(jsonFiles.map(async path => {
       try {
         const file = await fetchFileContent(path, session);
         if (file && file.content) {
-          profiles.push(JSON.parse(file.content));
+          return JSON.parse(file.content) as Profile;
         }
       } catch {}
+      return null;
     }));
+    
+    profiles = profileResults.filter((p): p is Profile => p !== null);
+    
+    profiles.sort((a, b) => {
+      const timeA = a.created_at || 0;
+      const timeB = b.created_at || 0;
+      if (timeA !== timeB) return timeA - timeB; // Ascending: oldest first, newest last
+      return (a.name || '').localeCompare(b.name || '');
+    });
   } catch {}
 
   return profiles;

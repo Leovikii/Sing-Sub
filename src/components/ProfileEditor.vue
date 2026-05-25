@@ -45,7 +45,7 @@
       <!-- Visual Editor -->
       <div v-show="viewMode === 'edit'" class="flex-1 overflow-auto flex flex-col min-h-0">
         <div class="p-5 sm:p-6 space-y-6 flex-1 min-h-0">
-          <ProfileTemplateConfig :profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" />
+          <ProfileTemplateConfig :profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" :availablePatches="availablePatches" />
           <ProfileInbounds :profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
           <ProfileOutbounds :profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
         </div>
@@ -83,6 +83,7 @@ const props = defineProps<{
   index: number;
   availableNodes?: string[];
   availableTemplates?: string[];
+  availablePatches?: string[];
   copyStatus: boolean;
   expanded?: boolean;
 }>();
@@ -114,11 +115,11 @@ function handleCardAction(action: string) {
   if (action === 'remove') emit('remove', props.index);
 }
 
-const { getFile, getPreview } = useApi();
+const { getFile, postPreview } = useApi();
 const fetchedTemplateData = ref<any>(null);
 const fetchedNodesData = ref<any>(null);
 
-const viewMode = ref<'preview' | 'edit'>('preview');
+const viewMode = ref<'preview' | 'edit'>('edit');
 
 const previewContent = ref('');
 const previewLoading = ref(false);
@@ -143,11 +144,10 @@ function openModal(mode?: 'preview' | 'edit') {
 }
 
 async function fetchPreview() {
-  if (!props.profile.name) return;
   previewLoading.value = true;
   previewContent.value = '';
   try {
-    const data = await getPreview(props.profile.name);
+    const data = await postPreview(localProfile.value);
     previewContent.value = data.content;
   } catch (e: any) {
     previewContent.value = `// 获取预览失败\n// ${e.message || '未知错误'}`;

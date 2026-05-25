@@ -44,6 +44,7 @@
                 :index="pIndex"
                 :availableNodes="availableAssets.nodes"
                 :availableTemplates="availableAssets.templates"
+                :availablePatches="availableAssets.patches"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
                 @update:expanded="toggleExpand(pIndex)"
@@ -59,15 +60,17 @@
               <div class="flex items-center bg-[#1c1c1e] p-1 rounded-full border border-[#38383a] shadow-inner">
                 <button @click="assetType = 'node'" :class="assetType === 'node' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">节点 (Nodes)</button>
                 <button @click="assetType = 'template'" :class="assetType === 'template' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">模板 (Templates)</button>
+                <button @click="assetType = 'patch'" :class="assetType === 'patch' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">补丁 (Patches)</button>
               </div>
             </div>
 
             <AssetManager
               ref="assetManagerRef"
               :type="assetType"
-              :files="assetType === 'node' ? availableAssets.nodes : availableAssets.templates"
+              :files="assetType === 'node' ? availableAssets.nodes.filter(n => !deletedAssets.includes(n.path)) : (assetType === 'template' ? availableAssets.templates.filter(n => !deletedAssets.includes(n.path)) : availableAssets.patches.filter(n => !deletedAssets.includes(n.path)))"
               @refresh="refreshAssets"
               @status="(t, m) => showStatus(t, m, 5000)"
+              @delete="markAssetForDeletion"
             />
           </div>
       </transition>
@@ -102,7 +105,7 @@ import AssetManager from './components/AssetManager.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v3.0.0-beta.4';
+const APP_VERSION = 'v3.0.0-rc1';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
@@ -115,15 +118,22 @@ const isInitializing = ref(true);
 const copyStatus = ref<Record<number, boolean>>({});
 const showDisconnectConfirm = ref(false);
 const expandedIndex = ref<number | null>(null);
-const availableAssets = ref<{ nodes: any[], templates: any[] }>({ nodes: [], templates: [] });
+const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[] }>({ nodes: [], templates: [], patches: [] });
 
 const activeTab = ref<'config' | 'assets'>('config');
-const assetType = ref<'node' | 'template'>('node');
+const assetType = ref<'node' | 'template' | 'patch'>('node');
 const assetManagerRef = ref<any>(null);
 
 const isDirty = ref(false);
 let suppressDirty = false;
 let statusTimer: any = null;
+
+const deletedAssets = ref<string[]>([]);
+
+function markAssetForDeletion(file: any) {
+  deletedAssets.value.push(file.path);
+  isDirty.value = true;
+}
 
 function showStatus(state: 'success' | 'warning' | 'error', msg: string, duration = 3000) {
   if (statusTimer) clearTimeout(statusTimer);
@@ -136,16 +146,17 @@ const { user, settings, login, getSettings, saveSettings, deleteSettings, getSta
 
 async function refreshAssets() {
   try {
-    availableAssets.value = await getAssets();
+    const data = await getAssets();
+    availableAssets.value = data;
   } catch {
-    availableAssets.value = { nodes: [], templates: [] };
+    availableAssets.value = { nodes: [], templates: [], patches: [] };
   }
 }
 
 function setStateData(state: StateData) {
   suppressDirty = true;
   originalStateData.value = JSON.parse(JSON.stringify(state));
-  stateData.value = normalizeProfiles(state);
+  stateData.value = state;
   nextTick(() => {
     suppressDirty = false;
     isDirty.value = false;
@@ -158,17 +169,7 @@ watch(() => stateData.value?.profiles.map(p => p.name).join(','), () => {
   isDirty.value = true;
 });
 
-function normalizeProfiles(state: StateData): StateData {
-  state.profiles = state.profiles.map((p: any) => ({
-    name: p.name || '',
-    note: p.note || '',
-    templateUrl: p.templateUrl || '',
-    nodesPath: p.nodesPath || '',
-    rules: Array.isArray(p.rules) ? p.rules : [],
-    inboundRules: Array.isArray(p.inboundRules) ? p.inboundRules : [],
-  }));
-  return state;
-}
+
 
 onMounted(async () => {
   try {
@@ -239,6 +240,19 @@ async function handleSave() {
   statusMessage.value = '';
   try {
     const data = await saveState(stateData.value, null);
+    
+    if (deletedAssets.value.length > 0) {
+      for (const path of deletedAssets.value) {
+        try {
+          await fetch(`/api/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+        } catch (err) {
+          console.error('Failed to delete asset', path, err);
+        }
+      }
+      deletedAssets.value = [];
+      await refreshAssets();
+    }
+
     isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '规则已保存，但构建失败: ' + data.warning, 5000);
@@ -275,6 +289,8 @@ async function handleRefresh() {
   try {
     const data = await rebuild();
     setStateData(data.state);
+    deletedAssets.value = [];
+    await refreshAssets();
     if (data.warning) {
       showStatus('warning', '刷新成功，但构建失败: ' + data.warning, 5000);
     } else {
@@ -307,8 +323,10 @@ async function handleCopyLink(name: string) {
 function addProfile() {
   if (!stateData.value) return;
   stateData.value.profiles.push({
-    name: 'new_env', note: '', templateUrl: '', nodesPath: 'sing-sub/nodes.json',
+    name: '', note: '', templateUrl: '', nodesPath: 'sing-sub/nodes.json',
     rules: [], inboundRules: [],
+    created_at: Date.now(),
+    updated_at: Date.now(),
   });
   expandedIndex.value = stateData.value.profiles.length - 1;
 }
@@ -326,6 +344,8 @@ function duplicateProfile(source: Profile) {
   const index = stateData.value.profiles.findIndex(p => p.name === source.name);
   const copy: Profile = JSON.parse(JSON.stringify(source));
   copy.name = `${source.name || 'untitled'}_copy`;
+  copy.created_at = Date.now();
+  copy.updated_at = Date.now();
   stateData.value.profiles.splice(index + 1, 0, copy);
   expandedIndex.value = index + 1;
 }
@@ -345,7 +365,7 @@ async function handleGlobalAdd() {
 }
 
 function handleGlobalSave() {
-  if (activeTab.value === 'config') handleSave();
+  handleSave();
 }
 
 function handleGlobalRefresh() {
@@ -353,10 +373,20 @@ function handleGlobalRefresh() {
   refreshAssets();
 }
 
-function handleGlobalReset() {
+function handleReset() {
+  suppressDirty = true;
   if (originalStateData.value) {
-    setStateData(JSON.parse(JSON.stringify(originalStateData.value)));
+    stateData.value = JSON.parse(JSON.stringify(originalStateData.value));
   }
+  deletedAssets.value = [];
+  nextTick(() => {
+    isDirty.value = false;
+    suppressDirty = false;
+  });
+}
+
+function handleGlobalReset() {
+  handleReset();
 }
 </script>
 

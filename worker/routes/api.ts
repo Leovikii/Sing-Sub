@@ -279,9 +279,10 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const session = toRepoSession(auth.settings);
 
   // Fetch directories concurrently
-  let [nodes, templates, configs] = await Promise.all([
+  let [nodes, templates, patches, configs] = await Promise.all([
     fetchDirectoryContents('sing-sub/nodes', session),
     fetchDirectoryContents('sing-sub/templates', session),
+    fetchDirectoryContents('sing-sub/patches', session),
     fetchDirectoryContents('sing-sub/configs', session),
   ]);
 
@@ -292,7 +293,7 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
 
   const jsonNodes = filterJson(nodes);
   const jsonTemplates = filterJson(templates);
-  
+  const jsonPatches = filterJson(patches);
   const parseFileMeta = async (path: string) => {
     try {
       const file = await fetchFileContent(path, session);
@@ -309,14 +310,16 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
     return { path, inboundsCount: 0, outboundsCount: 0, tags: [] };
   };
 
-  const [nodesWithMeta, templatesWithMeta] = await Promise.all([
+  const [nodesWithMeta, templatesWithMeta, patchesWithMeta] = await Promise.all([
     Promise.all(jsonNodes.map(parseFileMeta)),
-    Promise.all(jsonTemplates.map(parseFileMeta))
+    Promise.all(jsonTemplates.map(parseFileMeta)),
+    Promise.all(jsonPatches.map(parseFileMeta))
   ]);
 
   return jsonResponse({
     nodes: nodesWithMeta,
     templates: templatesWithMeta,
+    patches: patchesWithMeta,
   });
 }
 

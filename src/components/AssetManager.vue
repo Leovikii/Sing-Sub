@@ -8,9 +8,9 @@
         :title="getBasename(file.path)"
         :inboundCount="file.inboundsCount"
         :outboundCount="file.outboundsCount"
-        :icon="type === 'node' ? 'network' : 'layout-template'"
-        :tag="type === 'node' ? 'NODE' : 'TEMPLATE'"
-        :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'"
+        :icon="type === 'node' ? 'network' : (type === 'template' ? 'layout-template' : 'puzzle')"
+        :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : 'PATCH')"
+        :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20')"
         :menuItems="fileMenuItems"
         @click="editFile(file, 'preview')"
         @edit="editFile(file)"
@@ -21,7 +21,7 @@
 
 
     <div v-if="files.length === 0" class="text-center py-20 text-[#86868b]">
-      {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : '暂无模板文件。' }}
+      {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : (type === 'template' ? '暂无模板文件。' : '暂无补丁文件。') }}
     </div>
 
     <!-- Editor Modal -->
@@ -55,15 +55,7 @@
       />
     </EditorModal>
 
-    <!-- Confirm Modal -->
-    <ConfirmModal
-      :visible="showConfirm"
-      :title="confirmTitle"
-      :message="confirmMessage"
-      :confirmText="confirmBtnText"
-      @confirm="executeConfirm"
-      @cancel="showConfirm = false"
-    />
+
   </div>
 </template>
 
@@ -72,17 +64,17 @@ import { computed, ref, watch } from 'vue';
 import { Trash2 } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
-import ConfirmModal from './ui/ConfirmModal.vue';
 import CodeEditor from './ui/CodeEditor.vue';
 
 const props = defineProps<{
   files: any[];
-  type: 'node' | 'template';
+  type: 'node' | 'template' | 'patch';
 }>();
 
 const emit = defineEmits<{
   'refresh': [];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
+  'delete': [file: any];
 }>();
 
 const editingFile = ref<any>(null);
@@ -98,16 +90,7 @@ const localFileName = ref('');
 const localFileNote = ref('');
 const originalFileNote = ref('');
 
-const showConfirm = ref(false);
-const confirmTitle = ref('');
-const confirmMessage = ref('');
-const confirmBtnText = ref('');
-let confirmAction: (() => void) | null = null;
 
-function executeConfirm() {
-  if (confirmAction) confirmAction();
-  showConfirm.value = false;
-}
 
 const isNameDirty = computed(() => {
   if (!editingFile.value) return false;
@@ -128,24 +111,7 @@ const fileMenuItems = [
 
 function handleFileAction(action: string, file: any) {
   if (action === 'remove') {
-    confirmTitle.value = '删除确认';
-    confirmMessage.value = `确定要删除 ${getBasename(file.path)} 吗？此操作无法撤销。`;
-    confirmBtnText.value = '删除';
-    confirmAction = () => deleteFile(file.path);
-    showConfirm.value = true;
-  }
-}
-
-async function deleteFile(path: string) {
-  try {
-    await fetch(`/api/file?path=${encodeURIComponent(path)}`, {
-      method: 'DELETE',
-    });
-    emit('status', 'success', `成功删除文件 ${getBasename(path)}`);
-    emit('refresh');
-  } catch (e: any) {
-    console.error(e);
-    emit('status', 'error', '删除失败: ' + e.message);
+    emit('delete', file);
   }
 }
 
@@ -226,7 +192,7 @@ async function saveFileCode() {
   isSaving.value = true;
 
   try {
-    const dir = props.type === 'node' ? 'nodes' : 'templates';
+    const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : 'patches');
     const newPath = `sing-sub/${dir}/${localFileName.value}.json`;
     const isRename = newPath !== editingFile.value.path && !editingFile.value.isNew;
 
@@ -270,10 +236,13 @@ async function saveFileCode() {
 }
 
 function createFile() {
-  const dir = props.type === 'node' ? 'nodes' : 'templates';
-  const newName = props.type === 'node' ? 'new_node' : 'new_template';
+  const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : 'patches');
+  const newName = props.type === 'node' ? 'new_node' : (props.type === 'template' ? 'new_template' : 'new_patch');
   viewMode.value = 'edit';
-  editingFile.value = { path: `sing-sub/${dir}/${newName}.json`, isNew: true };
+  editingFile.value = {
+    path: `sing-sub/${dir}/untitled.json`,
+    isNew: true
+  };
   localFileName.value = newName;
   localFileNote.value = '';
   originalFileNote.value = '';
