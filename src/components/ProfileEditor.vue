@@ -5,8 +5,8 @@
     :inboundCount="inboundCount"
     :outboundCount="outboundCount"
     :menuItems="cardMenuItems"
-    @click="$emit('preview', profile.name || '')"
-    @edit="openModal"
+    @click="openModal('preview')"
+    @edit="openModal('edit')"
     @action="handleCardAction"
   >
     <template #actions>
@@ -43,18 +43,21 @@
   >
     <template #default>
       <!-- Visual Editor -->
-      <div v-show="viewMode === 'ui'" class="flex-1 overflow-auto flex flex-col min-h-0">
+      <div v-show="viewMode === 'edit'" class="flex-1 overflow-auto flex flex-col min-h-0">
         <div class="p-5 sm:p-6 space-y-6 flex-1 min-h-0">
-          <ProfileTemplateConfig :profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" />
+          <ProfileTemplateConfig :profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" :availablePatches="availablePatches" />
           <ProfileInbounds :profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
           <ProfileOutbounds :profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
         </div>
       </div>
 
-      <!-- Raw JSON Editor -->
-      <div v-if="viewMode === 'code'" class="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
+      <!-- Preview Mode: Raw JSON from KV -->
+      <div v-if="viewMode === 'preview'" class="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
         <CodeEditor
-          v-model="editorContent"
+          :modelValue="previewContent"
+          readonly
+          :loading="previewLoading"
+          loadingText="读取中..."
           class="flex-1 min-h-0"
         />
       </div>
@@ -73,13 +76,14 @@ import ProfileInbounds from './profile/ProfileInbounds.vue';
 import ProfileOutbounds from './profile/ProfileOutbounds.vue';
 import type { Profile } from '../types';
 import { useApi } from '../composables/useApi';
-import { deepDiff, deepMerge } from '../utils/object';
+
 
 const props = defineProps<{
   profile: Profile;
   index: number;
   availableNodes?: string[];
   availableTemplates?: string[];
+  availablePatches?: string[];
   copyStatus: boolean;
   expanded?: boolean;
 }>();
@@ -111,11 +115,14 @@ function handleCardAction(action: string) {
   if (action === 'remove') emit('remove', props.index);
 }
 
-const { getFile } = useApi();
+const { getFile, postPreview } = useApi();
 const fetchedTemplateData = ref<any>(null);
 const fetchedNodesData = ref<any>(null);
 
-const viewMode = ref<'ui' | 'code'>('ui');
+const viewMode = ref<'preview' | 'edit'>('edit');
+
+const previewContent = ref('');
+const previewLoading = ref(false);
 
 const localProfile = ref<Profile>(JSON.parse(JSON.stringify(props.profile)));
 let initialProfileState = '';
@@ -131,19 +138,22 @@ const isDirty = computed(() => {
   return JSON.stringify(current) !== initialProfileState;
 });
 
-const editorContent = ref('');
-const initialCodeState = ref('');
-
-function openModal() {
+function openModal(mode?: 'preview' | 'edit') {
+  viewMode.value = mode || 'edit';
   isOpen.value = true;
 }
 
-function populateCodeEditor() {
-  const base = fetchedTemplateData.value || {};
-  const current = deepMerge(base, localProfile.value.overrides || {});
-  const formatted = JSON.stringify(current, null, 2);
-  editorContent.value = formatted;
-  initialCodeState.value = formatted;
+async function fetchPreview() {
+  previewLoading.value = true;
+  previewContent.value = '';
+  try {
+    const data = await postPreview(localProfile.value);
+    previewContent.value = data.content;
+  } catch (e: any) {
+    previewContent.value = `// 获取预览失败\n// ${e.message || '未知错误'}`;
+  } finally {
+    previewLoading.value = false;
+  }
 }
 
 watch(isOpen, (open) => {
@@ -153,7 +163,9 @@ watch(isOpen, (open) => {
     localProfile.value = JSON.parse(initialProfileState);
     localProfileName.value = props.profile.name || 'untitled';
     localProfileNote.value = props.profile.note || '';
-    if (viewMode.value === 'code') populateCodeEditor();
+    if (viewMode.value === 'preview') {
+      fetchPreview();
+    }
   } else {
     document.body.style.overflow = '';
   }
@@ -166,32 +178,8 @@ onUnmounted(() => {
 });
 
 watch(viewMode, (mode) => {
-  if (mode === 'code') {
-    populateCodeEditor();
-  }
-});
-
-watch(fetchedTemplateData, () => {
-  if (isOpen.value && viewMode.value === 'code') {
-    populateCodeEditor();
-  }
-});
-
-// Watch is no longer needed since we compute isDirty reactively based on localProfile
-
-watch(editorContent, (newVal) => {
-  if (viewMode.value === 'code') {
-    try {
-      const parsed = JSON.parse(newVal);
-      const base = fetchedTemplateData.value || {};
-      const diff = deepDiff(base, parsed);
-      
-      if (diff === undefined) {
-        delete localProfile.value.overrides;
-      } else {
-        localProfile.value.overrides = diff;
-      }
-    } catch {}
+  if (mode === 'preview') {
+    fetchPreview();
   }
 });
 
@@ -239,15 +227,6 @@ watch(isOpen, (open) => {
 });
 
 function handleLocalSave() {
-  if (viewMode.value === 'code') {
-    try {
-      JSON.parse(editorContent.value);
-    } catch (e) {
-      alert("JSON 格式错误，请检查！");
-      return;
-    }
-  }
-  
   // Apply name and note change
   localProfile.value.name = localProfileName.value;
   localProfile.value.note = localProfileNote.value;
@@ -271,13 +250,9 @@ function handleLocalSave() {
   Object.assign(props.profile, localProfile.value);
   
   initialProfileState = JSON.stringify(props.profile);
-  if (viewMode.value === 'code') {
-    populateCodeEditor();
-  } else {
-    editorContent.value = JSON.stringify(props.profile, null, 2);
-  }
   
   emit('save', props.profile.name || '');
+  isOpen.value = false;
 }
 
 function handleLocalReset() {
@@ -286,9 +261,5 @@ function handleLocalReset() {
   
   localProfileName.value = localProfile.value.name || 'untitled';
   localProfileNote.value = localProfile.value.note || '';
-  
-  if (viewMode.value === 'code') {
-    populateCodeEditor();
-  }
 }
 </script>

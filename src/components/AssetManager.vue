@@ -8,27 +8,20 @@
         :title="getBasename(file.path)"
         :inboundCount="file.inboundsCount"
         :outboundCount="file.outboundsCount"
-        :icon="type === 'node' ? 'network' : 'layout-template'"
-        :tag="type === 'node' ? 'NODE' : 'TEMPLATE'"
-        :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'"
+        :icon="type === 'node' ? 'network' : (type === 'template' ? 'layout-template' : 'puzzle')"
+        :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : 'PATCH')"
+        :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20')"
         :menuItems="fileMenuItems"
-        @click="openPreview(file)"
+        @click="editFile(file, 'preview')"
         @edit="editFile(file)"
         @action="(act) => handleFileAction(act, file)"
       />
     </div>
 
-    <!-- Preview Modal -->
-    <PreviewModal
-      :visible="!!previewFile"
-      :title="previewFile ? getBasename(previewFile.path).replace(/\.json$/, '') : ''"
-      :content="previewContent"
-      :loading="isLoading"
-      @close="closePreview"
-    />
+
 
     <div v-if="files.length === 0" class="text-center py-20 text-[#86868b]">
-      {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : '暂无模板文件。' }}
+      {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : (type === 'template' ? '暂无模板文件。' : '暂无补丁文件。') }}
     </div>
 
     <!-- Editor Modal -->
@@ -39,6 +32,8 @@
       @update:title="localFileName = $event"
       :note="localFileNote"
       @update:note="localFileNote = $event"
+      :viewMode="viewMode"
+      @update:viewMode="viewMode = $event"
       :editableTitle="true"
       :editableNote="true"
       extension=".json"
@@ -46,27 +41,21 @@
       :isSaving="isSaving"
       :showSave="isEditorDirty || isNameDirty || isNoteDirty"
       saveText="保存"
+      :showViewToggle="true"
       @save="saveFileCode"
       @reset="resetFileCode"
       @close="closeEditor"
     >
       <CodeEditor
         v-model="editorContent"
+        :readonly="viewMode === 'preview'"
         :loading="isLoading"
         loadingText="读取中..."
         class="min-h-[60vh]"
       />
     </EditorModal>
 
-    <!-- Confirm Modal -->
-    <ConfirmModal
-      :visible="showConfirm"
-      :title="confirmTitle"
-      :message="confirmMessage"
-      :confirmText="confirmBtnText"
-      @confirm="executeConfirm"
-      @cancel="showConfirm = false"
-    />
+
   </div>
 </template>
 
@@ -75,24 +64,22 @@ import { computed, ref, watch } from 'vue';
 import { Trash2 } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
-import PreviewModal from './ui/PreviewModal.vue';
-import ConfirmModal from './ui/ConfirmModal.vue';
 import CodeEditor from './ui/CodeEditor.vue';
 
 const props = defineProps<{
   files: any[];
-  type: 'node' | 'template';
+  type: 'node' | 'template' | 'patch';
 }>();
 
 const emit = defineEmits<{
   'refresh': [];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
+  'delete': [file: any];
 }>();
 
 const editingFile = ref<any>(null);
-const previewFile = ref<any>(null);
+const viewMode = ref<'preview' | 'edit'>('edit');
 const editorContent = ref('');
-const previewContent = ref('');
 const originalContent = ref('');
 const isLoading = ref(false);
 const isSaving = ref(false);
@@ -103,16 +90,7 @@ const localFileName = ref('');
 const localFileNote = ref('');
 const originalFileNote = ref('');
 
-const showConfirm = ref(false);
-const confirmTitle = ref('');
-const confirmMessage = ref('');
-const confirmBtnText = ref('');
-let confirmAction: (() => void) | null = null;
 
-function executeConfirm() {
-  if (confirmAction) confirmAction();
-  showConfirm.value = false;
-}
 
 const isNameDirty = computed(() => {
   if (!editingFile.value) return false;
@@ -125,27 +103,7 @@ const isNoteDirty = computed(() => {
   return localFileNote.value !== originalFileNote.value;
 });
 
-async function openPreview(file: any) {
-  previewFile.value = file;
-  isLoading.value = true;
-  previewContent.value = '';
-  
-  try {
-    const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
-    if (!res.ok) throw new Error('Failed to load file');
-    const data = await res.json();
-    previewContent.value = data.content;
-  } catch (e: any) {
-    emit('status', 'error', '加载失败: ' + e.message);
-  } finally {
-    isLoading.value = false;
-  }
-}
 
-function closePreview() {
-  previewFile.value = null;
-  previewContent.value = '';
-}
 
 const fileMenuItems = [
   { label: '删除文件', action: 'remove', icon: Trash2, danger: true },
@@ -153,24 +111,7 @@ const fileMenuItems = [
 
 function handleFileAction(action: string, file: any) {
   if (action === 'remove') {
-    confirmTitle.value = '删除确认';
-    confirmMessage.value = `确定要删除 ${getBasename(file.path)} 吗？此操作无法撤销。`;
-    confirmBtnText.value = '删除';
-    confirmAction = () => deleteFile(file.path);
-    showConfirm.value = true;
-  }
-}
-
-async function deleteFile(path: string) {
-  try {
-    await fetch(`/api/file?path=${encodeURIComponent(path)}`, {
-      method: 'DELETE',
-    });
-    emit('status', 'success', `成功删除文件 ${getBasename(path)}`);
-    emit('refresh');
-  } catch (e: any) {
-    console.error(e);
-    emit('status', 'error', '删除失败: ' + e.message);
+    emit('delete', file);
   }
 }
 
@@ -182,8 +123,9 @@ watch(editorContent, (newVal) => {
   isEditorDirty.value = newVal !== originalContent.value;
 });
 
-async function editFile(file: any) {
+async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
   editingFile.value = file;
+  viewMode.value = mode;
   localFileName.value = getBasename(file.path).replace(/\.json$/, '');
   isLoading.value = true;
   editorContent.value = '';
@@ -216,17 +158,7 @@ async function editFile(file: any) {
 }
 
 function closeEditor() {
-  if (isEditorDirty.value || isNameDirty.value || isNoteDirty.value) {
-    confirmTitle.value = '未保存的修改';
-    confirmMessage.value = '有未保存的修改，确定放弃并关闭吗？';
-    confirmBtnText.value = '确定关闭';
-    confirmAction = () => {
-      isEditorDirty.value = false;
-      editingFile.value = null;
-    };
-    showConfirm.value = true;
-    return;
-  }
+  isEditorDirty.value = false;
   editingFile.value = null;
 }
 
@@ -260,7 +192,7 @@ async function saveFileCode() {
   isSaving.value = true;
 
   try {
-    const dir = props.type === 'node' ? 'nodes' : 'templates';
+    const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : 'patches');
     const newPath = `sing-sub/${dir}/${localFileName.value}.json`;
     const isRename = newPath !== editingFile.value.path && !editingFile.value.isNew;
 
@@ -304,9 +236,13 @@ async function saveFileCode() {
 }
 
 function createFile() {
-  const dir = props.type === 'node' ? 'nodes' : 'templates';
-  const newName = props.type === 'node' ? 'new_node' : 'new_template';
-  editingFile.value = { path: `sing-sub/${dir}/${newName}.json`, isNew: true };
+  const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : 'patches');
+  const newName = props.type === 'node' ? 'new_node' : (props.type === 'template' ? 'new_template' : 'new_patch');
+  viewMode.value = 'edit';
+  editingFile.value = {
+    path: `sing-sub/${dir}/untitled.json`,
+    isNew: true
+  };
   localFileName.value = newName;
   localFileNote.value = '';
   originalFileNote.value = '';

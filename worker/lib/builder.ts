@@ -18,22 +18,65 @@ function isObject(item: any): boolean {
   return (item && typeof item === 'object' && !Array.isArray(item));
 }
 
-function deepMerge<T extends Record<string, any>>(target: T, source: Record<string, any>): T {
-  const output = { ...target };
-  if (isObject(target) && isObject(source)) {
+function smartMerge(target: any, source: any): any {
+  if (Array.isArray(source)) {
+    return source;
+  }
+  if (isObject(source)) {
+    if (source['$set'] !== undefined) return source['$set'];
+    
+    if (Array.isArray(target) && (source['$prepend'] || source['$append'] || source['$remove'] || source['$replace'])) {
+      let result = [...target];
+      if (source['$remove']) {
+        const toRemove = Array.isArray(source['$remove']) ? source['$remove'] : [source['$remove']];
+        result = result.filter(item => {
+          return !toRemove.some((rm: any) => {
+            if (!isObject(item) || !isObject(rm)) return item === rm;
+            return Object.keys(rm).every(k => item[k] === rm[k]);
+          });
+        });
+      }
+      if (source['$replace']) {
+        const replaces = Array.isArray(source['$replace']) ? source['$replace'] : [source['$replace']];
+        result = result.map(item => {
+          for (const rep of replaces) {
+            if (rep.match && rep.with) {
+              const matches = Object.keys(rep.match).every(k => {
+                if (!isObject(item)) return false;
+                return item[k] === rep.match[k];
+              });
+              if (matches) return rep.with;
+            }
+          }
+          return item;
+        });
+      }
+      if (source['$prepend']) {
+        const prep = Array.isArray(source['$prepend']) ? source['$prepend'] : [source['$prepend']];
+        result = [...prep, ...result];
+      }
+      if (source['$append']) {
+        const app = Array.isArray(source['$append']) ? source['$append'] : [source['$append']];
+        result = [...result, ...app];
+      }
+      return result;
+    }
+    
+    const output: any = { ...target };
     Object.keys(source).forEach(key => {
-      if (isObject(source[key])) {
+      if (isObject(source[key]) || Array.isArray(source[key])) {
         if (!(key in target)) {
-          Object.assign(output, { [key]: source[key] });
+          output[key] = source[key];
         } else {
-          (output as any)[key] = deepMerge((target as any)[key], source[key]);
+          output[key] = smartMerge(target[key], source[key]);
         }
       } else {
-        Object.assign(output, { [key]: source[key] });
+        output[key] = source[key];
       }
     });
+    return output;
   }
-  return output;
+  return source;
 }
 
 function parseKeywords(str: string): string[] {
@@ -93,6 +136,8 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
       : fetchRepoJson(templateUrl, session)) as Promise<Record<string, unknown>>,
     fetchRepoJson(profile.nodesPath, session),
   ]);
+  
+  template = template || {};
 
   if (nodesData) {
     const inboundsArray = normalizeArray<Inbound>(nodesData, 'inbounds');
@@ -141,7 +186,14 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
   }
 
   if (profile.overrides) {
-    template = deepMerge(template, profile.overrides);
+    template = smartMerge(template, profile.overrides);
+  }
+
+  if (profile.patchUrl) {
+    const patch = await fetchRepoJson(profile.patchUrl, session) as Record<string, unknown>;
+    if (patch) {
+      template = smartMerge(template, patch);
+    }
   }
 
   return JSON.stringify(template, null, 2);
@@ -153,10 +205,20 @@ export async function buildAllProfiles(
   subToken: string,
   env: Env
 ): Promise<void> {
-  await Promise.all(
-    profiles.map(async (profile) => {
+  const prefix = `config:${subToken}:`;
+  const list = await env.SESSIONS.list({ prefix });
+  const currentNames = profiles.map(p => p.name);
+
+  await Promise.all([
+    ...list.keys.map(async (key: any) => {
+      const name = key.name.substring(prefix.length);
+      if (!currentNames.includes(name)) {
+        await env.SESSIONS.delete(key.name);
+      }
+    }),
+    ...profiles.map(async (profile) => {
       const config = await buildProfile(profile, session);
       await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
     })
-  );
+  ]);
 }

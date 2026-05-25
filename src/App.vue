@@ -5,9 +5,7 @@
       :appVersion="APP_VERSION"
       :settings="settings"
       :loading="loadingData"
-      @save="handleSaveSettings"
-      @disconnect="handleDisconnect"
-      @update:settings="handleUpdateSettings"
+      @open-settings="activeTab = 'settings'"
     />
 
     <div v-if="isInitializing" class="flex justify-center items-center py-32">
@@ -28,6 +26,9 @@
         :statusMessage="statusMessage"
         :refreshing="refreshing"
         :isDirty="isDirty"
+        :activeTab="activeTab"
+        :assetType="assetType"
+        @update:assetType="assetType = $event"
         @refresh="handleGlobalRefresh"
         @add="handleGlobalAdd"
         @save="handleGlobalSave"
@@ -39,15 +40,15 @@
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ProfileEditor
                 v-for="(profile, pIndex) in stateData.profiles"
-                :key="profile.name"
+                :key="profile.created_at || profile.name"
                 :profile="profile"
                 :index="pIndex"
                 :availableNodes="availableAssets.nodes"
                 :availableTemplates="availableAssets.templates"
+                :availablePatches="availableAssets.patches"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
                 @update:expanded="toggleExpand(pIndex)"
-                @preview="handlePreview"
                 @copyLink="handleCopyLink"
                 @remove="removeProfile"
                 @duplicate="duplicateProfile"
@@ -56,33 +57,30 @@
             </div>
           </div>
           <div v-else-if="activeTab === 'assets'" key="assets" class="space-y-6">
-            <div class="flex items-center justify-center mb-2">
-              <div class="flex items-center bg-[#1c1c1e] p-1 rounded-full border border-[#38383a] shadow-inner">
-                <button @click="assetType = 'node'" :class="assetType === 'node' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">节点 (Nodes)</button>
-                <button @click="assetType = 'template'" :class="assetType === 'template' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" class="px-6 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer">模板 (Templates)</button>
-              </div>
-            </div>
-
             <AssetManager
               ref="assetManagerRef"
               :type="assetType"
-              :files="assetType === 'node' ? availableAssets.nodes : availableAssets.templates"
+              :files="assetType === 'node' ? availableAssets.nodes.filter(n => !deletedAssets.includes(n.path)) : (assetType === 'template' ? availableAssets.templates.filter(n => !deletedAssets.includes(n.path)) : availableAssets.patches.filter(n => !deletedAssets.includes(n.path)))"
               @refresh="refreshAssets"
               @status="(t, m) => showStatus(t, m, 5000)"
+              @delete="markAssetForDeletion"
             />
           </div>
-      </transition>
+          <div v-else-if="activeTab === 'settings'" key="settings" class="space-y-6">
+            <SettingsView
+              :user="user"
+              :settings="settings"
+              :loading="loadingData"
+              @save="handleSaveSettings"
+              @disconnect="handleDisconnect"
+              @update:settings="handleUpdateSettings"
+            />
+          </div>
+        </transition>
 
       <AppDock v-model:activeTab="activeTab" />
     </template>
 
-    <PreviewModal
-      :visible="showPreviewModal"
-      :title="previewTitle"
-      :content="previewContent"
-      :loading="previewLoading"
-      @close="showPreviewModal = false"
-    />
 
     <ConfirmModal
       :visible="showDisconnectConfirm"
@@ -103,39 +101,43 @@ import { Loader2 } from 'lucide-vue-next';
 import AppHeader from './components/layout/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
 import ProfileEditor from './components/ProfileEditor.vue';
-import PreviewModal from './components/ui/PreviewModal.vue';
 import ConfirmModal from './components/ui/ConfirmModal.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
 import AppDock from './components/layout/AppDock.vue';
 import AssetManager from './components/AssetManager.vue';
+import SettingsView from './components/SettingsView.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 
-const APP_VERSION = 'v3.0.0-beta.4';
+const APP_VERSION = 'v3.0.0-rc1';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
+const originalStateData = ref<StateData | null>(null);
 const loadingData = ref(false);
 const saveStatus = ref<'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error'>('idle');
 const statusMessage = ref('');
 const refreshing = ref(false);
 const isInitializing = ref(true);
 const copyStatus = ref<Record<number, boolean>>({});
-const showPreviewModal = ref(false);
 const showDisconnectConfirm = ref(false);
 const expandedIndex = ref<number | null>(null);
-const previewTitle = ref('');
-const previewContent = ref('');
-const previewLoading = ref(false);
-const availableAssets = ref<{ nodes: any[], templates: any[] }>({ nodes: [], templates: [] });
+const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[] }>({ nodes: [], templates: [], patches: [] });
 
-const activeTab = ref<'config' | 'assets'>('config');
-const assetType = ref<'node' | 'template'>('node');
+const activeTab = ref<'config' | 'assets' | 'settings'>('config');
+const assetType = ref<'node' | 'template' | 'patch'>('node');
 const assetManagerRef = ref<any>(null);
 
 const isDirty = ref(false);
 let suppressDirty = false;
 let statusTimer: any = null;
+
+const deletedAssets = ref<string[]>([]);
+
+function markAssetForDeletion(file: any) {
+  deletedAssets.value.push(file.path);
+  isDirty.value = true;
+}
 
 function showStatus(state: 'success' | 'warning' | 'error', msg: string, duration = 3000) {
   if (statusTimer) clearTimeout(statusTimer);
@@ -144,19 +146,41 @@ function showStatus(state: 'success' | 'warning' | 'error', msg: string, duratio
   statusTimer = setTimeout(() => { saveStatus.value = 'idle'; }, duration);
 }
 
-const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getPreview, getAssets } = useApi();
+const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets } = useApi();
 
 async function refreshAssets() {
   try {
-    availableAssets.value = await getAssets();
+    const data = await getAssets();
+    availableAssets.value = data;
   } catch {
-    availableAssets.value = { nodes: [], templates: [] };
+    availableAssets.value = { nodes: [], templates: [], patches: [] };
+  }
+  pruneStaleReferences();
+}
+
+function pruneStaleReferences() {
+  if (!stateData.value?.profiles) return;
+  const nodePaths = new Set(availableAssets.value.nodes.map((n: any) => n.path || n));
+  const templatePaths = new Set(availableAssets.value.templates.map((t: any) => t.path || t));
+  const patchPaths = new Set(availableAssets.value.patches.map((p: any) => p.path || p));
+
+  for (const profile of stateData.value.profiles) {
+    if (profile.nodesPath && !nodePaths.has(profile.nodesPath)) {
+      profile.nodesPath = '';
+    }
+    if (profile.templateUrl && !profile.templateUrl.startsWith('http') && !templatePaths.has(profile.templateUrl)) {
+      profile.templateUrl = '';
+    }
+    if (profile.patchUrl && !patchPaths.has(profile.patchUrl)) {
+      profile.patchUrl = '';
+    }
   }
 }
 
 function setStateData(state: StateData) {
   suppressDirty = true;
-  stateData.value = normalizeProfiles(state);
+  originalStateData.value = JSON.parse(JSON.stringify(state));
+  stateData.value = state;
   nextTick(() => {
     suppressDirty = false;
     isDirty.value = false;
@@ -169,17 +193,7 @@ watch(() => stateData.value?.profiles.map(p => p.name).join(','), () => {
   isDirty.value = true;
 });
 
-function normalizeProfiles(state: StateData): StateData {
-  state.profiles = state.profiles.map((p: any) => ({
-    name: p.name || '',
-    note: p.note || '',
-    templateUrl: p.templateUrl || '',
-    nodesPath: p.nodesPath || '',
-    rules: Array.isArray(p.rules) ? p.rules : [],
-    inboundRules: Array.isArray(p.inboundRules) ? p.inboundRules : [],
-  }));
-  return state;
-}
+
 
 onMounted(async () => {
   try {
@@ -250,6 +264,19 @@ async function handleSave() {
   statusMessage.value = '';
   try {
     const data = await saveState(stateData.value, null);
+    
+    if (deletedAssets.value.length > 0) {
+      for (const path of deletedAssets.value) {
+        try {
+          await fetch(`/api/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+        } catch (err) {
+          console.error('Failed to delete asset', path, err);
+        }
+      }
+      deletedAssets.value = [];
+      await refreshAssets();
+    }
+
     isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '规则已保存，但构建失败: ' + data.warning, 5000);
@@ -265,9 +292,9 @@ async function handleSaveProfile(profileName: string) {
   if (!stateData.value) return;
   saveStatus.value = 'saving';
   statusMessage.value = '';
+  suppressDirty = true;
   try {
     const data = await saveState(stateData.value, null, profileName);
-    isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '配置已保存，但构建失败: ' + data.warning, 5000);
     } else {
@@ -275,6 +302,11 @@ async function handleSaveProfile(profileName: string) {
     }
   } catch (e: any) {
     showStatus('error', e.message || '保存失败', 5000);
+  } finally {
+    nextTick(() => {
+      suppressDirty = false;
+      isDirty.value = false;
+    });
   }
 }
 
@@ -286,6 +318,8 @@ async function handleRefresh() {
   try {
     const data = await rebuild();
     setStateData(data.state);
+    deletedAssets.value = [];
+    await refreshAssets();
     if (data.warning) {
       showStatus('warning', '刷新成功，但构建失败: ' + data.warning, 5000);
     } else {
@@ -298,20 +332,6 @@ async function handleRefresh() {
   }
 }
 
-async function handlePreview(name: string) {
-  previewTitle.value = name;
-  previewContent.value = '';
-  showPreviewModal.value = true;
-  previewLoading.value = true;
-  try {
-    const data = await getPreview(name);
-    previewContent.value = data.content;
-  } catch {
-    previewContent.value = '构建预览失败，请检查配置。';
-  } finally {
-    previewLoading.value = false;
-  }
-}
 
 async function handleCopyLink(name: string) {
   const token = settings.value?.subToken;
@@ -332,8 +352,10 @@ async function handleCopyLink(name: string) {
 function addProfile() {
   if (!stateData.value) return;
   stateData.value.profiles.push({
-    name: 'new_env', note: '', templateUrl: '', nodesPath: 'sing-sub/nodes.json',
+    name: '', note: '', templateUrl: '', nodesPath: 'sing-sub/nodes.json',
     rules: [], inboundRules: [],
+    created_at: Date.now(),
+    updated_at: Date.now(),
   });
   expandedIndex.value = stateData.value.profiles.length - 1;
 }
@@ -351,6 +373,8 @@ function duplicateProfile(source: Profile) {
   const index = stateData.value.profiles.findIndex(p => p.name === source.name);
   const copy: Profile = JSON.parse(JSON.stringify(source));
   copy.name = `${source.name || 'untitled'}_copy`;
+  copy.created_at = Date.now();
+  copy.updated_at = Date.now();
   stateData.value.profiles.splice(index + 1, 0, copy);
   expandedIndex.value = index + 1;
 }
@@ -370,7 +394,7 @@ async function handleGlobalAdd() {
 }
 
 function handleGlobalSave() {
-  if (activeTab.value === 'config') handleSave();
+  handleSave();
 }
 
 function handleGlobalRefresh() {
@@ -378,10 +402,20 @@ function handleGlobalRefresh() {
   refreshAssets();
 }
 
-function handleGlobalReset() {
-  if (stateData.value) {
-    setStateData(JSON.parse(JSON.stringify(stateData.value)));
+function handleReset() {
+  suppressDirty = true;
+  if (originalStateData.value) {
+    stateData.value = JSON.parse(JSON.stringify(originalStateData.value));
   }
+  deletedAssets.value = [];
+  nextTick(() => {
+    isDirty.value = false;
+    suppressDirty = false;
+  });
+}
+
+function handleGlobalReset() {
+  handleReset();
 }
 </script>
 

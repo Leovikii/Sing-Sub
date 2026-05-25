@@ -33,6 +33,7 @@ export interface Profile {
   name: string;
   note?: string;
   templateUrl: string;
+  patchUrl?: string;
   nodesPath: string;
   rules: Rule[];
   inboundRules: InboundRule[];

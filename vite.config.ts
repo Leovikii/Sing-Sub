@@ -7,4 +7,7 @@ export default defineConfig({
     vue(),
     tailwindcss(),
   ],
+  build: {
+    chunkSizeWarningLimit: 1000
+  }
 })

@@ -20,6 +20,17 @@
     </div>
     
     <div class="flex items-center gap-4">
+      <label class="w-32 shrink-0 font-medium text-[#f5f5f7]">配置补丁 <span class="text-[#86868b] font-normal text-xs">(可选)</span></label>
+      <div class="flex-1 min-w-0">
+        <AppleSelect
+          :modelValue="profile.patchUrl || ''"
+          @update:modelValue="profile.patchUrl = $event"
+          :options="patchOptions"
+          placeholder="无"
+        />
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
       <label class="w-32 shrink-0 font-medium text-[#f5f5f7]">节点配置</label>
       <div class="flex-1 min-w-0">
         <AppleSelect
@@ -44,6 +55,7 @@ const props = defineProps<{
   profile: Profile;
   availableNodes?: string[];
   availableTemplates?: string[];
+  availablePatches?: string[];
 }>();
 
 const nodeOptions = computed(() => {
@@ -54,6 +66,18 @@ const nodeOptions = computed(() => {
       value: path,
     };
   });
+});
+
+const patchOptions = computed(() => {
+  const opts = (props.availablePatches || []).map(p => {
+    const path = typeof p === 'string' ? p : (p as any).path || '';
+    return {
+      label: path.replace('sing-sub/patches/', ''),
+      value: path,
+    };
+  });
+  opts.unshift({ label: '无', value: '' });
+  return opts;
 });
 
 const templateOptions = computed(() => {

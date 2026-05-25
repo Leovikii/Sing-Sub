@@ -95,7 +95,7 @@ export function useApi() {
     return res.json();
   }
 
-  async function getAssets(): Promise<{ nodes: any[], templates: string[] }> {
+  async function getAssets(): Promise<{ nodes: any[], templates: any[], patches: any[] }> {
     return apiCall('/api/assets');
   }
 

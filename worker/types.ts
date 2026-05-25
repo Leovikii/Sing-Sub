@@ -1,3 +1,5 @@
+import type { KVNamespace } from '@cloudflare/workers-types';
+
 export interface Env {
   SESSIONS: KVNamespace;
 }
@@ -20,6 +22,7 @@ export interface Profile {
   name: string;
   note?: string;
   templateUrl: string;
+  patchUrl?: string;
   nodesPath: string;
   rules: { group: string; filters: { action: 'include' | 'exclude'; keyword: string }[] }[];
   inboundRules: { tag: string; filters: { action: 'include' | 'exclude'; keyword: string }[] }[];

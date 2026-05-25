@@ -15,7 +15,7 @@
                   <div class="relative inline-flex min-w-[30px] max-w-[calc(100%-40px)]">
                     <span class="invisible whitespace-pre overflow-hidden font-bold text-[15px] md:text-[16px] pr-0.5">{{ title || 'untitled' }}</span>
                     <input
-                      v-if="editableTitle"
+                      v-if="editableTitle && viewMode !== 'preview'"
                       :value="title"
                       @input="$emit('update:title', ($event.target as HTMLInputElement).value)"
                       class="absolute inset-0 bg-transparent text-[#f5f5f7] font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder-[#555]"
@@ -27,14 +27,16 @@
                 </div>
 
                 <!-- Note area -->
-                <div v-if="editableNote !== false" class="flex items-center min-w-0 mt-0.5">
+                <div v-if="editableNote !== false || (viewMode === 'preview' && note)" class="flex items-center min-w-0 mt-0.5">
                   <span class="text-[#86868b] font-medium text-[12px] shrink-0 mr-1.5 select-none">备注</span>
                   <input
+                    v-if="editableNote !== false && viewMode !== 'preview'"
                     :value="note"
                     @input="$emit('update:note', ($event.target as HTMLInputElement).value)"
                     class="bg-transparent text-[#86868b] hover:text-[#f5f5f7] focus:text-[#f5f5f7] font-medium outline-none text-[12px] min-w-[60px] flex-1 truncate transition-colors placeholder-[#444]"
                     placeholder="未添加..."
                   />
+                  <span v-else class="text-[#86868b] font-medium text-[12px] min-w-[60px] flex-1 truncate">{{ note || '未添加' }}</span>
                 </div>
               </slot>
             </div>
@@ -45,27 +47,27 @@
               <!-- View Mode Toggle -->
               <div v-if="showViewToggle" class="flex items-center bg-[#2c2c2e] p-0.5 rounded-lg border border-[#38383a]">
                  <button 
-                   @click="$emit('update:viewMode', 'ui')" 
-                   :class="viewMode === 'ui' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" 
+                   @click="$emit('update:viewMode', 'preview')" 
+                   :class="viewMode === 'preview' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" 
                    class="flex items-center justify-center px-2 py-1 rounded-md transition-colors"
-                   title="UI 面板"
+                   title="预览"
                  >
-                   <LayoutTemplate :size="14" />
-                   <span class="hidden md:inline ml-1 text-[11px] font-medium">UI 面板</span>
+                   <Eye :size="14" />
+                   <span class="hidden md:inline ml-1 text-[11px] font-medium">预览</span>
                  </button>
                  <button 
-                   @click="$emit('update:viewMode', 'code')" 
-                   :class="viewMode === 'code' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" 
+                   @click="$emit('update:viewMode', 'edit')" 
+                   :class="viewMode === 'edit' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" 
                    class="flex items-center justify-center px-2 py-1 rounded-md transition-colors"
-                   title="代码视图"
+                   title="编辑"
                  >
-                   <Code :size="14" />
-                   <span class="hidden md:inline ml-1 text-[11px] font-medium">代码视图</span>
+                   <Pencil :size="14" />
+                   <span class="hidden md:inline ml-1 text-[11px] font-medium">编辑</span>
                  </button>
               </div>
 
               <button
-                v-if="showSave && isDirty"
+                v-if="showSave && isDirty && viewMode !== 'preview'"
                 @click="$emit('reset')"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors bg-[#2c2c2e] text-[#86868b] border border-[#38383a] hover:text-[#f5f5f7] cursor-pointer"
                 title="复位"
@@ -74,7 +76,7 @@
               </button>
 
               <button
-                v-if="showSave"
+                v-if="showSave && viewMode !== 'preview'"
                 @click="$emit('save')"
                 :disabled="!isDirty || isSaving"
                 :class="[
@@ -105,10 +107,23 @@
       </div>
     </Transition>
   </Teleport>
+
+  <ConfirmModal
+    :visible="showUnsavedConfirm"
+    title="放弃未保存的修改？"
+    message="您所做的修改尚未保存。确定要放弃并关闭吗？"
+    confirmText="放弃并关闭"
+    @confirm="handleConfirmClose"
+    @cancel="showUnsavedConfirm = false"
+  />
 </template>
 
 <script setup lang="ts">
-import { X, Save, Loader2, RotateCcw, LayoutTemplate, Code } from 'lucide-vue-next';
+import { X, Save, Loader2, RotateCcw, Eye, Pencil } from 'lucide-vue-next';
+import ConfirmModal from './ConfirmModal.vue';
+import { ref } from 'vue';
+
+const showUnsavedConfirm = ref(false);
 
 const props = defineProps<{
   isOpen: boolean;
@@ -122,14 +137,14 @@ const props = defineProps<{
   showSave?: boolean;
   saveText?: string;
   showViewToggle?: boolean;
-  viewMode?: 'ui' | 'code';
+  viewMode?: 'preview' | 'edit';
 }>();
 
 const emit = defineEmits<{
   (e: 'update:isOpen', value: boolean): void;
   (e: 'update:title', value: string): void;
   (e: 'update:note', value: string): void;
-  (e: 'update:viewMode', value: 'ui' | 'code'): void;
+  (e: 'update:viewMode', value: 'preview' | 'edit'): void;
   (e: 'save'): void;
   (e: 'reset'): void;
   (e: 'close'): void;
@@ -137,12 +152,14 @@ const emit = defineEmits<{
 
 function closeModal() {
   if (props.isDirty) {
-    if (confirm('有未保存的修改，是否在关闭前保存？\n\n点击"确定"保存修改并关闭，点击"取消"直接丢弃并关闭。')) {
-      emit('save');
-      // If we emit save, we still want to close, but let the parent handle the actual closing if needed?
-      // No, we emit save, and emit close immediately. The save is usually sync or async, but parent can handle it.
-    }
+    showUnsavedConfirm.value = true;
+  } else {
+    emit('close');
   }
+}
+
+function handleConfirmClose() {
+  showUnsavedConfirm.value = false;
   emit('close');
 }
 </script>

@@ -205,8 +205,21 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
     return !currentNames.includes(name || '');
   });
 
-  // Write all current profiles
-  await Promise.all(state.profiles.map(async (profile: Profile) => {
+  const existingNames = existingJson.map(p => p.split('/').pop()?.replace('.json', ''));
+
+  const profilesToUpdate = state.profiles.filter((profile: Profile) => {
+    // If profileName is explicitly provided, we MUST update it
+    if (profileName && profile.name === profileName) return true;
+    
+    // If it's a new profile (or renamed to a new name), we MUST create it
+    if (!existingNames.includes(profile.name || '')) return true;
+
+    // Otherwise, we don't need to write it
+    return false;
+  });
+
+  // Write selected profiles
+  await Promise.all(profilesToUpdate.map(async (profile: Profile) => {
     const path = `sing-sub/configs/${profile.name}.json`;
     const content = JSON.stringify(profile, null, 2);
     // Passing null for SHA forces putFileContent to fetch it first, making it safe for updates
@@ -266,9 +279,10 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const session = toRepoSession(auth.settings);
 
   // Fetch directories concurrently
-  let [nodes, templates, configs] = await Promise.all([
+  let [nodes, templates, patches, configs] = await Promise.all([
     fetchDirectoryContents('sing-sub/nodes', session),
     fetchDirectoryContents('sing-sub/templates', session),
+    fetchDirectoryContents('sing-sub/patches', session),
     fetchDirectoryContents('sing-sub/configs', session),
   ]);
 
@@ -279,7 +293,7 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
 
   const jsonNodes = filterJson(nodes);
   const jsonTemplates = filterJson(templates);
-  
+  const jsonPatches = filterJson(patches);
   const parseFileMeta = async (path: string) => {
     try {
       const file = await fetchFileContent(path, session);
@@ -296,14 +310,16 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
     return { path, inboundsCount: 0, outboundsCount: 0, tags: [] };
   };
 
-  const [nodesWithMeta, templatesWithMeta] = await Promise.all([
+  const [nodesWithMeta, templatesWithMeta, patchesWithMeta] = await Promise.all([
     Promise.all(jsonNodes.map(parseFileMeta)),
-    Promise.all(jsonTemplates.map(parseFileMeta))
+    Promise.all(jsonTemplates.map(parseFileMeta)),
+    Promise.all(jsonPatches.map(parseFileMeta))
   ]);
 
   return jsonResponse({
     nodes: nodesWithMeta,
     templates: templatesWithMeta,
+    patches: patchesWithMeta,
   });
 }
 
