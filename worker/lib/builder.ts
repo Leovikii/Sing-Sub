@@ -139,6 +139,21 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
   
   template = template || {};
 
+  // Step 1: Apply overrides first
+  if (profile.overrides) {
+    template = smartMerge(template, profile.overrides);
+  }
+
+  // Step 2: Apply patch (before node insertion, so patch modifications to
+  // template structure are in place before we inject nodes into it)
+  if (profile.patchUrl) {
+    const patch = await fetchRepoJson(profile.patchUrl, session) as Record<string, unknown>;
+    if (patch) {
+      template = smartMerge(template, patch);
+    }
+  }
+
+  // Step 3: Insert inbound nodes
   if (nodesData) {
     const inboundsArray = normalizeArray<Inbound>(nodesData, 'inbounds');
     let templateInbounds = Array.isArray(template.inbounds) ? template.inbounds : [];
@@ -155,11 +170,11 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
           }
         }
       });
-      // Remove duplicates by JSON stringification or just Set if exact object refs
       template.inbounds = Array.from(new Set(templateInbounds));
     }
   }
 
+  // Step 4: Insert outbound nodes
   if (nodesData) {
     const outboundsArray = normalizeArray<Outbound>(nodesData, 'outbounds');
 
@@ -182,17 +197,6 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
       if (matchedOutbounds.size > 0) {
         templateOutbounds.push(...Array.from(matchedOutbounds));
       }
-    }
-  }
-
-  if (profile.overrides) {
-    template = smartMerge(template, profile.overrides);
-  }
-
-  if (profile.patchUrl) {
-    const patch = await fetchRepoJson(profile.patchUrl, session) as Record<string, unknown>;
-    if (patch) {
-      template = smartMerge(template, patch);
     }
   }
 
