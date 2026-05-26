@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'card glass p-4 md:p-5 cursor-pointer select-none relative group border border-transparent hover:border-[#F596AA]/30 transition-all duration-300',
+      'card glass p-5 md:p-6 cursor-pointer select-none relative group border border-transparent hover:border-[#F596AA]/30 transition-all duration-300',
       menuOpen ? 'z-50' : 'z-10 hover:z-20'
     ]"
     @click="$emit('click')"
@@ -9,10 +9,10 @@
     <!-- Background highlight on hover -->
     <div class="absolute inset-0 rounded-[20px] bg-[#F596AA]/[0.03] shadow-[inset_0_0_20px_rgba(245,150,170,0.05)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
 
-    <div class="relative flex flex-col md:flex-row md:items-center justify-between h-full gap-3 md:gap-4">
+    <div class="relative flex flex-col md:flex-row md:items-center justify-between h-full gap-4 md:gap-6">
       
       <!-- 左侧/上部容器：纯粹的信息展示区 -->
-      <div class="flex flex-col min-w-0 flex-1 space-y-1.5 md:space-y-2">
+      <div class="flex flex-col min-w-0 flex-1 space-y-2.5 md:space-y-3.5">
         <div class="flex items-center gap-2 min-w-0">
           <span class="card-title text-lg font-semibold text-[#f5f5f7] truncate group-hover:text-[#F596AA] transition-colors">{{ title }}</span>
           <span class="text-[#86868b] font-mono text-sm select-none hidden sm:inline">.json</span>
