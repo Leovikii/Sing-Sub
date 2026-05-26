@@ -45,24 +45,24 @@
               <slot name="header-actions"></slot>
 
               <!-- View Mode Toggle -->
-              <div v-if="showViewToggle" class="flex items-center bg-[#2c2c2e] p-0.5 rounded-lg border border-[#38383a]">
+              <div v-if="showViewToggle" class="flex items-center p-1 bg-[#1c1c1e]/80 backdrop-blur-xl border border-[#38383a] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
                  <button 
                    @click="$emit('update:viewMode', 'preview')" 
-                   :class="viewMode === 'preview' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" 
-                   class="flex items-center justify-center px-2 py-1 rounded-md transition-colors"
+                   :class="viewMode === 'preview' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e]'" 
+                   class="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer"
                    title="预览"
                  >
                    <Eye :size="14" />
-                   <span class="hidden md:inline ml-1 text-[11px] font-medium">预览</span>
+                   <span class="hidden md:inline">预览</span>
                  </button>
                  <button 
                    @click="$emit('update:viewMode', 'edit')" 
-                   :class="viewMode === 'edit' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7]'" 
-                   class="flex items-center justify-center px-2 py-1 rounded-md transition-colors"
+                   :class="viewMode === 'edit' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e]'" 
+                   class="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer"
                    title="编辑"
                  >
                    <Pencil :size="14" />
-                   <span class="hidden md:inline ml-1 text-[11px] font-medium">编辑</span>
+                   <span class="hidden md:inline">编辑</span>
                  </button>
               </div>
 
@@ -88,14 +88,34 @@
                 <Loader2 v-if="isSaving" :size="14" class="animate-spin" />
                 <Save v-else :size="14" /> <span class="hidden md:inline">{{ saveText }}</span>
               </button>
-
-              <button
-                @click="closeModal"
-                class="w-8 h-8 flex items-center justify-center rounded-full text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] transition-colors cursor-pointer"
-                title="关闭"
+              <PopoverMenu
+                v-model:isOpen="showUnsavedConfirm"
+                wrapperClass="relative flex"
+                contentClass="right-0 top-full mt-2 w-[220px] p-3 rounded-2xl bg-[#2c2c2e]/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-2"
               >
-                <X :size="16" />
-              </button>
+                <template #trigger="{ toggle, isOpen }">
+                  <button
+                    @click="handleCloseClick(toggle)"
+                    class="w-8 h-8 flex items-center justify-center rounded-full transition-colors cursor-pointer"
+                    :class="isOpen ? 'bg-[#ff6961]/20 text-[#ff6961]' : 'text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e]'"
+                    title="关闭"
+                  >
+                    <X :size="16" />
+                  </button>
+                </template>
+
+                <template #content="{ close }">
+                  <div class="flex items-center gap-1.5 text-[#ff6961]">
+                    <AlertTriangle :size="14" />
+                    <span class="text-[13px] font-bold">未保存的修改</span>
+                  </div>
+                  <span class="text-[#86868b] text-[12px] leading-relaxed">如果关闭，您刚刚修改的内容将会丢失。</span>
+                  <div class="flex items-center gap-2 mt-1">
+                    <button @click.stop="close" class="flex-1 px-0 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[#f5f5f7] text-[12px] font-medium transition-colors cursor-pointer">取消</button>
+                    <button @click.stop="handleConfirmClose" class="flex-1 px-0 py-1.5 rounded-lg bg-[#ff6961]/15 hover:bg-[#ff6961]/25 text-[#ff6961] text-[12px] font-medium transition-colors cursor-pointer">放弃修改</button>
+                  </div>
+                </template>
+              </PopoverMenu>
             </div>
           </div>
 
@@ -107,21 +127,12 @@
       </div>
     </Transition>
   </Teleport>
-
-  <ConfirmModal
-    :visible="showUnsavedConfirm"
-    title="放弃未保存的修改？"
-    message="您所做的修改尚未保存。确定要放弃并关闭吗？"
-    confirmText="放弃并关闭"
-    @confirm="handleConfirmClose"
-    @cancel="showUnsavedConfirm = false"
-  />
 </template>
 
 <script setup lang="ts">
-import { X, Save, Loader2, RotateCcw, Eye, Pencil } from 'lucide-vue-next';
-import ConfirmModal from './ConfirmModal.vue';
+import { X, Save, Loader2, RotateCcw, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
 import { ref } from 'vue';
+import PopoverMenu from './PopoverMenu.vue';
 
 const showUnsavedConfirm = ref(false);
 
@@ -150,17 +161,18 @@ const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-function closeModal() {
+function handleCloseClick(toggleFn: () => void) {
   if (props.isDirty) {
-    showUnsavedConfirm.value = true;
+    toggleFn();
   } else {
-    emit('close');
+    handleConfirmClose();
   }
 }
 
 function handleConfirmClose() {
   showUnsavedConfirm.value = false;
   emit('close');
+  emit('update:isOpen', false);
 }
 </script>
 

@@ -1,25 +1,22 @@
 <template>
   <div class="space-y-4">
     <div class="flex items-center gap-2 mb-2">
-      <ArrowDownToLine class="w-4 h-4 text-[#F596AA]" />
+      <ArrowDown class="w-4 h-4 text-[#F596AA]" />
       <h3 class="font-bold text-[#f5f5f7]">入站节点 (Inbounds)</h3>
     </div>
 
     <div
       class="bg-[#2c2c2e]/40 border border-[#38383a] rounded-xl p-4 transition-all"
     >
-      <div class="flex items-center gap-4">
+      <div class="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-start gap-y-3 gap-x-4">
         <!-- Left: Tag -->
-        <div class="w-32 shrink-0 font-medium text-[#f5f5f7] truncate">
+        <div class="w-auto md:w-32 shrink-0 font-medium text-[#f5f5f7] truncate order-1">
           入站节点
         </div>
 
-        <!-- Right: Content -->
-        <div class="flex-1 flex items-center justify-end gap-2 min-w-0">
-          
           <!-- Edit Mode -->
           <template v-if="isEditing">
-            <div class="flex-1 flex items-center gap-2">
+            <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex items-center gap-2">
               <AppleSelect
                 v-model="tempFilter.action"
                 :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
@@ -32,7 +29,7 @@
               @click="confirmEdit"
               :disabled="!tempFilter.keyword.trim()"
               :class="[
-                'px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0 self-center flex items-center gap-1.5',
+                'order-2 md:order-3 ml-auto md:ml-0 px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0 flex items-center gap-1.5',
                 tempFilter.keyword.trim() 
                   ? 'bg-[#F596AA]/10 text-[#F596AA] hover:bg-[#F596AA]/20 cursor-pointer' 
                   : 'bg-[#2c2c2e] text-[#86868b] border border-[#38383a] cursor-not-allowed'
@@ -46,15 +43,15 @@
           <!-- Confirmed Mode -->
           <template v-else-if="hasRule">
             <!-- Micro Cards -->
-            <div class="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+            <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex flex-wrap md:flex-nowrap items-center gap-1.5 md:overflow-x-auto no-scrollbar py-1">
               <template v-if="matchedNodes.length > 0">
                 <NodeMicroCard
-                  v-for="(node, idx) in matchedNodes.slice(0, 5)"
+                  v-for="(node, idx) in matchedNodes.slice(0, 10)"
                   :key="idx"
                   :node="{ type: node.type || '', tag: node.tag }"
                 />
-                <span v-if="matchedNodes.length > 5" class="px-2 py-0.5 rounded-full bg-[#38383a] text-[#86868b] text-xs font-medium whitespace-nowrap">
-                  +{{ matchedNodes.length - 5 }}
+                <span v-if="matchedNodes.length > 10" class="px-2 py-0.5 rounded-full bg-[#38383a] text-[#86868b] text-xs font-medium whitespace-nowrap">
+                  +{{ matchedNodes.length - 10 }}
                 </span>
               </template>
               <span v-else class="text-sm text-[#86868b] italic">无匹配节点</span>
@@ -63,7 +60,7 @@
             <!-- Actions -->
             <button
               @click="clearRule"
-              class="px-4 py-2 bg-[#2c2c2e] hover:bg-[#ff6961]/10 border border-[#38383a] hover:border-[#ff6961]/30 text-[#86868b] hover:text-[#ff6961] rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0 ml-2"
+              class="order-2 md:order-3 ml-auto md:ml-0 px-3 py-1.5 bg-[#2c2c2e] hover:bg-[#ff6961]/10 border border-[#38383a] hover:border-[#ff6961]/30 text-[#86868b] hover:text-[#ff6961] rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0"
             >
               <Trash2 class="w-4 h-4" />
               <span class="hidden md:inline">删除</span>
@@ -72,16 +69,16 @@
 
           <!-- Empty Mode -->
           <template v-else>
+            <!-- Insert Button -->
             <button
               @click="startEdit"
-              class="px-4 py-2 bg-[#2c2c2e] hover:bg-[#38383a] border border-[#38383a] text-[#f5f5f7] rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0"
+              class="order-2 md:order-3 ml-auto md:ml-0 px-4 py-2 bg-[#2c2c2e] hover:bg-[#38383a] border border-[#38383a] text-[#f5f5f7] rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0"
             >
               <Plus class="w-4 h-4" />
               <span class="hidden md:inline">插入节点</span>
             </button>
           </template>
 
-        </div>
       </div>
     </div>
   </div>
@@ -89,7 +86,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { ArrowDownToLine, Plus, Trash2, Check } from 'lucide-vue-next';
+import { ArrowDown, Plus, Trash2, Check } from 'lucide-vue-next';
 import AppleInput from '../ui/AppleInput.vue';
 import AppleSelect from '../ui/AppleSelect.vue';
 import NodeMicroCard from '../ui/NodeMicroCard.vue';

@@ -96,9 +96,14 @@ export async function putFileContent(
     }
   }
 
+  const botIdentity = { name: "Sing-Sub Bot", email: "bot@sing-sub.local" };
+  const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
+
   const body: Record<string, unknown> = {
-    message,
+    message: formattedMessage,
     content: encodeToBase64(content),
+    committer: botIdentity,
+    author: botIdentity,
   };
   if (fileSha) body.sha = fileSha;
 
@@ -122,7 +127,15 @@ export async function deleteFileContent(
   sha: string,
   message: string
 ): Promise<void> {
-  const body = { message, sha };
+  const botIdentity = { name: "Sing-Sub Bot", email: "bot@sing-sub.local" };
+  const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
+
+  const body = { 
+    message: formattedMessage, 
+    sha,
+    committer: botIdentity,
+    author: botIdentity
+  };
   const res = await repoFetch(`contents/${filePath}`, session, {
     method: 'DELETE',
     body,
@@ -132,4 +145,73 @@ export async function deleteFileContent(
     const err = await res.text();
     throw new Error(`GitHub DELETE failed (${res.status}): ${err}`);
   }
+}
+
+export interface GitTreeItem {
+  path: string;
+  mode: '100644' | '100755' | '040000' | '160000' | '120000';
+  type: 'blob' | 'tree' | 'commit';
+  content?: string;
+  sha?: string | null;
+}
+
+export async function commitMultiFiles(
+  session: RepoSession,
+  treeItems: GitTreeItem[],
+  message: string,
+  branch: string = 'main'
+): Promise<string> {
+  const botIdentity = { name: "Sing-Sub Bot", email: "bot@sing-sub.local" };
+  const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
+
+  // 1. Get the latest commit SHA of the branch
+  const refRes = await repoFetch(`git/refs/heads/${branch}`, session);
+  if (!refRes.ok) throw new Error(`Failed to fetch branch ref: ${await refRes.text()}`);
+  const refData = await refRes.json() as { object: { sha: string } };
+  const latestCommitSha = refData.object.sha;
+
+  // 2. Get the tree SHA of the latest commit
+  const commitRes = await repoFetch(`git/commits/${latestCommitSha}`, session);
+  if (!commitRes.ok) throw new Error(`Failed to fetch latest commit: ${await commitRes.text()}`);
+  const commitData = await commitRes.json() as { tree: { sha: string } };
+  const baseTreeSha = commitData.tree.sha;
+
+  // 3. Create a new Tree
+  const treeRes = await repoFetch(`git/trees`, session, {
+    method: 'POST',
+    body: {
+      base_tree: baseTreeSha,
+      tree: treeItems,
+    }
+  });
+  if (!treeRes.ok) throw new Error(`Failed to create git tree: ${await treeRes.text()}`);
+  const treeData = await treeRes.json() as { sha: string };
+  const newTreeSha = treeData.sha;
+
+  // 4. Create a new Commit
+  const newCommitRes = await repoFetch(`git/commits`, session, {
+    method: 'POST',
+    body: {
+      message: formattedMessage,
+      tree: newTreeSha,
+      parents: [latestCommitSha],
+      author: botIdentity,
+      committer: botIdentity
+    }
+  });
+  if (!newCommitRes.ok) throw new Error(`Failed to create commit: ${await newCommitRes.text()}`);
+  const newCommitData = await newCommitRes.json() as { sha: string };
+  const newCommitSha = newCommitData.sha;
+
+  // 5. Update the branch reference
+  const updateRefRes = await repoFetch(`git/refs/heads/${branch}`, session, {
+    method: 'PATCH',
+    body: {
+      sha: newCommitSha,
+      force: false
+    }
+  });
+  if (!updateRefRes.ok) throw new Error(`Failed to update branch ref: ${await updateRefRes.text()}`);
+
+  return newCommitSha;
 }

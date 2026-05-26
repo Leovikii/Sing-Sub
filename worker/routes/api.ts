@@ -4,10 +4,10 @@ import {
   createSession, deleteSession, requireAuth,
   sessionCookieHeader, clearSessionCookieHeader,
 } from '../lib/auth';
-import { fetchUser, fetchFileContent, putFileContent, deleteFileContent, fetchDirectoryContents, type RepoSession } from '../lib/github';
+import { fetchUser, fetchFileContent, putFileContent, deleteFileContent, fetchDirectoryContents, commitMultiFiles, type GitTreeItem, type RepoSession } from '../lib/github';
 import { buildAllProfiles } from '../lib/builder';
 import { jsonResponse, errorResponse } from '../lib/security';
-import { generateHex, toRepoSession, rebuildWithWarning, rebuildSingleWithWarning, cleanupSubToken, fetchAllProfiles } from '../lib/helpers';
+import { generateHex, toRepoSession, rebuildWithWarning, rebuildSingleWithWarning, cleanupSubToken, fetchAllProfiles, pLimit } from '../lib/helpers';
 
 
 export async function handleLogin(request: Request, env: Env): Promise<Response> {
@@ -208,30 +208,46 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
   const existingNames = existingJson.map(p => p.split('/').pop()?.replace('.json', ''));
 
   const profilesToUpdate = state.profiles.filter((profile: Profile) => {
-    // If profileName is explicitly provided, we MUST update it
+    // If profileName is explicitly provided (single update), we MUST update it
     if (profileName && profile.name === profileName) return true;
-    
-    // If it's a new profile (or renamed to a new name), we MUST create it
-    if (!existingNames.includes(profile.name || '')) return true;
-
-    // Otherwise, we don't need to write it
+    // Otherwise, we update all (this handles bulk edits, reordering, and new creations)
+    if (!profileName) return true;
     return false;
   });
 
-  // Write selected profiles
-  await Promise.all(profilesToUpdate.map(async (profile: Profile) => {
+  const treeItems: GitTreeItem[] = [];
+
+  // Add updated/new profiles to the tree
+  profilesToUpdate.forEach((profile: Profile) => {
     const path = `sing-sub/configs/${profile.name}.json`;
     const content = JSON.stringify(profile, null, 2);
-    // Passing null for SHA forces putFileContent to fetch it first, making it safe for updates
-    await putFileContent(path, session, content, null, `Update config ${profile.name}`);
-  }));
+    treeItems.push({
+      path,
+      mode: '100644',
+      type: 'blob',
+      content
+    });
+  });
 
-  // Delete removed profiles
-  if (filesToDelete.length > 0) {
-    await Promise.all(filesToDelete.map(async path => {
-      const f = await fetchFileContent(path, session);
-      if (f) await deleteFileContent(path, session, f.sha, `Delete config`);
-    }));
+  // Add deleted profiles to the tree (sha: null deletes them)
+  filesToDelete.forEach((path: string) => {
+    treeItems.push({
+      path,
+      mode: '100644',
+      type: 'blob',
+      sha: null
+    });
+  });
+
+  // Commit changes if there are any
+  if (treeItems.length > 0) {
+    let commitMessage = '';
+    if (profileName) {
+      commitMessage = `Update config ${profileName}`;
+    } else {
+      commitMessage = `Sync configurations (${profilesToUpdate.length} updated, ${filesToDelete.length} deleted)`;
+    }
+    await commitMultiFiles(session, treeItems, commitMessage);
   }
 
 
@@ -294,7 +310,9 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const jsonNodes = filterJson(nodes);
   const jsonTemplates = filterJson(templates);
   const jsonPatches = filterJson(patches);
-  const parseFileMeta = async (path: string) => {
+  
+  const limit = pLimit(5);
+  const parseFileMeta = (path: string) => limit(async () => {
     try {
       const file = await fetchFileContent(path, session);
       if (file && file.content) {
@@ -308,7 +326,7 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
       }
     } catch { /* ignore parse errors */ }
     return { path, inboundsCount: 0, outboundsCount: 0, tags: [] };
-  };
+  });
 
   const [nodesWithMeta, templatesWithMeta, patchesWithMeta] = await Promise.all([
     Promise.all(jsonNodes.map(parseFileMeta)),
@@ -346,7 +364,7 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
   if (!path || content === undefined) return errorResponse('Missing path or content', 400);
 
   const session = toRepoSession(auth.settings);
-  await putFileContent(path, session, content, sha || null, message || `Update ${path}`);
+  await putFileContent(path, session, content, sha || null, message || `Update ${path.split('/').pop()}`);
   return jsonResponse({ success: true });
 }
 
@@ -364,6 +382,6 @@ export async function handleDeleteFile(request: Request, env: Env): Promise<Resp
   const file = await fetchFileContent(path, session);
   if (!file) return errorResponse('File not found', 404);
 
-  await deleteFileContent(path, session, file.sha, `Delete ${path}`);
+  await deleteFileContent(path, session, file.sha, `Delete ${path.split('/').pop()}`);
   return jsonResponse({ success: true });
 }

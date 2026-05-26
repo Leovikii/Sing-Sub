@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
     <div class="flex items-center gap-2 mb-2">
-      <ArrowUpFromLine class="w-4 h-4 text-[#F596AA]" />
+      <ArrowUp class="w-4 h-4 text-[#F596AA]" />
       <h3 class="font-bold text-[#f5f5f7]">出站节点 (Outbounds)</h3>
     </div>
 
@@ -96,7 +96,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { ArrowUpFromLine, Plus, Trash2, Check } from 'lucide-vue-next';
+import { ArrowUp, Plus, Trash2, Check } from 'lucide-vue-next';
 import AppleInput from '../ui/AppleInput.vue';
 import AppleSelect from '../ui/AppleSelect.vue';
 import NodeMicroCard from '../ui/NodeMicroCard.vue';

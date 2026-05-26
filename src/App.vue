@@ -37,10 +37,16 @@
 
       <transition name="fade-scale" mode="out-in">
         <div v-if="activeTab === 'config'" key="config" class="space-y-6">
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <draggable
+            v-model="stateData.profiles"
+            item-key="name"
+            :delay="200"
+            :animation="200"
+            class="grid grid-cols-1 lg:grid-cols-2 gap-6"
+            @end="recomputeOrders"
+          >
+            <template #item="{ element: profile, index: pIndex }">
               <ProfileEditor
-                v-for="(profile, pIndex) in stateData.profiles"
-                :key="profile.created_at || profile.name"
                 :profile="profile"
                 :index="pIndex"
                 :availableNodes="availableAssets.nodes"
@@ -48,15 +54,17 @@
                 :availablePatches="availableAssets.patches"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
-                @update:expanded="toggleExpand(pIndex)"
+                @update:expanded="(val) => toggleExpand(pIndex, val)"
                 @copyLink="handleCopyLink"
                 @remove="removeProfile"
                 @duplicate="duplicateProfile"
                 @save="handleSaveProfile"
+                @status="(t, m) => showStatus(t, m, 5000)"
               />
-            </div>
-          </div>
-          <div v-else-if="activeTab === 'assets'" key="assets" class="space-y-6">
+            </template>
+          </draggable>
+        </div>
+        <div v-else-if="activeTab === 'assets'" key="assets" class="space-y-6">
             <AssetManager
               ref="assetManagerRef"
               :type="assetType"
@@ -108,8 +116,9 @@ import AssetManager from './components/AssetManager.vue';
 import SettingsView from './components/SettingsView.vue';
 import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
+import draggable from 'vuedraggable';
 
-const APP_VERSION = 'v3.0.0-rc2';
+const APP_VERSION = 'v3.0.0';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
@@ -134,11 +143,6 @@ let statusTimer: any = null;
 
 const deletedAssets = ref<string[]>([]);
 
-function markAssetForDeletion(file: any) {
-  deletedAssets.value.push(file.path);
-  isDirty.value = true;
-}
-
 function showStatus(state: 'success' | 'warning' | 'error', msg: string, duration = 3000) {
   if (statusTimer) clearTimeout(statusTimer);
   saveStatus.value = state;
@@ -146,7 +150,16 @@ function showStatus(state: 'success' | 'warning' | 'error', msg: string, duratio
   statusTimer = setTimeout(() => { saveStatus.value = 'idle'; }, duration);
 }
 
-const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets } = useApi();
+function recomputeOrders() {
+  if (!stateData.value?.profiles) return;
+  // Update order fields sequentially based on current array position
+  stateData.value.profiles.forEach((p, idx) => {
+    p.order = idx;
+  });
+  isDirty.value = true;
+}
+
+const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets, deleteFile } = useApi();
 
 async function refreshAssets() {
   try {
@@ -268,9 +281,10 @@ async function handleSave() {
     if (deletedAssets.value.length > 0) {
       for (const path of deletedAssets.value) {
         try {
-          await fetch(`/api/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+          await deleteFile(path);
         } catch (err) {
           console.error('Failed to delete asset', path, err);
+          showStatus('error', `删除文件失败: ${path}`, 3000);
         }
       }
       deletedAssets.value = [];
@@ -290,6 +304,8 @@ async function handleSave() {
 
 async function handleSaveProfile(profileName: string) {
   if (!stateData.value) return;
+  const p = stateData.value.profiles.find(x => x.name === profileName);
+  if (p) p.updated_at = Date.now();
   saveStatus.value = 'saving';
   statusMessage.value = '';
   suppressDirty = true;
@@ -356,7 +372,9 @@ function addProfile() {
     rules: [], inboundRules: [],
     created_at: Date.now(),
     updated_at: Date.now(),
+    order: stateData.value.profiles.length
   });
+  recomputeOrders();
   expandedIndex.value = stateData.value.profiles.length - 1;
 }
 
@@ -365,6 +383,7 @@ function removeProfile(index: number) {
   if (expandedIndex.value === index) expandedIndex.value = null;
   else if (expandedIndex.value !== null && expandedIndex.value > index) expandedIndex.value--;
   stateData.value.profiles.splice(index, 1);
+  recomputeOrders();
 }
 
 function duplicateProfile(source: Profile) {
@@ -376,11 +395,25 @@ function duplicateProfile(source: Profile) {
   copy.created_at = Date.now();
   copy.updated_at = Date.now();
   stateData.value.profiles.splice(index + 1, 0, copy);
+  recomputeOrders();
   expandedIndex.value = index + 1;
 }
 
-function toggleExpand(index: number) {
-  expandedIndex.value = expandedIndex.value === index ? null : index;
+function markAssetForDeletion(file: any) {
+  deletedAssets.value.push(file.path);
+  isDirty.value = true;
+}
+
+function toggleExpand(index: number, forceState?: boolean) {
+  if (forceState !== undefined) {
+    if (forceState) {
+      expandedIndex.value = index;
+    } else if (expandedIndex.value === index) {
+      expandedIndex.value = null;
+    }
+  } else {
+    expandedIndex.value = expandedIndex.value === index ? null : index;
+  }
 }
 
 async function handleGlobalAdd() {

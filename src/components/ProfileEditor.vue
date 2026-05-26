@@ -1,9 +1,11 @@
 <template>
-  <FileCard
+  <div>
+    <FileCard
     :title="profile.name"
     :note="profile.note"
     :inboundCount="inboundCount"
     :outboundCount="outboundCount"
+    :updatedAt="profile.updated_at"
     :menuItems="cardMenuItems"
     @click="openModal('preview')"
     @edit="openModal('edit')"
@@ -12,11 +14,11 @@
     <template #actions>
       <button
         @click.stop="$emit('copyLink', profile.name || '', index)"
-        :class="['flex items-center justify-center gap-1.5 w-8 h-8 md:w-auto md:h-auto md:px-3 md:py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer border', copyStatus ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border-[#38383a] hover:border-[#F596AA]']"
+        :class="['flex-1 md:flex-none flex items-center justify-center gap-1.5 h-10 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl md:rounded-full text-[13px] md:text-xs font-medium transition-colors cursor-pointer border', copyStatus ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border-[#38383a] hover:border-[#F596AA]']"
         :title="copyStatus ? '已复制' : '订阅'"
       >
         <component :is="copyStatus ? Check : Link2" :size="14" />
-        <span class="hidden md:inline">{{ copyStatus ? '已复制' : '订阅' }}</span>
+        <span class="ml-1">{{ copyStatus ? '已复制' : '订阅' }}</span>
       </button>
     </template>
   </FileCard>
@@ -63,6 +65,7 @@
       </div>
     </template>
   </EditorModal>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -95,6 +98,7 @@ const emit = defineEmits<{
   duplicate: [profile: Profile];
   save: [name: string];
   'update:expanded': [value: boolean];
+  status: [type: 'success' | 'warning' | 'error', message: string, duration?: number];
 }>();
 
 const isOpen = computed({
@@ -196,8 +200,9 @@ async function fetchTemplateData(url: string) {
       const res = await getFile(url);
       fetchedTemplateData.value = JSON.parse(res.content);
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to fetch template', e);
+    emit('status', 'error', '获取模板失败: ' + e.message);
     fetchedTemplateData.value = null;
   }
 }
@@ -210,8 +215,9 @@ async function fetchNodesData(path: string) {
   try {
     const res = await getFile(path);
     fetchedNodesData.value = JSON.parse(res.content);
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to fetch nodes', e);
+    emit('status', 'error', '获取节点文件失败: ' + e.message);
     fetchedNodesData.value = null;
   }
 }

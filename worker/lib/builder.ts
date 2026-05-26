@@ -1,5 +1,6 @@
 import type { Env, Profile } from '../types';
 import { fetchFileContent, type RepoSession } from './github';
+import { pLimit } from './helpers';
 
 interface Outbound {
   tag?: string;
@@ -109,14 +110,27 @@ function normalizeArray<T>(data: unknown, key: string): T[] {
 }
 
 async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'sing-sub-worker',
-      'Accept': 'application/json',
-    },
-  });
-  if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
-  return res.json();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'sing-sub-worker',
+        'Accept': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
+    return await res.json();
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      throw new Error(`获取外部模板超时: ${url}`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function fetchRepoJson(path: string, session: RepoSession): Promise<unknown> {
@@ -213,6 +227,7 @@ export async function buildAllProfiles(
   const list = await env.SESSIONS.list({ prefix });
   const currentNames = profiles.map(p => p.name);
 
+  const limit = pLimit(3);
   await Promise.all([
     ...list.keys.map(async (key: any) => {
       const name = key.name.substring(prefix.length);
@@ -220,9 +235,9 @@ export async function buildAllProfiles(
         await env.SESSIONS.delete(key.name);
       }
     }),
-    ...profiles.map(async (profile) => {
+    ...profiles.map(profile => limit(async () => {
       const config = await buildProfile(profile, session);
       await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
-    })
+    }))
   ]);
 }

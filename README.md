@@ -1,5 +1,7 @@
 # Sing Sub
 
+[中文文档](README_zh-CN.md)
+
 Edge-based multi-environment configuration distribution console for [sing-box](https://sing-box.sagernet.org/). Manage sing-box profiles through a web UI, store configurations in a private GitHub repo, and distribute subscription links via Cloudflare Workers.
 
 ## Features
@@ -7,6 +9,7 @@ Edge-based multi-environment configuration distribution console for [sing-box](h
 - **Cookie-based auth** — Login with GitHub repo + PAT. Session stored as HttpOnly Secure cookie, no third-party auth required.
 - **Server-side security** — GitHub PAT stored in Cloudflare KV (encrypted at rest), never exposed to the browser. Same repo from different devices shares one user entry.
 - **Edge config building** — Worker fetches templates and nodes from GitHub, merges them on the fly, and caches in KV. No GitHub Actions or Gist needed.
+- **Automated Bot Commits** — Configuration changes via the UI are pushed to your repository under a dedicated "Sing-Sub Bot" identity, keeping your commit history clean and easily distinguishable from manual edits.
 - **Subscription distribution** — `/sub/{token}/{name}.json` with User-Agent filtering (sing-box clients only).
 - **Next-Gen Glassmorphism UI** — A stunning, fully responsive interface optimized for both desktop and mobile, featuring dynamic layout adaptation, intelligent protocol tag rendering, and seamless mode toggles.
 - **Dual-Mode Profile Editor** — Switch instantly between Visual UI Builder and Live JSON Preview with animated segmented controls.
@@ -28,45 +31,34 @@ Edge-based multi-environment configuration distribution console for [sing-box](h
    ```
    your-private-repo/
    ├── sing-sub/
-   │   └── rules.json          # Managed by this UI (auto-created on first save)
-   ├── outbounds.json           # Outbound node definitions
-   └── inbounds.json            # Inbound node definitions (optional)
+   │   ├── configs/             # Configuration profiles managed by UI
+   │   ├── nodes/               # Node files (.json)
+   │   ├── templates/           # Base templates (.json)
+   │   └── patches/             # Patch definitions (.json)
    ```
+   *Note: Templates can also be hosted anywhere as public URLs (e.g., raw GitHub links).*
 
-   Templates can be hosted anywhere as public URLs (e.g. raw GitHub links).
-
-2. A **GitHub Personal Access Token (PAT)** with `repo` permission (read/write private repos).
-
-   Create one at: https://github.com/settings/tokens
-
+2. A **GitHub Personal Access Token (PAT)** with `repo` permission (read/write private repos). Create one at: https://github.com/settings/tokens
 3. A **Cloudflare account** with a custom domain.
 
 ## Deployment
 
 ### 1. Create KV Namespace
-
 - Cloudflare Dashboard → Storage & Databases → KV → Create a namespace
-- Copy the Namespace ID and update `wrangler.toml`
+- Copy the Namespace ID and update `id` under `[[kv_namespaces]]` in `wrangler.toml`
 
 ### 2. Set GitHub Secrets
-
 - Go to your repo → Settings → Secrets → Actions
-- Add `CLOUDFLARE_API_TOKEN` (use the "Edit Cloudflare Workers" template)
+- Add `CLOUDFLARE_API_TOKEN` (use the "Edit Cloudflare Workers" template from Cloudflare Dashboard)
 
 ### 3. Push to Deploy
-
 ```bash
 git push origin main
 ```
 
-## Usage
+## Usage & Documentation
 
-1. Open your domain → Login with `owner/repo`, GitHub PAT, and a custom subscription token
-2. Add/edit profiles — each profile specifies a template URL, node file paths, and filtering rules
-3. Save → commits `sing-sub/rules.json` to GitHub and builds all configs on the edge
-4. Refresh → force rebuilds all configs from latest remote templates and node files
-5. Preview → view the exact cached config that sing-box clients will receive
-6. Copy the subscription link → paste into sing-box client
+For detailed usage instructions, how to organize your repository, and a comprehensive guide on the **Patch Syntax** (`$set`, `$append`, `$replace`, `$remove`), please refer to our [WIKI](WIKI.md).
 
 Subscription URL format: `https://your-domain/sub/{token}/{profile_name}.json`
 

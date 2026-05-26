@@ -3,6 +3,36 @@ import type { RepoSession } from './github';
 import { fetchFileContent, fetchDirectoryContents } from './github';
 import { buildAllProfiles, buildProfile } from './builder';
 
+export function pLimit(concurrency: number) {
+  let activeCount = 0;
+  const queue: Array<() => void> = [];
+
+  const next = () => {
+    activeCount--;
+    if (queue.length > 0) {
+      queue.shift()!();
+    }
+  };
+
+  const run = async <T>(fn: () => Promise<T>): Promise<T> => {
+    activeCount++;
+    try {
+      return await fn();
+    } finally {
+      next();
+    }
+  };
+
+  return <T>(fn: () => Promise<T>): Promise<T> => {
+    if (activeCount < concurrency) {
+      return run(fn);
+    }
+    return new Promise<void>((resolve) => {
+      queue.push(resolve);
+    }).then(() => run(fn));
+  };
+}
+
 
 export async function fetchAllProfiles(session: RepoSession): Promise<Profile[]> {
   let profiles: Profile[] = [];
@@ -10,7 +40,8 @@ export async function fetchAllProfiles(session: RepoSession): Promise<Profile[]>
     const files = await fetchDirectoryContents('sing-sub/configs', session);
     const jsonFiles = (files || []).filter(f => f.toLowerCase().endsWith('.json'));
     
-    const profileResults = await Promise.all(jsonFiles.map(async path => {
+    const limit = pLimit(3);
+    const profileResults = await Promise.all(jsonFiles.map(path => limit(async () => {
       try {
         const file = await fetchFileContent(path, session);
         if (file && file.content) {
@@ -18,16 +49,11 @@ export async function fetchAllProfiles(session: RepoSession): Promise<Profile[]>
         }
       } catch {}
       return null;
-    }));
+    })));
     
     profiles = profileResults.filter((p): p is Profile => p !== null);
     
-    profiles.sort((a, b) => {
-      const timeA = a.created_at || 0;
-      const timeB = b.created_at || 0;
-      if (timeA !== timeB) return timeA - timeB; // Ascending: oldest first, newest last
-      return (a.name || '').localeCompare(b.name || '');
-    });
+    profiles.sort((a, b) => a.order - b.order);
   } catch {}
 
   return profiles;
