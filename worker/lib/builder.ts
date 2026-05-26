@@ -214,6 +214,12 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
     }
   }
 
+  // Step 5: Clean up metadata fields to prevent Sing-Box strict parsing errors
+  if (template) {
+    delete (template as any).note;
+    delete (template as any)._note;
+  }
+
   return JSON.stringify(template, null, 2);
 }
 

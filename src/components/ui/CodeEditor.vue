@@ -22,7 +22,7 @@ import { ref, onMounted, onBeforeUnmount, watch, shallowRef } from 'vue';
 import EditorToolbar from './EditorToolbar.vue';
 
 // CodeMirror Core
-import { EditorState } from '@codemirror/state';
+import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, undo, redo, undoDepth, redoDepth } from '@codemirror/commands';
 import { search, searchKeymap, openSearchPanel } from '@codemirror/search';
@@ -44,6 +44,8 @@ const view = shallowRef<EditorView | null>(null);
 
 const canUndo = ref(false);
 const canRedo = ref(false);
+
+const readOnlyCompartment = new Compartment();
 
 function getActiveView(): EditorView | null {
   return view.value;
@@ -102,63 +104,102 @@ const themeExtensions = EditorView.theme({
   ".cm-activeLine": {
     backgroundColor: "rgba(255,255,255,0.03) !important"
   },
-  /* --- Clean Search Panel Styling --- */
+  /* --- Floating Search Panel Styling (VS Code Style) --- */
+  ".cm-panels-top": {
+    position: "absolute !important",
+    top: "0px !important",
+    right: "8px !important",
+    left: "auto !important",
+    width: "auto !important",
+    zIndex: "10 !important",
+    backgroundColor: "transparent !important",
+    border: "none !important"
+  },
   ".cm-panels": {
-    backgroundColor: "#1c1c1e !important",
-    borderBottom: "1px solid #38383a",
-    color: "#f5f5f7"
+    backgroundColor: "transparent !important",
+    border: "none !important"
   },
   ".cm-search": {
-    padding: "10px 12px !important",
-    position: "relative"
-  },
-  ".cm-search label": {
-    display: "none !important"
+    backgroundColor: "rgba(30, 30, 32, 0.95) !important",
+    backdropFilter: "blur(16px)",
+    WebkitBackdropFilter: "blur(16px)",
+    border: "1px solid rgba(255, 255, 255, 0.1) !important",
+    borderTop: "none !important",
+    borderTopLeftRadius: "0px !important",
+    borderTopRightRadius: "0px !important",
+    borderBottomLeftRadius: "8px !important",
+    borderBottomRightRadius: "8px !important",
+    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5) !important",
+    color: "#f5f5f7",
+    padding: "6px 8px !important",
+    width: "320px",
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "6px",
+    position: "relative",
+    paddingRight: "18px"
   },
   ".cm-search input": {
-    backgroundColor: "#0a0a0a",
-    border: "1px solid #38383a",
-    borderRadius: "6px",
-    padding: "4px 8px",
-    color: "#f5f5f7",
-    outline: "none",
-    fontSize: "13px",
-    maxWidth: "160px",
-    marginRight: "6px",
-    marginBottom: "6px"
+    width: "140px",
+    backgroundColor: "#0a0a0a !important",
+    border: "1px solid #38383a !important",
+    borderRadius: "4px !important",
+    padding: "4px 8px !important",
+    color: "#f5f5f7 !important",
+    outline: "none !important",
+    fontSize: "12px !important",
+    transition: "border-color 0.2s"
   },
   ".cm-search input:focus": {
-    borderColor: "#F596AA"
+    borderColor: "#F596AA !important"
   },
   ".cm-search button": {
-    backgroundColor: "#2c2c2e",
-    border: "1px solid #38383a",
-    borderRadius: "6px",
-    padding: "4px 10px",
-    color: "#86868b",
-    cursor: "pointer",
-    fontSize: "12px",
-    transition: "all 0.2s",
-    marginRight: "6px",
-    marginBottom: "6px"
+    backgroundColor: "transparent !important",
+    border: "1px solid transparent !important",
+    borderRadius: "4px !important",
+    padding: "4px 8px !important",
+    color: "#86868b !important",
+    cursor: "pointer !important",
+    fontSize: "12px !important",
+    transition: "all 0.2s !important"
   },
   ".cm-search button:hover": {
-    backgroundColor: "#38383a",
-    color: "#f5f5f7"
+    backgroundColor: "#2c2c2e !important",
+    color: "#f5f5f7 !important"
+  },
+  ".cm-search label": {
+    display: "none !important" /* Hide match options completely */
+  },
+  ".cm-search button[name=select]": {
+    display: "none !important" /* Hide 'all' select button */
+  },
+  ".cm-search br": {
+    display: "block !important",
+    flexBasis: "100%",
+    height: "0",
+    margin: "0"
   },
   ".cm-search button[name=close]": {
     position: "absolute",
-    top: "6px",
-    right: "6px",
+    top: "0px",
+    right: "-4px",
+    width: "20px",
+    height: "20px",
     backgroundColor: "transparent !important",
     border: "none !important",
-    fontSize: "16px",
-    padding: "4px !important",
-    margin: "0 !important",
-    color: "#86868b !important"
+    padding: "0 !important",
+    color: "#86868b !important",
+    fontSize: "16px !important",
+    lineHeight: "1",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: "20"
   },
   ".cm-search button[name=close]:hover": {
-    color: "#F596AA !important"
+    color: "#F596AA !important",
+    backgroundColor: "transparent !important"
   },
   /* --- Lint panel --- */
   ".cm-lint-marker": {
@@ -210,7 +251,7 @@ function createExtensions() {
       "replace": "替换",
       "replace all": "全部替换"
     }),
-    EditorState.readOnly.of(!!props.readonly)
+    readOnlyCompartment.of(EditorState.readOnly.of(!!props.readonly))
   ];
 
   return exts;
@@ -233,6 +274,15 @@ watch(() => props.modelValue, (newVal) => {
   if (v && v.state.doc.toString() !== newVal) {
     v.dispatch({
       changes: { from: 0, to: v.state.doc.length, insert: newVal }
+    });
+  }
+});
+
+watch(() => props.readonly, (newVal) => {
+  const v = getActiveView();
+  if (v) {
+    v.dispatch({
+      effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(!!newVal))
     });
   }
 });
