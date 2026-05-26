@@ -68,7 +68,7 @@
             <AssetManager
               ref="assetManagerRef"
               :type="assetType"
-              :files="assetType === 'node' ? availableAssets.nodes.filter(n => !deletedAssets.includes(n.path)) : (assetType === 'template' ? availableAssets.templates.filter(n => !deletedAssets.includes(n.path)) : availableAssets.patches.filter(n => !deletedAssets.includes(n.path)))"
+              :files="filteredAssets"
               @refresh="refreshAssets"
               @status="(t, m) => showStatus(t, m, 5000)"
               @delete="markAssetForDeletion"
@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick } from 'vue';
+import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue';
 import { Loader2 } from 'lucide-vue-next';
 import AppHeader from './components/layout/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
@@ -142,6 +142,14 @@ let suppressDirty = false;
 let statusTimer: any = null;
 
 const deletedAssets = ref<string[]>([]);
+
+const filteredAssets = computed(() => {
+  const type = assetType.value;
+  const arr = type === 'node' ? availableAssets.value.nodes 
+            : type === 'template' ? availableAssets.value.templates 
+            : availableAssets.value.patches;
+  return arr.filter((n: any) => !deletedAssets.value.includes(n.path || n));
+});
 
 function showStatus(state: 'success' | 'warning' | 'error', msg: string, duration = 3000) {
   if (statusTimer) clearTimeout(statusTimer);
