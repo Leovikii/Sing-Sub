@@ -109,6 +109,14 @@ function normalizeArray<T>(data: unknown, key: string): T[] {
   return [];
 }
 
+function sanitizeMetadata(obj: any): any {
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    delete obj.note;
+    delete obj._note;
+  }
+  return obj;
+}
+
 async function fetchJson(url: string): Promise<unknown> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -122,7 +130,8 @@ async function fetchJson(url: string): Promise<unknown> {
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
-    return await res.json();
+    const data = await res.json();
+    return sanitizeMetadata(data);
   } catch (e: any) {
     if (e.name === 'AbortError') {
       throw new Error(`获取外部模板超时: ${url}`);
@@ -137,7 +146,7 @@ async function fetchRepoJson(path: string, session: RepoSession): Promise<unknow
   if (!path) return null;
   const file = await fetchFileContent(path, session);
   if (!file) return null;
-  return JSON.parse(file.content);
+  return sanitizeMetadata(JSON.parse(file.content));
 }
 
 export async function buildProfile(profile: Profile, session: RepoSession): Promise<string> {

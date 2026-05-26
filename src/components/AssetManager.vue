@@ -5,7 +5,7 @@
       <FileCard
         v-for="file in files"
         :key="file.path"
-        :title="getBasename(file.path)"
+        :title="getBasename(file.path).replace(/\.json$/, '')"
         :inboundCount="file.inboundsCount"
         :outboundCount="file.outboundsCount"
         :icon="type === 'node' ? 'network' : (type === 'template' ? 'layout-template' : 'puzzle')"

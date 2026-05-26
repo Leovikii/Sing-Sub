@@ -1,11 +1,19 @@
 <template>
   <header class="flex items-center justify-between">
-    <div class="space-y-1">
-      <div class="flex items-center gap-3">
-        <h1 class="text-3xl md:text-4xl font-bold tracking-tight text-[#f5f5f7]">Sing Sub</h1>
-        <span class="px-2 py-0.5 rounded-md bg-[#2c2c2e] text-[#F596AA] text-xs font-mono border border-[#38383a]">{{ appVersion }}</span>
+    <div class="flex items-center gap-3 md:gap-4">
+      <!-- App Logo -->
+      <div class="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-[#2c2c2e]/40 border border-[#38383a] flex items-center justify-center shadow-lg backdrop-blur-md shrink-0">
+        <img src="/favicon.svg" alt="Sing Sub Logo" class="w-7 h-7 md:w-8 md:h-8 drop-shadow-md" />
       </div>
-      <p class="text-[#86868b] font-medium text-sm md:text-base">Edge 多环境分发控制台</p>
+
+      <!-- Titles -->
+      <div class="space-y-0.5 md:space-y-1">
+        <div class="flex items-center gap-2 md:gap-3">
+          <h1 class="text-2xl md:text-4xl font-bold tracking-tight text-[#f5f5f7]">Sing Sub</h1>
+          <span class="px-2 py-0.5 rounded-md bg-[#2c2c2e] text-[#F596AA] text-[10px] md:text-xs font-mono border border-[#38383a]">{{ appVersion }}</span>
+        </div>
+        <p class="text-[#86868b] font-medium text-xs md:text-sm">Edge 多环境分发控制台</p>
+      </div>
     </div>
 
     <div v-if="user" class="flex items-center gap-3">
