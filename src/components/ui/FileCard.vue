@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'card glass p-5 cursor-pointer select-none relative group border border-transparent hover:border-[#F596AA]/30 transition-all duration-300',
+      'card glass p-4 md:p-5 cursor-pointer select-none relative group border border-transparent hover:border-[#F596AA]/30 transition-all duration-300',
       menuOpen ? 'z-50' : 'z-10 hover:z-20'
     ]"
     @click="$emit('click')"
@@ -9,66 +9,83 @@
     <!-- Background highlight on hover -->
     <div class="absolute inset-0 rounded-[20px] bg-[#F596AA]/[0.03] shadow-[inset_0_0_20px_rgba(245,150,170,0.05)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
 
-    <div class="relative flex flex-col h-full space-y-2">
-      <div class="relative z-20 flex items-center gap-4">
-      <div class="flex items-center gap-2 min-w-0 flex-1">
-        <span class="card-title text-lg font-semibold text-[#f5f5f7] truncate group-hover:text-[#F596AA] transition-colors">{{ title }}</span>
-        <span class="text-[#86868b] font-mono text-sm select-none">.json</span>
+    <div class="relative flex flex-col md:flex-row md:items-center justify-between h-full gap-3 md:gap-4">
+      
+      <!-- 左侧/上部容器：纯粹的信息展示区 -->
+      <div class="flex flex-col min-w-0 flex-1 space-y-1.5 md:space-y-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="card-title text-lg font-semibold text-[#f5f5f7] truncate group-hover:text-[#F596AA] transition-colors">{{ title }}</span>
+          <span class="text-[#86868b] font-mono text-sm select-none hidden sm:inline">.json</span>
+          
+          <div class="flex items-center gap-1.5 md:gap-2 ml-auto md:ml-2 shrink-0">
+            <span class="bg-[#2c2c2e] text-[#86868b] text-[11px] md:text-xs rounded-full px-2 py-0.5 md:px-2.5 md:py-1 flex items-center gap-1 border border-white/5"><ArrowDown :size="12"/> {{ inboundCount }}</span>
+            <span class="bg-[#2c2c2e] text-[#86868b] text-[11px] md:text-xs rounded-full px-2 py-0.5 md:px-2.5 md:py-1 flex items-center gap-1 border border-white/5"><ArrowUp :size="12"/> {{ outboundCount }}</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span v-if="note" class="text-[#86868b] text-[11px] md:text-xs truncate">{{ note }}</span>
+          <span v-else class="text-[#48484a] text-[11px] md:text-xs italic">无备注</span>
+          
+          <template v-if="updatedAt">
+            <span class="text-[#48484a] text-[11px] md:text-xs">·</span>
+            <span class="text-[#86868b] text-[11px] md:text-xs whitespace-nowrap">{{ formatDynamicTime(updatedAt) }}</span>
+          </template>
+        </div>
       </div>
 
-      <div class="flex items-center gap-2 shrink-0">
+      <!-- 分割线 (仅移动端显示) -->
+      <div class="w-full h-px bg-white/5 md:hidden mt-1 mb-1"></div>
+
+      <!-- 右侧/下部容器：纯粹的操作区 -->
+      <div class="flex items-center gap-2 shrink-0 w-full md:w-auto">
         <slot name="actions"></slot>
         <button
           @click.stop="$emit('edit')"
-          class="flex items-center justify-center gap-1.5 w-8 h-8 md:w-auto md:h-auto md:px-3 md:py-1.5 rounded-full text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#F596AA] transition-colors cursor-pointer"
+          class="flex-1 md:flex-none flex items-center justify-center gap-1.5 h-10 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl md:rounded-full text-[13px] md:text-xs font-medium text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border border-[#38383a] hover:border-[#F596AA] transition-colors cursor-pointer"
           title="编辑"
         >
-          <Pencil :size="14" /><span class="hidden md:inline">编辑</span>
+          <Pencil :size="16" /><span class="ml-1">编辑</span>
         </button>
 
         <!-- ⋯ Menu -->
-        <div class="relative ml-1" ref="menuRef">
-          <button
-            @click.stop="menuOpen = !menuOpen"
-            :class="['w-8 h-8 flex items-center justify-center rounded-full bg-[#2c2c2e] transition-colors cursor-pointer border border-[#38383a] shadow-sm hover:text-[#f5f5f7] focus:outline-none', menuOpen ? 'border-[#F596AA] text-[#F596AA] shadow-[#F596AA]/20' : 'text-[#86868b]']"
-            title="更多操作"
-          >
-            <MoreHorizontal :size="16" />
-          </button>
-          <Transition name="menu">
-            <div
-              v-if="menuOpen"
-              @click.stop
-              class="absolute right-0 top-full mt-2 w-40 rounded-xl bg-[#1c1c1e] border border-[#38383a] shadow-2xl overflow-hidden z-[80] transform origin-top-right"
+        <PopoverMenu 
+          v-model:isOpen="menuOpen"
+          wrapperClass="flex-1 md:flex-none md:ml-1" 
+          contentClass="right-0 bottom-full md:bottom-auto md:top-full mb-2 md:mb-0 md:mt-2 min-w-[120px] w-max p-1.5 rounded-2xl bg-[#2c2c2e]/90 backdrop-blur-xl border border-white/5 shadow-2xl origin-bottom-right md:origin-top-right flex flex-col gap-0.5"
+        >
+          <template #trigger="{ toggle, isOpen }">
+            <button
+              @click.stop="toggle"
+              :class="['w-full h-10 md:w-auto md:h-auto md:px-3 md:py-2 flex items-center justify-center gap-1.5 rounded-xl md:rounded-full bg-[#2c2c2e] transition-colors cursor-pointer border border-[#38383a] shadow-sm hover:text-[#f5f5f7] focus:outline-none', isOpen ? 'border-[#F596AA] text-[#F596AA] shadow-[#F596AA]/20' : 'text-[#86868b]']"
+              title="更多操作"
             >
-              <button
-                v-for="(item, idx) in menuItems"
-                :key="idx"
-                @click="handleMenuAction(item.action)"
-                :class="['w-full flex items-center gap-2 px-3 py-2.5 text-sm transition-colors cursor-pointer', item.danger ? 'text-[#ff6961] hover:bg-[#ff6961]/10' : 'text-[#f5f5f7] hover:bg-[#2c2c2e]']"
-              >
-                <component :is="item.icon" :size="14" /> {{ item.label }}
-              </button>
-            </div>
-          </Transition>
-        </div>
-      </div>
-    </div>
+              <MoreHorizontal :size="18" />
+              <span class="ml-1 text-[13px] font-medium">更多</span>
+            </button>
+          </template>
 
-      <div class="relative z-10 flex items-center gap-2">
-        <span v-if="note" class="text-[#86868b] text-xs truncate">{{ note }}</span>
-        <span v-else class="text-[#48484a] text-xs italic">无备注</span>
-        <div class="flex-1"></div>
-        <span class="bg-[#2c2c2e] text-[#86868b] text-xs rounded-full px-2.5 py-1 flex items-center gap-1 border border-white/5"><ArrowDownToLine :size="12"/> {{ inboundCount }}</span>
-        <span class="bg-[#2c2c2e] text-[#86868b] text-xs rounded-full px-2.5 py-1 flex items-center gap-1 border border-white/5"><ArrowUpFromLine :size="12"/> {{ outboundCount }}</span>
+          <template #content="{ close }">
+            <button
+              v-for="(item, idx) in menuItems"
+              :key="idx"
+              @click="handleMenuAction(item.action); close()"
+              :class="['w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-all cursor-pointer rounded-xl', item.danger ? 'text-[#ff6961] hover:bg-[#ff6961]/15' : 'text-[#f5f5f7] hover:bg-white/10']"
+            >
+              <component :is="item.icon" :size="14" /> 
+              <span class="whitespace-nowrap">{{ item.label }}</span>
+            </button>
+          </template>
+        </PopoverMenu>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { Pencil, MoreHorizontal, ArrowDownToLine, ArrowUpFromLine } from 'lucide-vue-next';
+import { ref } from 'vue';
+import { Pencil, MoreHorizontal, ArrowDown, ArrowUp } from 'lucide-vue-next';
+import PopoverMenu from './PopoverMenu.vue';
 
 interface MenuItem {
   label: string;
@@ -82,6 +99,7 @@ const props = defineProps<{
   note?: string;
   inboundCount: number;
   outboundCount: number;
+  updatedAt?: number;
   menuItems: MenuItem[];
 }>();
 
@@ -92,31 +110,23 @@ const emit = defineEmits<{
 }>();
 
 const menuOpen = ref(false);
-const menuRef = ref<HTMLElement | null>(null);
 
 function handleMenuAction(action: string) {
   emit('action', action);
-  menuOpen.value = false;
 }
 
-function onClickOutside(e: MouseEvent) {
-  if (menuOpen.value && menuRef.value && !menuRef.value.contains(e.target as Node)) {
-    menuOpen.value = false;
+function formatDynamicTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days > 7) {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
+  if (days >= 1) return `${days}天前`;
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  if (hours >= 1) return `${hours}小时前`;
+  const minutes = Math.floor(diff / (1000 * 60));
+  if (minutes >= 1) return `${minutes}分钟前`;
+  return '刚才更新';
 }
-
-onMounted(() => document.addEventListener('click', onClickOutside));
-onUnmounted(() => document.removeEventListener('click', onClickOutside));
 </script>
-
-<style scoped>
-.menu-enter-active,
-.menu-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.menu-enter-from,
-.menu-leave-to {
-  opacity: 0;
-  transform: scale(0.95) translateY(-5px);
-}
-</style>

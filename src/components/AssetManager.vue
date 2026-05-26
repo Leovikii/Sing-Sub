@@ -27,7 +27,7 @@
     <!-- Editor Modal -->
     <EditorModal
       :isOpen="!!editingFile"
-      @update:isOpen="val => { if (!val) closeEditor() }"
+      @update:isOpen="(val) => { if (!val) closeEditor(); }"
       :title="localFileName"
       @update:title="localFileName = $event"
       :note="localFileNote"
@@ -203,7 +203,7 @@ async function saveFileCode() {
         path: newPath,
         content: editorContent.value,
         sha: isRename ? null : fileSha.value,
-        message: `${editingFile.value.isNew ? 'Create' : 'Update'} ${localFileName.value}.json via Sing-Sub Asset Manager`
+        message: `${editingFile.value.isNew ? 'Create' : 'Update'} ${localFileName.value}.json`
       })
     });
     
@@ -219,6 +219,7 @@ async function saveFileCode() {
         });
       } catch (deleteErr) {
         console.error('Failed to delete old file after rename:', deleteErr);
+        emit('status', 'error', '重命名后删除旧文件失败: ' + (deleteErr as Error).message);
       }
     }
     

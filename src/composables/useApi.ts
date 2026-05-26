@@ -83,16 +83,10 @@ export function useApi() {
   }
 
   async function postPreview(profile: Profile): Promise<{ content: string }> {
-    const res = await fetch('/api/preview', {
+    return apiCall('/api/preview', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(profile),
     });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || 'Preview failed');
-    }
-    return res.json();
   }
 
   async function getAssets(): Promise<{ nodes: any[], templates: any[], patches: any[] }> {
@@ -103,9 +97,13 @@ export function useApi() {
     return apiCall(`/api/file?path=${encodeURIComponent(path)}`);
   }
 
+  async function deleteFile(path: string): Promise<void> {
+    return apiCall(`/api/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+  }
+
   return {
     user, settings,
     login, logout, getSettings, saveSettings, deleteSettings,
-    getState, saveState, rebuild, getPreview, postPreview, getAssets, getFile,
+    getState, saveState, rebuild, getPreview, postPreview, getAssets, getFile, deleteFile,
   };
 }

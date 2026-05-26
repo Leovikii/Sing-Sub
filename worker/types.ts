@@ -29,6 +29,7 @@ export interface Profile {
   overrides?: Record<string, unknown>;
   created_at?: number;
   updated_at?: number;
+  order: number;
 }
 
 export interface StateData {

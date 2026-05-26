@@ -29,6 +29,30 @@ body {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
   }
+}
+
+/* Drag and Drop Animations */
+.sortable-chosen {
+  transform: scale(0.98);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.sortable-drag {
+  cursor: grabbing !important;
+  opacity: 1 !important;
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(245, 150, 170, 0.4) !important;
+  transform: scale(1.03) rotate(1deg) !important;
+  z-index: 999 !important;
+  backdrop-filter: blur(20px) brightness(1.1) !important;
+  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.1s ease !important;
+  will-change: transform, box-shadow;
+}
+
+.sortable-ghost {
+  opacity: 0.3 !important;
+  transform: scale(0.95) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.2) !important;
 }
