@@ -34,13 +34,6 @@
 
         <!-- Dynamic Buttons -->
         <ToolbarButton
-          :icon="RotateCcw"
-          label="复位"
-          :disabled="!isDirty"
-          @click="$emit('reset')"
-        />
-
-        <ToolbarButton
           :icon="saveStatusIcon"
           label="保存"
           :variant="saveStatusVariant"
@@ -84,7 +77,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { RefreshCw, Plus, Save, Check, X, RotateCcw, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
+import { RefreshCw, Plus, Save, Check, X, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
 import ToolbarButton from '../ui/ToolbarButton.vue';
 import SegmentedControl from '../ui/SegmentedControl.vue';
 
@@ -124,7 +117,6 @@ const emit = defineEmits<{
   refresh: [];
   add: [];
   save: [];
-  reset: [];
   'update:assetType': [value: 'node' | 'template' | 'patch' | 'ruleset'];
 }>();
 

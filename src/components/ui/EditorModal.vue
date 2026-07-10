@@ -52,23 +52,15 @@
                 :options="viewModeOptions"
               />
 
-              <template v-if="showSave && viewMode !== 'preview'">
-                <ToolbarButton
-                  :icon="RotateCcw"
-                  label="复位"
-                  :disabled="!isDirty"
-                  @click="$emit('reset')"
-                />
-
-                <ToolbarButton
-                  :icon="Save"
-                  :label="saveText"
-                  variant="primary"
-                  :disabled="!isDirty || isSaving"
-                  :loading="isSaving"
-                  @click="$emit('save')"
-                />
-              </template>
+              <ToolbarButton
+                v-if="showSave && viewMode !== 'preview'"
+                :icon="Save"
+                :label="saveText"
+                variant="primary"
+                :disabled="!isDirty || isSaving"
+                :loading="isSaving"
+                @click="$emit('save')"
+              />
               <PopoverMenu
                 v-model:isOpen="showUnsavedConfirm"
                 wrapperClass="relative flex"
@@ -110,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { X, Save, RotateCcw, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
+import { X, Save, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
 import { ref } from 'vue';
 import PopoverMenu from './PopoverMenu.vue';
 import SegmentedControl from './SegmentedControl.vue';
@@ -144,7 +136,6 @@ const emit = defineEmits<{
   (e: 'update:note', value: string): void;
   (e: 'update:viewMode', value: 'preview' | 'edit'): void;
   (e: 'save'): void;
-  (e: 'reset'): void;
   (e: 'close'): void;
 }>();
 

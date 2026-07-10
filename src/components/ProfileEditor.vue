@@ -40,7 +40,6 @@
     :showViewToggle="true"
     v-model:viewMode="viewMode"
     @save="handleLocalSave"
-    @reset="handleLocalReset"
     @close="isOpen = false"
   >
     <template #default>
@@ -259,13 +258,5 @@ function handleLocalSave() {
   
   emit('save', props.profile.name || '');
   isOpen.value = false;
-}
-
-function handleLocalReset() {
-  if (!initialProfileState) return;
-  localProfile.value = JSON.parse(initialProfileState);
-  
-  localProfileName.value = localProfile.value.name || 'untitled';
-  localProfileNote.value = localProfile.value.note || '';
 }
 </script>

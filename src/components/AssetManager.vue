@@ -43,7 +43,6 @@
       saveText="保存"
       :showViewToggle="true"
       @save="saveFileCode"
-      @reset="resetFileCode"
       @close="closeEditor"
     >
       <template v-if="type === 'ruleset' && viewMode === 'edit'" #header-actions>
@@ -208,15 +207,6 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
 function closeEditor() {
   isEditorDirty.value = false;
   editingFile.value = null;
-}
-
-function resetFileCode() {
-  editorContent.value = originalContent.value;
-  if (editingFile.value && !editingFile.value.isNew) {
-    localFileName.value = getBasename(editingFile.value.path).replace(/\.json$/, '');
-  }
-  localFileNote.value = originalFileNote.value;
-  isEditorDirty.value = false;
 }
 
 async function saveFileCode() {

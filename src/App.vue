@@ -32,7 +32,6 @@
         @refresh="handleGlobalRefresh"
         @add="handleGlobalAdd"
         @save="handleGlobalSave"
-        @reset="handleGlobalReset"
       />
 
       <transition name="fade-scale" mode="out-in">
@@ -122,7 +121,6 @@ const APP_VERSION = 'v3.0.0';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
-const originalStateData = ref<StateData | null>(null);
 const loadingData = ref(false);
 const saveStatus = ref<'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error'>('idle');
 const statusMessage = ref('');
@@ -201,7 +199,6 @@ function pruneStaleReferences() {
 
 function setStateData(state: StateData) {
   suppressDirty = true;
-  originalStateData.value = JSON.parse(JSON.stringify(state));
   stateData.value = state;
   nextTick(() => {
     suppressDirty = false;
@@ -442,22 +439,6 @@ function handleGlobalSave() {
 function handleGlobalRefresh() {
   handleRefresh();
   refreshAssets();
-}
-
-function handleReset() {
-  suppressDirty = true;
-  if (originalStateData.value) {
-    stateData.value = JSON.parse(JSON.stringify(originalStateData.value));
-  }
-  deletedAssets.value = [];
-  nextTick(() => {
-    isDirty.value = false;
-    suppressDirty = false;
-  });
-}
-
-function handleGlobalReset() {
-  handleReset();
 }
 </script>
 
