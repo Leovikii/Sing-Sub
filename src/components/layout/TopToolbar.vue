@@ -33,14 +33,14 @@
       <div class="flex items-center gap-0.5 p-1 bg-[#1c1c1e]/80 backdrop-blur-xl border border-[#38383a] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
 
         <!-- Dynamic Buttons -->
-        <AppleToolbarButton
+        <ToolbarButton
           :icon="RotateCcw"
           label="复位"
           :disabled="!isDirty"
           @click="$emit('reset')"
         />
 
-        <AppleToolbarButton
+        <ToolbarButton
           :icon="saveStatusIcon"
           label="保存"
           :variant="saveStatusVariant"
@@ -50,7 +50,7 @@
         />
 
         <!-- Static Buttons -->
-        <AppleToolbarButton
+        <ToolbarButton
           :icon="RefreshCw"
           label="刷新"
           :disabled="refreshing"
@@ -58,7 +58,7 @@
           @click="handleRefresh"
         />
 
-        <AppleToolbarButton
+        <ToolbarButton
           :icon="Plus"
           label="新建"
           variant="primary"
@@ -71,7 +71,7 @@
     <!-- Center/Row 2: Category Switcher (only visible in Assets tab) -->
     <Transition name="fade-scale">
       <div v-if="activeTab === 'assets'" class="flex justify-center md:absolute md:left-1/2 md:top-[21px] md:-translate-x-1/2 md:-translate-y-1/2 pointer-events-auto z-10 w-full md:w-auto">
-        <AppleSegmentedControl
+        <SegmentedControl
           :modelValue="assetType ?? 'node'"
           @update:modelValue="$emit('update:assetType', $event as 'node' | 'template' | 'patch' | 'ruleset')"
           :options="assetTypeOptions"
@@ -85,8 +85,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { RefreshCw, Plus, Save, Check, X, RotateCcw, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
-import AppleToolbarButton from '../ui/AppleToolbarButton.vue';
-import AppleSegmentedControl from '../ui/AppleSegmentedControl.vue';
+import ToolbarButton from '../ui/ToolbarButton.vue';
+import SegmentedControl from '../ui/SegmentedControl.vue';
 
 const props = defineProps<{
   saveStatus: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';

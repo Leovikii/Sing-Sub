@@ -7,12 +7,12 @@
       </div>
       <form @submit.prevent="$emit('save')" class="space-y-6">
         <div class="space-y-4">
-          <AppleInput :modelValue="ownerRepo" @update:modelValue="onOwnerRepoChange" placeholder="owner/repo (如: user/singbox-private)" />
-          <AppleInput :modelValue="setupData.pat" @update:modelValue="update('pat', $event)" type="password" placeholder="GitHub PAT (repo 读写权限)" />
+          <Input :modelValue="ownerRepo" @update:modelValue="onOwnerRepoChange" placeholder="owner/repo (如: user/singbox-private)" />
+          <Input :modelValue="setupData.pat" @update:modelValue="update('pat', $event)" type="password" placeholder="GitHub PAT (repo 读写权限)" />
         </div>
-        <AppleButton type="submit" :loading="loading" variant="primary" class="w-full !py-3">
+        <Button type="submit" :loading="loading" variant="primary" class="w-full !py-3">
           登录
-        </AppleButton>
+        </Button>
       </form>
       <div class="border-t border-[#38383a] pt-4 space-y-2">
         <p class="text-xs text-[#86868b] leading-relaxed">
@@ -30,8 +30,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import AppleInput from './ui/AppleInput.vue';
-import AppleButton from './ui/AppleButton.vue';
+import Input from './ui/Input.vue';
+import Button from './ui/Button.vue';
 import type { SetupData } from '../types';
 
 const props = defineProps<{

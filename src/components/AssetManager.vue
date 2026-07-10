@@ -53,7 +53,7 @@
           contentClass="right-0 top-full mt-2 w-52 p-1.5 rounded-2xl bg-[#2c2c2e]/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-0.5"
         >
           <template #trigger="{ toggle, isOpen }">
-            <AppleToolbarButton
+            <ToolbarButton
               :icon="Plus"
               :active="isOpen"
               title="添加规则"
@@ -110,7 +110,7 @@ import EditorModal from './ui/EditorModal.vue';
 import PopoverMenu from './ui/PopoverMenu.vue';
 import CodeEditor from './ui/CodeEditor.vue';
 import RuleSetEditor from './ui/RuleSetEditor.vue';
-import AppleToolbarButton from './ui/AppleToolbarButton.vue';
+import ToolbarButton from './ui/ToolbarButton.vue';
 
 const props = defineProps<{
   files: any[];

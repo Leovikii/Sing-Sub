@@ -17,12 +17,12 @@
           <!-- Edit Mode -->
           <template v-if="isEditing">
             <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex items-center gap-2">
-              <AppleSelect
+              <Select
                 v-model="tempFilter.action"
                 :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
                 class="w-28 shrink-0"
               />
-              <AppleInput v-model="tempFilter.keyword" placeholder="关键词，多个用逗号隔开" class="flex-1" />
+              <Input v-model="tempFilter.keyword" placeholder="关键词，多个用逗号隔开" class="flex-1" />
             </div>
             
             <button
@@ -87,8 +87,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { ArrowDown, Plus, Trash2, Check } from 'lucide-vue-next';
-import AppleInput from '../ui/AppleInput.vue';
-import AppleSelect from '../ui/AppleSelect.vue';
+import Input from '../ui/Input.vue';
+import Select from '../ui/Select.vue';
 import NodeMicroCard from '../ui/NodeMicroCard.vue';
 import type { Profile, FilterAction } from '../../types';
 

@@ -40,8 +40,8 @@
           @click="selectOption(opt.value)"
           class="px-4 py-2 text-[14px] cursor-pointer transition-colors flex justify-between items-center group"
           :class="[
-            modelValue === opt.value 
-              ? 'text-[#F596AA] bg-[#F596AA]/10' 
+            modelValue === opt.value
+              ? 'text-[#F596AA] bg-[#F596AA]/10'
               : 'text-[#f5f5f7] hover:bg-[#3a3a3c]'
           ]"
         >

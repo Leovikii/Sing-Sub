@@ -42,11 +42,11 @@
         <div class="space-y-3 md:space-y-4">
           <div>
             <label class="block text-xs md:text-sm font-medium text-[#a1a1a6] mb-1.5">Repository (Owner/Repo)</label>
-            <AppleInput :modelValue="ownerRepo" @update:modelValue="onOwnerRepoChange" placeholder="owner/repo" />
+            <Input :modelValue="ownerRepo" @update:modelValue="onOwnerRepoChange" placeholder="owner/repo" />
           </div>
           <div>
             <label class="block text-xs md:text-sm font-medium text-[#a1a1a6] mb-1.5">Personal Access Token (PAT)</label>
-            <AppleInput v-model="editPat" type="password" placeholder="留空则不修改" />
+            <Input v-model="editPat" type="password" placeholder="留空则不修改" />
             <p class="text-[11px] md:text-xs text-[#86868b] mt-1.5 md:mt-2">用于通过 GitHub API 读写配置文件</p>
           </div>
         </div>
@@ -68,7 +68,7 @@
           <div>
             <label class="block text-xs md:text-sm font-medium text-[#a1a1a6] mb-1.5">Subscription Token</label>
             <div class="flex gap-2">
-              <AppleInput v-model="editToken" placeholder="订阅 Token" class="flex-1" />
+              <Input v-model="editToken" placeholder="订阅 Token" class="flex-1" />
               <button
                 @click="generateToken"
                 class="shrink-0 px-3 md:px-4 rounded-xl bg-[#2c2c2e] text-[#86868b] hover:text-[#F596AA] hover:bg-[#3a3a3c] transition-colors cursor-pointer border border-[#38383a]"
@@ -88,9 +88,9 @@
         </div>
 
         <div class="pt-2 md:pt-4 flex justify-end">
-          <AppleButton @click="handleSave" :loading="loading" variant="primary" class="px-6 md:px-8 w-full md:w-auto shadow-lg shadow-[#F596AA]/20">
+          <Button @click="handleSave" :loading="loading" variant="primary" class="px-6 md:px-8 w-full md:w-auto shadow-lg shadow-[#F596AA]/20">
             保存更改
-          </AppleButton>
+          </Button>
         </div>
 
       </div>
@@ -101,8 +101,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { Github, LogOut, Database, Key, Shuffle, AlertTriangle } from 'lucide-vue-next';
-import AppleInput from './ui/AppleInput.vue';
-import AppleButton from './ui/AppleButton.vue';
+import Input from './ui/Input.vue';
+import Button from './ui/Button.vue';
 import type { UserSettings, GithubUser } from '../types';
 
 const props = defineProps<{

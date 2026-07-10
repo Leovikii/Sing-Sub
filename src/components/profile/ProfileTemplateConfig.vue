@@ -3,7 +3,7 @@
     <div class="flex items-center gap-4">
       <label class="w-32 shrink-0 font-medium text-[#f5f5f7]">配置模板</label>
       <div class="flex-1 min-w-0">
-        <AppleSelect
+        <Select
           v-if="!isCustomTemplate"
           :modelValue="profile.templateUrl || ''"
           @update:modelValue="onTemplateSelect"
@@ -11,7 +11,7 @@
           placeholder="选择一个模板..."
         />
         <div v-else class="flex gap-2 items-center">
-          <AppleInput v-model="profile.templateUrl" placeholder="https://..." class="flex-1" />
+          <Input v-model="profile.templateUrl" placeholder="https://..." class="flex-1" />
           <button @click="cancelCustomTemplate" title="删除自定义模板并返回选择" class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 cursor-pointer">
             <Trash2 class="w-4 h-4" />
           </button>
@@ -22,7 +22,7 @@
     <div class="flex items-center gap-4">
       <label class="w-32 shrink-0 font-medium text-[#f5f5f7]">配置补丁 <span class="text-[#86868b] font-normal text-xs">(可选)</span></label>
       <div class="flex-1 min-w-0">
-        <AppleSelect
+        <Select
           :modelValue="profile.patchUrl || ''"
           @update:modelValue="profile.patchUrl = $event"
           :options="patchOptions"
@@ -33,7 +33,7 @@
     <div class="flex items-center gap-4">
       <label class="w-32 shrink-0 font-medium text-[#f5f5f7]">节点配置</label>
       <div class="flex-1 min-w-0">
-        <AppleSelect
+        <Select
           :modelValue="profile.nodesPath || ''"
           @update:modelValue="profile.nodesPath = $event"
           :options="nodeOptions"
@@ -47,8 +47,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Trash2 } from 'lucide-vue-next';
-import AppleInput from '../ui/AppleInput.vue';
-import AppleSelect from '../ui/AppleSelect.vue';
+import Input from '../ui/Input.vue';
+import Select from '../ui/Select.vue';
 import type { Profile } from '../../types';
 
 const props = defineProps<{

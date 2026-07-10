@@ -5,14 +5,14 @@
         <h3 class="text-lg font-semibold text-[#f5f5f7]">{{ title }}</h3>
         <p class="text-sm text-[#86868b] leading-relaxed">{{ message }}</p>
         <div class="flex gap-3 pt-2">
-          <AppleButton @click="$emit('cancel')" variant="secondary" class="flex-1">取消</AppleButton>
-          <AppleButton
+          <Button @click="$emit('cancel')" variant="secondary" class="flex-1">取消</Button>
+          <Button
             @click="$emit('confirm')"
             variant="danger"
             class="flex-1"
           >
             {{ confirmText }}
-          </AppleButton>
+          </Button>
         </div>
       </div>
     </div>
@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import AppleButton from './AppleButton.vue';
+import Button from './Button.vue';
 
 defineProps<{
   visible: boolean;

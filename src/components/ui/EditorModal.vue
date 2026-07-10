@@ -45,7 +45,7 @@
               <slot name="header-actions"></slot>
 
               <!-- View Mode Toggle -->
-              <AppleSegmentedControl
+              <SegmentedControl
                 v-if="showViewToggle"
                 :modelValue="viewMode ?? 'edit'"
                 @update:modelValue="$emit('update:viewMode', $event as 'preview' | 'edit')"
@@ -53,14 +53,14 @@
               />
 
               <template v-if="showSave && viewMode !== 'preview'">
-                <AppleToolbarButton
+                <ToolbarButton
                   :icon="RotateCcw"
                   label="复位"
                   :disabled="!isDirty"
                   @click="$emit('reset')"
                 />
 
-                <AppleToolbarButton
+                <ToolbarButton
                   :icon="Save"
                   :label="saveText"
                   variant="primary"
@@ -75,7 +75,7 @@
                 contentClass="right-0 top-full mt-2 w-[220px] p-3 rounded-2xl bg-[#2c2c2e]/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-2"
               >
                 <template #trigger="{ toggle, isOpen }">
-                  <AppleToolbarButton
+                  <ToolbarButton
                     :icon="X"
                     variant="danger"
                     :active="isOpen"
@@ -113,8 +113,8 @@
 import { X, Save, RotateCcw, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
 import { ref } from 'vue';
 import PopoverMenu from './PopoverMenu.vue';
-import AppleSegmentedControl from './AppleSegmentedControl.vue';
-import AppleToolbarButton from './AppleToolbarButton.vue';
+import SegmentedControl from './SegmentedControl.vue';
+import ToolbarButton from './ToolbarButton.vue';
 
 const showUnsavedConfirm = ref(false);
 
