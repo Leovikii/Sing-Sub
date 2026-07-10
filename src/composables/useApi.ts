@@ -89,7 +89,7 @@ export function useApi() {
     });
   }
 
-  async function getAssets(): Promise<{ nodes: any[], templates: any[], patches: any[] }> {
+  async function getAssets(): Promise<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }> {
     return apiCall('/api/assets');
   }
 

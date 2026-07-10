@@ -66,6 +66,18 @@ export async function fetchFileContent(
   return { content: decodeGithubContent(data.content), sha: data.sha };
 }
 
+export async function fetchRawFile(
+  filePath: string,
+  session: RepoSession
+): Promise<Response> {
+  const headers = {
+    'Authorization': `Bearer ${session.pat}`,
+    'Accept': 'application/vnd.github.v3.raw',
+    'User-Agent': 'sing-sub-worker',
+  };
+  return fetch(`${GITHUB_API}/repos/${session.owner}/${session.repo}/contents/${filePath}`, { headers });
+}
+
 export async function fetchDirectoryContents(
   dirPath: string,
   session: RepoSession

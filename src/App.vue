@@ -131,10 +131,10 @@ const isInitializing = ref(true);
 const copyStatus = ref<Record<number, boolean>>({});
 const showDisconnectConfirm = ref(false);
 const expandedIndex = ref<number | null>(null);
-const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[] }>({ nodes: [], templates: [], patches: [] });
+const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }>({ nodes: [], templates: [], patches: [], rulesets: [] });
 
 const activeTab = ref<'config' | 'assets' | 'settings'>('config');
-const assetType = ref<'node' | 'template' | 'patch'>('node');
+const assetType = ref<'node' | 'template' | 'patch' | 'ruleset'>('node');
 const assetManagerRef = ref<any>(null);
 
 const isDirty = ref(false);
@@ -147,7 +147,8 @@ const filteredAssets = computed(() => {
   const type = assetType.value;
   const arr = type === 'node' ? availableAssets.value.nodes 
             : type === 'template' ? availableAssets.value.templates 
-            : availableAssets.value.patches;
+            : type === 'patch' ? availableAssets.value.patches
+            : availableAssets.value.rulesets;
   return arr.filter((n: any) => !deletedAssets.value.includes(n.path || n));
 });
 
@@ -174,7 +175,7 @@ async function refreshAssets() {
     const data = await getAssets();
     availableAssets.value = data;
   } catch {
-    availableAssets.value = { nodes: [], templates: [], patches: [] };
+    availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
   }
   pruneStaleReferences();
 }

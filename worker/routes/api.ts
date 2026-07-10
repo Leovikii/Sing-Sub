@@ -295,10 +295,11 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const session = toRepoSession(auth.settings);
 
   // Fetch directories concurrently
-  let [nodes, templates, patches, configs] = await Promise.all([
+  let [nodes, templates, patches, rulesets, configs] = await Promise.all([
     fetchDirectoryContents('sing-sub/nodes', session),
     fetchDirectoryContents('sing-sub/templates', session),
     fetchDirectoryContents('sing-sub/patches', session),
+    fetchDirectoryContents('sing-sub/rulesets', session),
     fetchDirectoryContents('sing-sub/configs', session),
   ]);
 
@@ -310,6 +311,7 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const jsonNodes = filterJson(nodes);
   const jsonTemplates = filterJson(templates);
   const jsonPatches = filterJson(patches);
+  const jsonRulesets = filterJson(rulesets);
   
   const limit = pLimit(5);
   const parseFileMeta = (path: string) => limit(async () => {
@@ -328,16 +330,18 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
     return { path, inboundsCount: 0, outboundsCount: 0, tags: [] };
   });
 
-  const [nodesWithMeta, templatesWithMeta, patchesWithMeta] = await Promise.all([
+  const [nodesWithMeta, templatesWithMeta, patchesWithMeta, rulesetsWithMeta] = await Promise.all([
     Promise.all(jsonNodes.map(parseFileMeta)),
     Promise.all(jsonTemplates.map(parseFileMeta)),
-    Promise.all(jsonPatches.map(parseFileMeta))
+    Promise.all(jsonPatches.map(parseFileMeta)),
+    Promise.all(jsonRulesets.map(parseFileMeta))
   ]);
 
   return jsonResponse({
     nodes: nodesWithMeta,
     templates: templatesWithMeta,
     patches: patchesWithMeta,
+    rulesets: rulesetsWithMeta,
   });
 }
 
@@ -365,6 +369,105 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
 
   const session = toRepoSession(auth.settings);
   await putFileContent(path, session, content, sha || null, message || `Update ${path.split('/').pop()}`);
+
+  if (path.startsWith('sing-sub/rulesets/')) {
+    const wfPath = '.github/workflows/compile-srs.yml';
+    try {
+      const wfFile = await fetchFileContent(wfPath, session);
+      if (!wfFile) {
+        const wfContent = `name: Compile SRS
+on:
+  push:
+    paths:
+      - 'sing-sub/rulesets/*.json'
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch and compile rulesets
+        run: |
+          mkdir -p sing-sub/rulesets/compiled
+          
+          # Get latest sing-box
+          LATEST=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\\1/')
+          if [ -z "$LATEST" ]; then LATEST="v1.9.3"; fi
+          wget "https://github.com/SagerNet/sing-box/releases/download/\${LATEST}/sing-box-\${LATEST#v}-linux-amd64.tar.gz" -O sing-box.tar.gz
+          tar -xzf sing-box.tar.gz
+          mv sing-box-*/sing-box ./sing-box
+          chmod +x ./sing-box
+          
+          cat << 'EOF' > process.js
+          const fs = require('fs');
+          async function main() {
+            const files = fs.readdirSync('sing-sub/rulesets').filter(f => f.endsWith('.json'));
+            for (const file of files) {
+              const path = 'sing-sub/rulesets/' + file;
+              const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+              let mergedRules = [];
+              
+              if (data._urls && Array.isArray(data._urls)) {
+                for (const url of data._urls) {
+                  try {
+                    const res = await fetch(url);
+                    const upstream = await res.json();
+                    if (upstream.rules && Array.isArray(upstream.rules)) {
+                      mergedRules = mergedRules.concat(upstream.rules);
+                    }
+                  } catch (e) {
+                    console.error('Failed to fetch', url, e);
+                  }
+                }
+                delete data._urls;
+              }
+              
+              if (data.rules) {
+                mergedRules = mergedRules.concat(data.rules);
+              }
+              data.rules = mergedRules;
+              
+              const tmpPath = 'sing-sub/rulesets/compiled/tmp_' + file;
+              fs.writeFileSync(tmpPath, JSON.stringify(data));
+            }
+          }
+          main();
+          EOF
+          
+          node process.js
+          
+          for tmp in sing-sub/rulesets/compiled/tmp_*.json; do
+            [ -e "$tmp" ] || continue
+            base=$(basename "$tmp" | sed 's/^tmp_//')
+            name="\${base%.json}"
+            ./sing-box rule-set compile "$tmp" -o "sing-sub/rulesets/compiled/$name.srs"
+            rm "$tmp"
+          done
+      - name: Commit and Push
+        run: |
+          git config user.name "Sing-Sub Bot"
+          git config user.email "bot@sing-sub.local"
+          git add sing-sub/rulesets/compiled/*.srs
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-compile SRS rulesets" && git push)
+`;
+        await putFileContent(wfPath, session, wfContent, null, 'Add SRS compilation workflow');
+      }
+    } catch (e) {
+      console.error('Failed to inject workflow:', e);
+      // Fail silently to not break the file save
+    }
+  }
+
   return jsonResponse({ success: true });
 }
 

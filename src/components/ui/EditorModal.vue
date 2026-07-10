@@ -45,63 +45,43 @@
               <slot name="header-actions"></slot>
 
               <!-- View Mode Toggle -->
-              <div v-if="showViewToggle" class="flex items-center p-1 bg-[#1c1c1e]/80 backdrop-blur-xl border border-[#38383a] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
-                 <button 
-                   @click="$emit('update:viewMode', 'preview')" 
-                   :class="viewMode === 'preview' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e]'" 
-                   class="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer"
-                   title="预览"
-                 >
-                   <Eye :size="14" />
-                   <span class="hidden md:inline">预览</span>
-                 </button>
-                 <button 
-                   @click="$emit('update:viewMode', 'edit')" 
-                   :class="viewMode === 'edit' ? 'bg-[#38383a] text-[#f5f5f7] shadow' : 'text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e]'" 
-                   class="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-all cursor-pointer"
-                   title="编辑"
-                 >
-                   <Pencil :size="14" />
-                   <span class="hidden md:inline">编辑</span>
-                 </button>
-              </div>
+              <AppleSegmentedControl
+                v-if="showViewToggle"
+                :modelValue="viewMode ?? 'edit'"
+                @update:modelValue="$emit('update:viewMode', $event as 'preview' | 'edit')"
+                :options="viewModeOptions"
+              />
 
-              <button
-                v-if="showSave && isDirty && viewMode !== 'preview'"
-                @click="$emit('reset')"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors bg-[#2c2c2e] text-[#86868b] border border-[#38383a] hover:text-[#f5f5f7] cursor-pointer"
-                title="复位"
-              >
-                <RotateCcw :size="14" /> <span class="hidden md:inline">复位</span>
-              </button>
+              <template v-if="showSave && viewMode !== 'preview'">
+                <AppleToolbarButton
+                  :icon="RotateCcw"
+                  label="复位"
+                  :disabled="!isDirty"
+                  @click="$emit('reset')"
+                />
 
-              <button
-                v-if="showSave && viewMode !== 'preview'"
-                @click="$emit('save')"
-                :disabled="!isDirty || isSaving"
-                :class="[
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-                  (isDirty && !isSaving) ? 'bg-[#F596AA] text-[#f5f5f7] hover:bg-[#F596AA]/90 cursor-pointer shadow-lg shadow-[#F596AA]/20' : 'bg-[#2c2c2e] text-[#86868b] border border-[#38383a] cursor-not-allowed'
-                ]"
-                title="保存"
-              >
-                <Loader2 v-if="isSaving" :size="14" class="animate-spin" />
-                <Save v-else :size="14" /> <span class="hidden md:inline">{{ saveText }}</span>
-              </button>
+                <AppleToolbarButton
+                  :icon="Save"
+                  :label="saveText"
+                  variant="primary"
+                  :disabled="!isDirty || isSaving"
+                  :loading="isSaving"
+                  @click="$emit('save')"
+                />
+              </template>
               <PopoverMenu
                 v-model:isOpen="showUnsavedConfirm"
                 wrapperClass="relative flex"
                 contentClass="right-0 top-full mt-2 w-[220px] p-3 rounded-2xl bg-[#2c2c2e]/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-2"
               >
                 <template #trigger="{ toggle, isOpen }">
-                  <button
-                    @click="handleCloseClick(toggle)"
-                    class="w-8 h-8 flex items-center justify-center rounded-full transition-colors cursor-pointer"
-                    :class="isOpen ? 'bg-[#ff6961]/20 text-[#ff6961]' : 'text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e]'"
+                  <AppleToolbarButton
+                    :icon="X"
+                    variant="danger"
+                    :active="isOpen"
                     title="关闭"
-                  >
-                    <X :size="16" />
-                  </button>
+                    @click="handleCloseClick(toggle)"
+                  />
                 </template>
 
                 <template #content="{ close }">
@@ -130,11 +110,18 @@
 </template>
 
 <script setup lang="ts">
-import { X, Save, Loader2, RotateCcw, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
+import { X, Save, RotateCcw, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
 import { ref } from 'vue';
 import PopoverMenu from './PopoverMenu.vue';
+import AppleSegmentedControl from './AppleSegmentedControl.vue';
+import AppleToolbarButton from './AppleToolbarButton.vue';
 
 const showUnsavedConfirm = ref(false);
+
+const viewModeOptions = [
+  { value: 'preview', label: '预览', icon: Eye },
+  { value: 'edit', label: '编辑', icon: Pencil },
+];
 
 const props = defineProps<{
   isOpen: boolean;

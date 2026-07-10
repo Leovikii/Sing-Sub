@@ -35,7 +35,7 @@
     extension=".json"
     :isDirty="isDirty"
     :isSaving="false"
-    :showSave="isDirty"
+    :showSave="true"
     saveText="保存"
     :showViewToggle="true"
     v-model:viewMode="viewMode"

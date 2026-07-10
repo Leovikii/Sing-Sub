@@ -38,7 +38,7 @@
    ```
    *注: 基础模板也可以是托管在任意地方的公开 URL（例如 GitHub 的 raw 链接）。*
 
-2. 获取 **GitHub Personal Access Token (PAT)**。必须包含 `repo` 权限（用于读写私有仓库）。在此创建: https://github.com/settings/tokens
+2. 获取 **GitHub Personal Access Token (PAT)**。必须包含 `repo` 和 `workflow` 权限（`repo` 用于读写配置，`workflow` 用于支持 GitHub Actions 自动编译规则集）。在此创建: https://github.com/settings/tokens
 3. 一个绑定了 **自定义域名** 的 **Cloudflare 账号**。
 
 ## 部署指南
