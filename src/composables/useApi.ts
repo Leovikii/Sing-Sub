@@ -1,6 +1,15 @@
 import { ref } from 'vue';
 import type { UserSettings, SetupData, StateData, GithubUser, Profile } from '../types';
 
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export function useApi() {
   const user = ref<GithubUser | null>(null);
   const settings = ref<UserSettings | null>(null);
@@ -13,11 +22,11 @@ export function useApi() {
     if (res.status === 401) {
       user.value = null;
       settings.value = null;
-      throw new Error('Not authenticated');
+      throw new ApiError('Not authenticated', 401);
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || res.statusText);
+      throw new ApiError(err.error || res.statusText, res.status);
     }
     return res.json();
   }

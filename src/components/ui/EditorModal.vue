@@ -4,8 +4,16 @@
       <div
         v-if="isOpen"
         class="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-6 bg-[#121212]/80 backdrop-blur-md"
+        @click.self="handleBackdropClick"
+        @keydown.esc="handleEscapeKey"
       >
-        <div class="modal-panel w-full md:max-w-4xl h-[92vh] md:h-[88vh] bg-[#1c1c1e] border border-[#38383a] md:rounded-2xl rounded-t-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden relative">
+        <div
+          role="dialog"
+          aria-modal="true"
+          tabindex="-1"
+          ref="dialogRef"
+          class="modal-panel w-full md:max-w-4xl h-[92vh] md:h-[88vh] bg-[#1c1c1e] border border-[#38383a] md:rounded-2xl rounded-t-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden relative"
+        >
           <!-- Header -->
           <div class="flex items-center justify-between gap-2 p-3 md:p-4 border-b border-[#38383a] bg-[#0a0a0a]/60 backdrop-blur-xl shrink-0 z-10">
             <div class="flex flex-col min-w-0 flex-1">
@@ -103,12 +111,13 @@
 
 <script setup lang="ts">
 import { X, Save, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import PopoverMenu from './PopoverMenu.vue';
 import SegmentedControl from './SegmentedControl.vue';
 import ToolbarButton from './ToolbarButton.vue';
 
 const showUnsavedConfirm = ref(false);
+const dialogRef = ref<HTMLElement | null>(null);
 
 const viewModeOptions = [
   { value: 'preview', label: '预览', icon: Eye },
@@ -152,6 +161,30 @@ function handleConfirmClose() {
   emit('close');
   emit('update:isOpen', false);
 }
+
+function handleBackdropClick() {
+  if (props.isDirty) {
+    showUnsavedConfirm.value = true;
+  } else {
+    handleConfirmClose();
+  }
+}
+
+function handleEscapeKey() {
+  if (showUnsavedConfirm.value) {
+    showUnsavedConfirm.value = false;
+    return;
+  }
+  handleBackdropClick();
+}
+
+watch(() => props.isOpen, (open) => {
+  if (open) {
+    nextTick(() => {
+      dialogRef.value?.focus();
+    });
+  }
+});
 </script>
 
 <style scoped>

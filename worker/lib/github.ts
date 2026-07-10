@@ -1,5 +1,14 @@
 const GITHUB_API = 'https://api.github.com';
 
+export class GithubApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'GithubApiError';
+    this.status = status;
+  }
+}
+
 interface GithubRequestOptions {
   method?: string;
   body?: unknown;
@@ -126,7 +135,7 @@ export async function putFileContent(
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`GitHub PUT failed (${res.status}): ${err}`);
+    throw new GithubApiError(`GitHub PUT failed (${res.status}): ${err}`, res.status);
   }
 
   const result = await res.json() as { content: { sha: string } };
@@ -155,7 +164,7 @@ export async function deleteFileContent(
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`GitHub DELETE failed (${res.status}): ${err}`);
+    throw new GithubApiError(`GitHub DELETE failed (${res.status}): ${err}`, res.status);
   }
 }
 
@@ -177,14 +186,26 @@ export async function commitMultiFiles(
   const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
 
   // 1. Get the latest commit SHA of the branch
-  const refRes = await repoFetch(`git/refs/heads/${branch}`, session);
-  if (!refRes.ok) throw new Error(`Failed to fetch branch ref: ${await refRes.text()}`);
+  let refRes = await repoFetch(`git/refs/heads/${branch}`, session);
+  if (refRes.status === 404) {
+    // Empty repository: no commits/branch exist yet. Bootstrap with an initial file
+    // so the branch ref is created, then retry.
+    await putFileContent(
+      'README.md',
+      session,
+      '# Sing Sub\n\n由 Sing-Sub 管理的配置仓库。\n',
+      null,
+      'Initialize repository'
+    );
+    refRes = await repoFetch(`git/refs/heads/${branch}`, session);
+  }
+  if (!refRes.ok) throw new GithubApiError(`Failed to fetch branch ref: ${await refRes.text()}`, refRes.status);
   const refData = await refRes.json() as { object: { sha: string } };
   const latestCommitSha = refData.object.sha;
 
   // 2. Get the tree SHA of the latest commit
   const commitRes = await repoFetch(`git/commits/${latestCommitSha}`, session);
-  if (!commitRes.ok) throw new Error(`Failed to fetch latest commit: ${await commitRes.text()}`);
+  if (!commitRes.ok) throw new GithubApiError(`Failed to fetch latest commit: ${await commitRes.text()}`, commitRes.status);
   const commitData = await commitRes.json() as { tree: { sha: string } };
   const baseTreeSha = commitData.tree.sha;
 
@@ -196,7 +217,7 @@ export async function commitMultiFiles(
       tree: treeItems,
     }
   });
-  if (!treeRes.ok) throw new Error(`Failed to create git tree: ${await treeRes.text()}`);
+  if (!treeRes.ok) throw new GithubApiError(`Failed to create git tree: ${await treeRes.text()}`, treeRes.status);
   const treeData = await treeRes.json() as { sha: string };
   const newTreeSha = treeData.sha;
 
@@ -211,7 +232,7 @@ export async function commitMultiFiles(
       committer: botIdentity
     }
   });
-  if (!newCommitRes.ok) throw new Error(`Failed to create commit: ${await newCommitRes.text()}`);
+  if (!newCommitRes.ok) throw new GithubApiError(`Failed to create commit: ${await newCommitRes.text()}`, newCommitRes.status);
   const newCommitData = await newCommitRes.json() as { sha: string };
   const newCommitSha = newCommitData.sha;
 
@@ -223,7 +244,11 @@ export async function commitMultiFiles(
       force: false
     }
   });
-  if (!updateRefRes.ok) throw new Error(`Failed to update branch ref: ${await updateRefRes.text()}`);
+  if (!updateRefRes.ok) {
+    // A 422 here typically means the branch moved concurrently (stale base tree).
+    const status = updateRefRes.status === 422 ? 409 : updateRefRes.status;
+    throw new GithubApiError(`Failed to update branch ref: ${await updateRefRes.text()}`, status);
+  }
 
   return newCommitSha;
 }

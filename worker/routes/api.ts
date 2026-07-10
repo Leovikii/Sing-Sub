@@ -4,7 +4,7 @@ import {
   createSession, deleteSession, requireAuth,
   sessionCookieHeader, clearSessionCookieHeader,
 } from '../lib/auth';
-import { fetchUser, fetchFileContent, putFileContent, deleteFileContent, fetchDirectoryContents, commitMultiFiles, type GitTreeItem, type RepoSession } from '../lib/github';
+import { fetchUser, fetchFileContent, putFileContent, deleteFileContent, fetchDirectoryContents, commitMultiFiles, GithubApiError, type GitTreeItem, type RepoSession } from '../lib/github';
 import { buildAllProfiles } from '../lib/builder';
 import { jsonResponse, errorResponse } from '../lib/security';
 import { generateHex, toRepoSession, rebuildWithWarning, rebuildSingleWithWarning, cleanupSubToken, fetchAllProfiles, pLimit } from '../lib/helpers';
@@ -247,7 +247,14 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
     } else {
       commitMessage = `Sync configurations (${profilesToUpdate.length} updated, ${filesToDelete.length} deleted)`;
     }
-    await commitMultiFiles(session, treeItems, commitMessage);
+    try {
+      await commitMultiFiles(session, treeItems, commitMessage);
+    } catch (e) {
+      if (e instanceof GithubApiError && (e.status === 409 || e.status === 422)) {
+        return errorResponse('配置已被其他操作修改，请重新加载后再试', 409);
+      }
+      throw e;
+    }
   }
 
 
@@ -360,22 +367,9 @@ export async function handleGetFile(request: Request, env: Env): Promise<Respons
   return jsonResponse({ content: file.content, sha: file.sha });
 }
 
-export async function handlePutFile(request: Request, env: Env): Promise<Response> {
-  const auth = await requireAuth(request, env);
-  if (auth instanceof Response) return auth;
+const COMPILE_SRS_WORKFLOW_PATH = '.github/workflows/compile-srs.yml';
 
-  const { path, content, sha, message } = await request.json() as { path: string; content: string; sha?: string; message?: string };
-  if (!path || content === undefined) return errorResponse('Missing path or content', 400);
-
-  const session = toRepoSession(auth.settings);
-  await putFileContent(path, session, content, sha || null, message || `Update ${path.split('/').pop()}`);
-
-  if (path.startsWith('sing-sub/rulesets/')) {
-    const wfPath = '.github/workflows/compile-srs.yml';
-    try {
-      const wfFile = await fetchFileContent(wfPath, session);
-      if (!wfFile) {
-        const wfContent = `name: Compile SRS
+const COMPILE_SRS_WORKFLOW_CONTENT = `name: Compile SRS
 on:
   push:
     paths:
@@ -399,7 +393,7 @@ jobs:
       - name: Fetch and compile rulesets
         run: |
           mkdir -p sing-sub/rulesets/compiled
-          
+
           # Get latest sing-box
           LATEST=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\\1/')
           if [ -z "$LATEST" ]; then LATEST="v1.9.3"; fi
@@ -407,7 +401,7 @@ jobs:
           tar -xzf sing-box.tar.gz
           mv sing-box-*/sing-box ./sing-box
           chmod +x ./sing-box
-          
+
           cat << 'EOF' > process.js
           const fs = require('fs');
           async function main() {
@@ -416,7 +410,7 @@ jobs:
               const path = 'sing-sub/rulesets/' + file;
               const data = JSON.parse(fs.readFileSync(path, 'utf8'));
               let mergedRules = [];
-              
+
               if (data._urls && Array.isArray(data._urls)) {
                 for (const url of data._urls) {
                   try {
@@ -431,26 +425,29 @@ jobs:
                 }
                 delete data._urls;
               }
-              
+
+              delete data.note;
+              delete data._note;
+
               if (data.rules) {
                 mergedRules = mergedRules.concat(data.rules);
               }
               data.rules = mergedRules;
-              
+
               const tmpPath = 'sing-sub/rulesets/compiled/tmp_' + file;
               fs.writeFileSync(tmpPath, JSON.stringify(data));
             }
           }
           main();
           EOF
-          
+
           node process.js
-          
+
           for tmp in sing-sub/rulesets/compiled/tmp_*.json; do
             [ -e "$tmp" ] || continue
             base=$(basename "$tmp" | sed 's/^tmp_//')
             name="\${base%.json}"
-            ./sing-box rule-set compile "$tmp" -o "sing-sub/rulesets/compiled/$name.srs"
+            ./sing-box rule-set compile "$tmp" -o "sing-sub/rulesets/compiled/$name.srs" || { echo "::warning::compile failed for $name"; rm -f "$tmp"; continue; }
             rm "$tmp"
           done
       - name: Commit and Push
@@ -460,15 +457,60 @@ jobs:
           git add sing-sub/rulesets/compiled/*.srs
           git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-compile SRS rulesets" && git push)
 `;
-        await putFileContent(wfPath, session, wfContent, null, 'Add SRS compilation workflow');
+
+export async function handlePutFile(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  const { path, content, sha, message, oldPath } = await request.json() as { path: string; content: string; sha?: string; message?: string; oldPath?: string };
+  if (!path || content === undefined) return errorResponse('Missing path or content', 400);
+
+  const session = toRepoSession(auth.settings);
+  const isRuleset = path.startsWith('sing-sub/rulesets/');
+  const isRename = !!oldPath && oldPath !== path;
+  let warning: string | undefined;
+
+  try {
+    if (isRename) {
+      // Atomic rename: combine new content + old file deletion (+ stale .srs cleanup) into one commit
+      const treeItems: GitTreeItem[] = [
+        { path, mode: '100644', type: 'blob', content },
+        { path: oldPath!, mode: '100644', type: 'blob', sha: null },
+      ];
+
+      if (oldPath!.startsWith('sing-sub/rulesets/')) {
+        const oldBasename = oldPath!.split('/').pop()!.replace(/\.json$/, '');
+        const compiledPath = `sing-sub/rulesets/compiled/${oldBasename}.srs`;
+        const compiledFile = await fetchFileContent(compiledPath, session);
+        if (compiledFile) {
+          treeItems.push({ path: compiledPath, mode: '100644', type: 'blob', sha: null });
+        }
+      }
+
+      await commitMultiFiles(session, treeItems, message || `Rename ${oldPath!.split('/').pop()} to ${path.split('/').pop()}`);
+    } else {
+      await putFileContent(path, session, content, sha || null, message || `Update ${path.split('/').pop()}`);
+    }
+  } catch (e) {
+    if (e instanceof GithubApiError && e.status === 409) {
+      return errorResponse('文件已被修改，请重新加载后再试', 409);
+    }
+    throw e;
+  }
+
+  if (isRuleset && !isRename) {
+    try {
+      const wfFile = await fetchFileContent(COMPILE_SRS_WORKFLOW_PATH, session);
+      if (!wfFile) {
+        await putFileContent(COMPILE_SRS_WORKFLOW_PATH, session, COMPILE_SRS_WORKFLOW_CONTENT, null, 'Add SRS compilation workflow');
       }
     } catch (e) {
       console.error('Failed to inject workflow:', e);
-      // Fail silently to not break the file save
+      warning = '规则集编译流水线创建失败：' + (e instanceof Error ? e.message : String(e));
     }
   }
 
-  return jsonResponse({ success: true });
+  return jsonResponse({ success: true, warning });
 }
 
 export async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
@@ -480,11 +522,32 @@ export async function handleDeleteFile(request: Request, env: Env): Promise<Resp
   if (!path) return errorResponse('Missing path parameter', 400);
 
   const session = toRepoSession(auth.settings);
-  
+
   // Need to get SHA first to delete
   const file = await fetchFileContent(path, session);
   if (!file) return errorResponse('File not found', 404);
 
-  await deleteFileContent(path, session, file.sha, `Delete ${path.split('/').pop()}`);
+  try {
+    await deleteFileContent(path, session, file.sha, `Delete ${path.split('/').pop()}`);
+  } catch (e) {
+    if (e instanceof GithubApiError && e.status === 409) {
+      return errorResponse('文件已被修改，请重新加载后再试', 409);
+    }
+    throw e;
+  }
+
+  if (path.startsWith('sing-sub/rulesets/')) {
+    const basename = path.split('/').pop()!.replace(/\.json$/, '');
+    const compiledPath = `sing-sub/rulesets/compiled/${basename}.srs`;
+    const compiledFile = await fetchFileContent(compiledPath, session);
+    if (compiledFile) {
+      try {
+        await deleteFileContent(compiledPath, session, compiledFile.sha, `Delete ${basename}.srs`);
+      } catch (e) {
+        console.error('Failed to delete compiled ruleset:', e);
+      }
+    }
+  }
+
   return jsonResponse({ success: true });
 }

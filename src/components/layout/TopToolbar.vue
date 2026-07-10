@@ -18,7 +18,7 @@
         :icon="saveStatusIcon"
         label="保存"
         :variant="saveStatusVariant"
-        :disabled="saveStatus !== 'idle'"
+        :disabled="!isDirty || saveStatus !== 'idle'"
         :loading="saveStatus === 'saving'"
         @click="handleSave"
       />
@@ -26,7 +26,7 @@
       <ToolbarButton
         :icon="RefreshCw"
         label="刷新"
-        :disabled="refreshing"
+        :disabled="refreshing || saveStatus !== 'idle'"
         :loading="refreshing"
         @click="handleRefresh"
       />

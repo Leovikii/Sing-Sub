@@ -55,6 +55,9 @@
                 :availablePatches="availableAssets.patches"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
+                :globalBusy="globalBusy"
+                :isSaving="savingProfileName === profile.name"
+                :saveFailed="savingProfileName !== profile.name && profileSaveError !== null && lastSaveAttemptName === profile.name"
                 @update:expanded="(val) => toggleExpand(pIndex, val)"
                 @copyLink="handleCopyLink"
                 @remove="removeProfile"
@@ -70,9 +73,11 @@
               ref="assetManagerRef"
               :type="assetType"
               :files="filteredAssets"
+              :globalBusy="globalBusy"
               @refresh="refreshAssets"
               @status="(t, m) => showStatus(t, m, 5000)"
               @delete="markAssetForDeletion"
+              @conflict="handleAssetConflict"
             />
           </div>
           <div v-else-if="activeTab === 'settings'" key="settings" class="space-y-6">
@@ -100,6 +105,12 @@
       @cancel="showDisconnectConfirm = false"
     />
 
+    <ConflictModal
+      :visible="conflictVisible"
+      @reload="handleConflictAction('reload')"
+      @overwrite="handleConflictAction('overwrite')"
+      @cancel="handleConflictAction('cancel')"
+    />
 
   </div>
 </template>
@@ -111,6 +122,7 @@ import AppHeader from './components/layout/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
 import ProfileEditor from './components/ProfileEditor.vue';
 import ConfirmModal from './components/ui/ConfirmModal.vue';
+import ConflictModal from './components/ui/ConflictModal.vue';
 import GlobalToast from './components/ui/GlobalToast.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
 import AppDock from './components/layout/AppDock.vue';
@@ -143,6 +155,29 @@ let suppressDirty = false;
 let statusTimer: any = null;
 
 const deletedAssets = ref<string[]>([]);
+
+const savingProfileName = ref<string | null>(null);
+const lastSaveAttemptName = ref<string | null>(null);
+const profileSaveError = ref<string | null>(null);
+const globalBusy = computed(() => saveStatus.value !== 'idle' || refreshing.value);
+
+const conflictVisible = ref(false);
+let conflictResolver: ((action: 'reload' | 'overwrite' | 'cancel') => void) | null = null;
+
+function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
+  conflictVisible.value = true;
+  return new Promise(resolve => { conflictResolver = resolve; });
+}
+
+function handleConflictAction(action: 'reload' | 'overwrite' | 'cancel') {
+  conflictVisible.value = false;
+  conflictResolver?.(action);
+  conflictResolver = null;
+}
+
+async function handleAssetConflict(resolver: (action: 'reload' | 'overwrite' | 'cancel') => void) {
+  resolver(await resolveConflict());
+}
 
 const filteredAssets = computed(() => {
   const type = assetType.value;
@@ -280,22 +315,22 @@ async function confirmDisconnect() {
   stateData.value = null;
 }
 
-async function handleSave() {
+async function handleSave(): Promise<void> {
   if (!stateData.value) return;
   saveStatus.value = 'saving';
   statusMessage.value = '';
   try {
     const data = await saveState(stateData.value, null);
-    
+
     if (deletedAssets.value.length > 0) {
-      for (const path of deletedAssets.value) {
-        try {
-          await deleteFile(path);
-        } catch (err) {
-          console.error('Failed to delete asset', path, err);
-          showStatus('error', `删除文件失败: ${path}`, 3000);
+      const paths = deletedAssets.value;
+      const results = await Promise.allSettled(paths.map(path => deleteFile(path)));
+      results.forEach((res, i) => {
+        if (res.status === 'rejected') {
+          console.error('Failed to delete asset', paths[i], res.reason);
+          showStatus('error', `删除文件失败: ${paths[i]}`, 3000);
         }
-      }
+      });
       deletedAssets.value = [];
       await refreshAssets();
     }
@@ -307,30 +342,63 @@ async function handleSave() {
       showStatus('success', '保存成功，配置已更新', 3000);
     }
   } catch (e: any) {
+    if (e.status === 409) {
+      const action = await resolveConflict();
+      if (action === 'reload') {
+        const data = await getState();
+        setStateData(data.state);
+        showStatus('warning', '已重新加载最新版本，请检查改动是否需要重新应用', 5000);
+      } else if (action === 'overwrite') {
+        return handleSave();
+      }
+      return;
+    }
     showStatus('error', e.message || '保存失败', 5000);
   }
 }
 
-async function handleSaveProfile(profileName: string) {
+async function handleSaveProfile(profileName: string): Promise<void> {
   if (!stateData.value) return;
   const p = stateData.value.profiles.find(x => x.name === profileName);
   if (p) p.updated_at = Date.now();
   saveStatus.value = 'saving';
   statusMessage.value = '';
   suppressDirty = true;
+  savingProfileName.value = profileName;
+  lastSaveAttemptName.value = profileName;
   try {
     const data = await saveState(stateData.value, null, profileName);
+    profileSaveError.value = null;
+    isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '配置已保存，但构建失败: ' + data.warning, 5000);
     } else {
       showStatus('success', '保存成功，配置已更新', 3000);
     }
   } catch (e: any) {
-    showStatus('error', e.message || '保存失败', 5000);
+    if (e.status === 409) {
+      const action = await resolveConflict();
+      if (action === 'reload') {
+        const data = await getState();
+        setStateData(data.state);
+        profileSaveError.value = null;
+        showStatus('warning', '已重新加载最新版本，请检查改动是否需要重新应用', 5000);
+      } else if (action === 'overwrite') {
+        savingProfileName.value = null;
+        nextTick(() => { suppressDirty = false; });
+        return handleSaveProfile(profileName);
+      } else {
+        profileSaveError.value = '已取消';
+      }
+    } else {
+      const msg = e.message || '保存失败';
+      profileSaveError.value = msg;
+      showStatus('error', msg, 5000);
+    }
   } finally {
+    savingProfileName.value = null;
     nextTick(() => {
       suppressDirty = false;
-      isDirty.value = false;
     });
   }
 }
@@ -440,8 +508,7 @@ function handleGlobalSave() {
 }
 
 function handleGlobalRefresh() {
-  handleRefresh();
-  refreshAssets();
+  handleRefresh(); // handleRefresh内部已经await refreshAssets()
 }
 </script>
 

@@ -8,7 +8,7 @@
         :title="getBasename(file.path).replace(/\.json$/, '')"
         :inboundCount="file.inboundsCount"
         :outboundCount="file.outboundsCount"
-        :icon="type === 'node' ? 'network' : (type === 'template' ? 'layout-template' : type === 'patch' ? 'puzzle' : 'shield')"
+        :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'patch' ? Puzzle : Shield)"
         :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'patch' ? 'PATCH' : 'RULESET')"
         :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : type === 'patch' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20')"
         :menuItems="fileMenuItems"
@@ -38,7 +38,7 @@
       :editableNote="true"
       extension=".json"
       :isDirty="isEditorDirty || isNameDirty || isNoteDirty"
-      :isSaving="isSaving"
+      :isSaving="isSaving || globalBusy"
       :showSave="true"
       saveText="保存"
       :showViewToggle="true"
@@ -102,24 +102,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { Trash2, Plus, Globe, Link2, CloudDownload } from 'lucide-vue-next';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { Trash2, Plus, Globe, Link2, CloudDownload, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
 import PopoverMenu from './ui/PopoverMenu.vue';
-import CodeEditor from './ui/CodeEditor.vue';
-import RuleSetEditor from './ui/RuleSetEditor.vue';
 import ToolbarButton from './ui/ToolbarButton.vue';
+
+const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
+const RuleSetEditor = defineAsyncComponent(() => import('./ui/RuleSetEditor.vue'));
 
 const props = defineProps<{
   files: any[];
   type: 'node' | 'template' | 'patch' | 'ruleset';
+  globalBusy?: boolean;
 }>();
 
 const emit = defineEmits<{
   'refresh': [];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
   'delete': [file: any];
+  'conflict': [resolve: (action: 'reload' | 'overwrite' | 'cancel') => void];
 }>();
 
 const editingFile = ref<any>(null);
@@ -170,7 +173,10 @@ watch(editorContent, (newVal) => {
   isEditorDirty.value = newVal !== originalContent.value;
 });
 
+let editFileSeq = 0;
+
 async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
+  const seq = ++editFileSeq;
   editingFile.value = file;
   viewMode.value = mode;
   localFileName.value = getBasename(file.path).replace(/\.json$/, '');
@@ -178,15 +184,17 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
   editorContent.value = '';
   originalContent.value = '';
   isEditorDirty.value = false;
-  
+
   try {
     const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
     if (!res.ok) throw new Error('Failed to load file');
     const data = await res.json();
+    if (seq !== editFileSeq) return; // A newer editFile() call superseded this one
+
     originalContent.value = data.content;
     editorContent.value = data.content;
     fileSha.value = data.sha;
-    
+
     // Parse note if possible
     try {
       const parsed = JSON.parse(data.content);
@@ -196,17 +204,22 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
       originalFileNote.value = '';
       localFileNote.value = '';
     }
-    
+
   } catch (e: any) {
+    if (seq !== editFileSeq) return;
     emit('status', 'error', '加载失败: ' + e.message);
   } finally {
-    isLoading.value = false;
+    if (seq === editFileSeq) isLoading.value = false;
   }
 }
 
 function closeEditor() {
   isEditorDirty.value = false;
   editingFile.value = null;
+}
+
+function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
+  return new Promise(resolve => { emit('conflict', resolve); });
 }
 
 async function saveFileCode() {
@@ -241,30 +254,42 @@ async function saveFileCode() {
         path: newPath,
         content: editorContent.value,
         sha: isRename ? null : fileSha.value,
-        message: `${editingFile.value.isNew ? 'Create' : 'Update'} ${localFileName.value}.json`
+        oldPath: isRename ? editingFile.value.path : undefined,
+        message: `${editingFile.value.isNew ? 'Create' : (isRename ? 'Rename' : 'Update')} ${localFileName.value}.json`
       })
     });
-    
+
     if (!res.ok) {
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        const action = await resolveConflict();
+        isSaving.value = false;
+        if (action === 'reload') {
+          await editFile(editingFile.value);
+          emit('status', 'warning', '已重新加载最新版本，请检查改动是否需要重新应用', 5000);
+        } else if (action === 'overwrite') {
+          const latest = await fetch(`/api/file?path=${encodeURIComponent(editingFile.value.path)}`);
+          if (latest.ok) {
+            const latestData = await latest.json();
+            fileSha.value = latestData.sha;
+          }
+          return saveFileCode();
+        }
+        return;
+      }
       throw new Error(data.error || '保存失败');
     }
 
-    if (isRename && fileSha.value) {
-      try {
-        await fetch(`/api/file?path=${encodeURIComponent(editingFile.value.path)}`, {
-          method: 'DELETE',
-        });
-      } catch (deleteErr) {
-        console.error('Failed to delete old file after rename:', deleteErr);
-        emit('status', 'error', '重命名后删除旧文件失败: ' + (deleteErr as Error).message);
-      }
-    }
-    
+    const data = await res.json().catch(() => ({}));
+
     isEditorDirty.value = false;
     originalContent.value = editorContent.value;
     originalFileNote.value = localFileNote.value;
-    emit('status', 'success', '保存成功');
+    if (data.warning) {
+      emit('status', 'warning', data.warning, 5000);
+    } else {
+      emit('status', 'success', '保存成功');
+    }
     emit('refresh');
     editingFile.value = null;
   } catch (e: any) {

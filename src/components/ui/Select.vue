@@ -2,7 +2,13 @@
   <div class="relative" ref="containerRef">
     <!-- Trigger -->
     <div
-      @click="isOpen = !isOpen"
+      role="combobox"
+      aria-haspopup="listbox"
+      :aria-expanded="isOpen"
+      :aria-activedescendant="isOpen ? `select-option-${highlightedIndex}` : undefined"
+      tabindex="0"
+      @click="toggleOpen"
+      @keydown="handleTriggerKeydown"
       :class="[
         'appearance-none rounded-xl border bg-[#1c1c1e]/80 text-[#f5f5f7] transition-all duration-200 outline-none py-3 px-4 w-full text-[14px] flex items-center justify-between cursor-pointer select-none',
         isOpen ? 'border-[#F596AA] ring-4 ring-[#F596AA]/20' : 'border-[#38383a] hover:border-[#F596AA]/50',
@@ -32,17 +38,24 @@
     >
       <ul
         v-if="isOpen"
+        role="listbox"
         class="absolute z-50 w-full mt-2 py-1 bg-[#2c2c2e] border border-[#38383a] rounded-xl shadow-xl max-h-60 overflow-auto focus:outline-none"
       >
         <li
-          v-for="opt in options"
+          v-for="(opt, idx) in options"
+          :id="`select-option-${idx}`"
           :key="opt.value"
+          role="option"
+          :aria-selected="modelValue === opt.value"
           @click="selectOption(opt.value)"
+          @mouseenter="highlightedIndex = idx"
           class="px-4 py-2 text-[14px] cursor-pointer transition-colors flex justify-between items-center group"
           :class="[
             modelValue === opt.value
               ? 'text-[#F596AA] bg-[#F596AA]/10'
-              : 'text-[#f5f5f7] hover:bg-[#3a3a3c]'
+              : idx === highlightedIndex
+                ? 'text-[#f5f5f7] bg-[#3a3a3c]'
+                : 'text-[#f5f5f7] hover:bg-[#3a3a3c]'
           ]"
         >
           <span class="truncate">{{ opt.label }}</span>
@@ -60,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 
 const props = defineProps<{
   modelValue: string;
@@ -74,16 +87,57 @@ const emit = defineEmits<{
 
 const isOpen = ref(false);
 const containerRef = ref<HTMLElement | null>(null);
+const highlightedIndex = ref(0);
 
 const selectedLabel = computed(() => {
   const opt = props.options.find(o => o.value === props.modelValue);
   return opt ? opt.label : '';
 });
 
+function toggleOpen() {
+  isOpen.value = !isOpen.value;
+}
+
 function selectOption(val: string) {
   emit('update:modelValue', val);
   isOpen.value = false;
 }
+
+function handleTriggerKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    if (!isOpen.value) {
+      isOpen.value = true;
+    } else {
+      const opt = props.options[highlightedIndex.value];
+      if (opt) selectOption(opt.value);
+    }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (!isOpen.value) {
+      isOpen.value = true;
+    } else {
+      highlightedIndex.value = Math.min(highlightedIndex.value + 1, props.options.length - 1);
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (isOpen.value) {
+      highlightedIndex.value = Math.max(highlightedIndex.value - 1, 0);
+    }
+  } else if (e.key === 'Escape') {
+    if (isOpen.value) {
+      e.preventDefault();
+      isOpen.value = false;
+    }
+  }
+}
+
+watch(isOpen, (open) => {
+  if (open) {
+    const idx = props.options.findIndex(o => o.value === props.modelValue);
+    highlightedIndex.value = idx >= 0 ? idx : 0;
+  }
+});
 
 // Click outside to close
 function handleClickOutside(e: MouseEvent) {
