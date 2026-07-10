@@ -1,5 +1,7 @@
 <template>
   <div class="max-w-7xl mx-auto space-y-10 p-6 md:p-12 pb-32">
+    <GlobalToast :status="saveStatus" :message="statusMessage" />
+
     <AppHeader
       :user="user"
       :appVersion="APP_VERSION"
@@ -109,6 +111,7 @@ import AppHeader from './components/layout/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
 import ProfileEditor from './components/ProfileEditor.vue';
 import ConfirmModal from './components/ui/ConfirmModal.vue';
+import GlobalToast from './components/ui/GlobalToast.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
 import AppDock from './components/layout/AppDock.vue';
 import AssetManager from './components/AssetManager.vue';
