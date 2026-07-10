@@ -11,7 +11,7 @@
     />
 
     <div v-if="isInitializing" class="flex justify-center items-center py-32">
-      <Loader2 :size="32" class="animate-spin text-[#F596AA]" />
+      <Loader2 :size="32" class="animate-spin text-brand-pink" />
     </div>
 
     <ConnectForm

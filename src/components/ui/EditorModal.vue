@@ -3,7 +3,7 @@
     <Transition name="modal">
       <div
         v-if="isOpen"
-        class="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-6 bg-[#121212]/80 backdrop-blur-md"
+        class="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-6 bg-bg-page/80 backdrop-blur-md"
         @click.self="handleBackdropClick"
         @keydown.esc="handleEscapeKey"
       >
@@ -12,10 +12,10 @@
           aria-modal="true"
           tabindex="-1"
           ref="dialogRef"
-          class="modal-panel w-full md:max-w-4xl h-[92vh] md:h-[88vh] bg-[#1c1c1e] border border-[#38383a] md:rounded-2xl rounded-t-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden relative"
+          class="modal-panel w-full md:max-w-4xl h-[92vh] md:h-[88vh] bg-bg-surface border border-border-base md:rounded-2xl rounded-t-2xl shadow-xl flex flex-col overflow-hidden relative"
         >
           <!-- Header -->
-          <div class="flex items-center justify-between gap-2 p-3 md:p-4 border-b border-[#38383a] bg-[#0a0a0a]/60 backdrop-blur-xl shrink-0 z-10">
+          <div class="flex items-center justify-between gap-2 p-3 md:p-4 border-b border-border-base bg-[#0a0a0a]/60 backdrop-blur-xl shrink-0 z-10">
             <div class="flex flex-col min-w-0 flex-1">
               <slot name="title">
                 <!-- Filename area -->
@@ -26,25 +26,25 @@
                       v-if="editableTitle && viewMode !== 'preview'"
                       :value="title"
                       @input="$emit('update:title', ($event.target as HTMLInputElement).value)"
-                      class="absolute inset-0 bg-transparent text-[#f5f5f7] font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder-[#555]"
+                      class="absolute inset-0 bg-transparent text-text-primary font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder-[#555]"
                       placeholder="untitled"
                     />
-                    <span v-else class="absolute inset-0 text-[#f5f5f7] font-bold text-[15px] md:text-[16px] truncate">{{ title || 'untitled' }}</span>
+                    <span v-else class="absolute inset-0 text-text-primary font-bold text-[15px] md:text-[16px] truncate">{{ title || 'untitled' }}</span>
                   </div>
-                  <span class="text-[#86868b] font-mono text-[11px] shrink-0 ml-0.5">.json</span>
+                  <span class="text-text-muted font-mono text-[11px] shrink-0 ml-0.5">.json</span>
                 </div>
 
                 <!-- Note area -->
                 <div v-if="editableNote !== false || (viewMode === 'preview' && note)" class="flex items-center min-w-0 mt-0.5">
-                  <span class="text-[#86868b] font-medium text-[12px] shrink-0 mr-1.5 select-none">备注</span>
+                  <span class="text-text-muted font-medium text-[12px] shrink-0 mr-1.5 select-none">备注</span>
                   <input
                     v-if="editableNote !== false && viewMode !== 'preview'"
                     :value="note"
                     @input="$emit('update:note', ($event.target as HTMLInputElement).value)"
-                    class="bg-transparent text-[#86868b] hover:text-[#f5f5f7] focus:text-[#f5f5f7] font-medium outline-none text-[12px] min-w-[60px] flex-1 truncate transition-colors placeholder-[#444]"
+                    class="bg-transparent text-text-muted hover:text-text-primary focus:text-text-primary font-medium outline-none text-[12px] min-w-[60px] flex-1 truncate transition-colors placeholder-[#444]"
                     placeholder="未添加..."
                   />
-                  <span v-else class="text-[#86868b] font-medium text-[12px] min-w-[60px] flex-1 truncate">{{ note || '未添加' }}</span>
+                  <span v-else class="text-text-muted font-medium text-[12px] min-w-[60px] flex-1 truncate">{{ note || '未添加' }}</span>
                 </div>
               </slot>
             </div>
@@ -72,7 +72,7 @@
               <PopoverMenu
                 v-model:isOpen="showUnsavedConfirm"
                 wrapperClass="relative flex"
-                contentClass="right-0 top-full mt-2 w-[220px] p-3 rounded-2xl bg-[#2c2c2e]/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-2"
+                contentClass="right-0 top-full mt-2 w-[220px] p-3 rounded-2xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-2"
               >
                 <template #trigger="{ toggle, isOpen }">
                   <ToolbarButton
@@ -85,14 +85,14 @@
                 </template>
 
                 <template #content="{ close }">
-                  <div class="flex items-center gap-1.5 text-[#ff6961]">
+                  <div class="flex items-center gap-1.5 text-danger">
                     <AlertTriangle :size="14" />
                     <span class="text-[13px] font-bold">未保存的修改</span>
                   </div>
-                  <span class="text-[#86868b] text-[12px] leading-relaxed">如果关闭，您刚刚修改的内容将会丢失。</span>
+                  <span class="text-text-muted text-[12px] leading-relaxed">如果关闭，您刚刚修改的内容将会丢失。</span>
                   <div class="flex items-center gap-2 mt-1">
-                    <button @click.stop="close" class="flex-1 px-0 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[#f5f5f7] text-[12px] font-medium transition-colors cursor-pointer">取消</button>
-                    <button @click.stop="handleConfirmClose" class="flex-1 px-0 py-1.5 rounded-lg bg-[#ff6961]/15 hover:bg-[#ff6961]/25 text-[#ff6961] text-[12px] font-medium transition-colors cursor-pointer">放弃修改</button>
+                    <button @click.stop="close" class="flex-1 px-0 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-text-primary text-[12px] font-medium transition-colors cursor-pointer">取消</button>
+                    <button @click.stop="handleConfirmClose" class="flex-1 px-0 py-1.5 rounded-lg bg-danger/15 hover:bg-danger/25 text-danger text-[12px] font-medium transition-colors cursor-pointer">放弃修改</button>
                   </div>
                 </template>
               </PopoverMenu>

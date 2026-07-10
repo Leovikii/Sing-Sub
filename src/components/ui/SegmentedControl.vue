@@ -1,8 +1,8 @@
 <template>
-  <div class="relative flex items-center p-1 bg-[#1c1c1e]/80 backdrop-blur-xl border border-[#38383a] rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+  <div class="relative flex items-center p-1 bg-bg-surface/80 backdrop-blur-xl border border-border-base rounded-full shadow-md">
     <!-- Animated slider background -->
     <div
-      class="absolute rounded-full bg-[#38383a] shadow-[0_1px_4px_rgba(0,0,0,0.4)] pointer-events-none"
+      class="absolute rounded-full bg-border-base shadow-sm pointer-events-none"
       :class="[!ready && 'opacity-0', sliding ? 'transition-[left,width] duration-[380ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]' : 'transition-none']"
       :style="{
         left: `${sliderLeft}px`,
@@ -20,7 +20,7 @@
       @click="handleSelect(opt.value)"
       :class="[
         'relative flex items-center justify-center rounded-full font-medium cursor-pointer z-10 transition-[color,transform] duration-200 active:scale-95',
-        opt.value === modelValue ? 'text-[#f5f5f7]' : 'text-[#86868b] hover:text-[#f5f5f7]',
+        opt.value === modelValue ? 'text-text-primary' : 'text-text-muted hover:text-text-primary',
         sizeClass
       ]"
       :title="opt.label"
@@ -115,11 +115,11 @@ watch(() => props.modelValue, () => {
   });
 });
 
-watch(() => props.options, () => {
+watch(() => props.options.length, () => {
   nextTick(() => {
     updateSliderPosition();
   });
-}, { deep: true });
+});
 
 function handleWindowResize() {
   updateSliderPosition(false);

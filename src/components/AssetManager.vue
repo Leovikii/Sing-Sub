@@ -10,7 +10,7 @@
         :outboundCount="file.outboundsCount"
         :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'patch' ? Puzzle : Shield)"
         :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'patch' ? 'PATCH' : 'RULESET')"
-        :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : type === 'patch' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20')"
+        :tagStyle="type === 'node' ? 'bg-brand-pink/10 text-brand-pink border border-brand-pink/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : type === 'patch' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20')"
         :menuItems="fileMenuItems"
         @click="editFile(file, 'preview')"
         @edit="editFile(file)"
@@ -20,7 +20,7 @@
 
 
 
-    <div v-if="files.length === 0" class="text-center py-20 text-[#86868b]">
+    <div v-if="files.length === 0" class="text-center py-20 text-text-muted">
       {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : (type === 'template' ? '暂无模板文件。' : (type === 'patch' ? '暂无补丁文件。' : '暂无规则集文件。')) }}
     </div>
 
@@ -49,7 +49,7 @@
         <PopoverMenu
           v-model:isOpen="addRuleMenuOpen"
           wrapperClass="relative flex"
-          contentClass="right-0 top-full mt-2 w-52 p-1.5 rounded-2xl bg-[#2c2c2e]/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-0.5"
+          contentClass="right-0 top-full mt-2 w-52 p-1.5 rounded-2xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-0.5"
         >
           <template #trigger="{ toggle, isOpen }">
             <ToolbarButton
@@ -63,21 +63,21 @@
           <template #content="{ close }">
             <button
               @click="ruleSetEditorRef?.addRule('domain'); close()"
-              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-[#f5f5f7] hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <Globe :size="14" />
               添加完整域名 (domain)
             </button>
             <button
               @click="ruleSetEditorRef?.addRule('domain_suffix'); close()"
-              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-[#f5f5f7] hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <Link2 :size="14" />
               添加域名后缀 (domain_suffix)
             </button>
             <button
               @click="ruleSetEditorRef?.addRule('external_url'); close()"
-              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-[#f5f5f7] hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <CloudDownload :size="14" />
               引入外部 JSON (URL)

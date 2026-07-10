@@ -1,17 +1,17 @@
 <template>
-  <div class="ruleset-editor flex flex-col h-full min-h-[60vh] bg-[#0a0a0a] rounded-xl overflow-hidden border border-[#2c2c2e]">
+  <div class="ruleset-editor flex flex-col h-full min-h-[60vh] bg-[#0a0a0a] rounded-xl overflow-hidden border border-bg-elevated">
     <div v-if="loading" class="flex-1 flex items-center justify-center">
-      <Loader2 class="w-8 h-8 animate-spin text-[#F596AA]" />
+      <Loader2 class="w-8 h-8 animate-spin text-brand-pink" />
     </div>
     <div v-else class="flex-1 flex flex-col relative">
       <!-- Editor Content -->
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
-        <div v-if="rules.length === 0" class="flex flex-col items-center justify-center h-full text-[#86868b] space-y-3 opacity-60 mt-10">
+        <div v-if="rules.length === 0" class="flex flex-col items-center justify-center h-full text-text-muted space-y-3 opacity-60 mt-10">
           <ListPlus class="w-12 h-12" />
           <p>{{ readonly ? '当前规则集为空。' : '当前规则集为空，请点击右上角添加规则。' }}</p>
         </div>
 
-        <div v-for="(rule, index) in rules" :key="rule.id" class="glass p-4 rounded-xl border border-[#38383a] group relative transition-all focus-within:border-[#F596AA]/50">
+        <div v-for="(rule, index) in rules" :key="rule.id" class="glass p-4 rounded-xl border border-border-base group relative transition-all focus-within:border-brand-pink/50">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
               <span class="px-2 py-0.5 rounded text-[11px] font-medium tracking-wider font-mono border"
@@ -19,9 +19,9 @@
               >
                 {{ rule.type.toUpperCase() }}
               </span>
-              <span class="text-xs text-[#86868b]">{{ getSubtitle(rule) }}</span>
+              <span class="text-xs text-text-muted">{{ getSubtitle(rule) }}</span>
             </div>
-            <button v-if="!readonly" @click="removeRule(index)" class="text-[#86868b] hover:text-red-400 transition-colors p-1 cursor-pointer" title="移除该规则块">
+            <button v-if="!readonly" @click="removeRule(index)" class="text-text-muted hover:text-red-400 transition-colors p-1 cursor-pointer" title="移除该规则块">
               <Trash2 class="w-4 h-4" />
             </button>
           </div>
@@ -29,7 +29,7 @@
           <textarea
             v-model="rule.content"
             :class="[
-              'w-full bg-[#0a0a0a] border border-[#2c2c2e] rounded-lg p-3 text-sm text-[#e5e5ea] font-mono focus:outline-none focus:border-[#F596AA] transition-colors resize-y min-h-[100px] placeholder:text-[#48484a]',
+              'w-full bg-[#0a0a0a] border border-bg-elevated rounded-lg p-3 text-sm text-[#e5e5ea] font-mono focus:outline-none focus:border-brand-pink transition-colors resize-y min-h-[100px] placeholder:text-[#48484a]',
               (readonly || rule.type === 'raw') ? 'opacity-70 cursor-default' : ''
             ]"
             :placeholder="getPlaceholder(rule.type)"
@@ -188,7 +188,7 @@ defineExpose({ addRule });
   background: transparent;
 }
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background-color: #38383a;
-  border-radius: 20px;
+  background-color: var(--color-border-base);
+  border-radius: var(--radius-xl);
 }
 </style>

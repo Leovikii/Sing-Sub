@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
     <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-[#f5f5f7]">配置模板</label>
+      <label class="w-32 shrink-0 font-medium text-text-primary">配置模板</label>
       <div class="flex-1 min-w-0">
         <Select
           v-if="!isCustomTemplate"
@@ -12,7 +12,7 @@
         />
         <div v-else class="flex gap-2 items-center">
           <Input v-model="profile.templateUrl" placeholder="https://..." class="flex-1" />
-          <button @click="cancelCustomTemplate" title="删除自定义模板并返回选择" class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#ff6961]/10 text-[#ff6961] hover:bg-[#ff6961]/20 transition shrink-0 cursor-pointer">
+          <button @click="cancelCustomTemplate" title="删除自定义模板并返回选择" class="w-10 h-10 flex items-center justify-center rounded-xl bg-danger/10 text-danger hover:bg-danger/20 transition shrink-0 cursor-pointer">
             <Trash2 class="w-4 h-4" />
           </button>
         </div>
@@ -20,7 +20,7 @@
     </div>
     
     <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-[#f5f5f7]">配置补丁 <span class="text-[#86868b] font-normal text-xs">(可选)</span></label>
+      <label class="w-32 shrink-0 font-medium text-text-primary">配置补丁 <span class="text-text-muted font-normal text-xs">(可选)</span></label>
       <div class="flex-1 min-w-0">
         <Select
           :modelValue="profile.patchUrl || ''"
@@ -31,7 +31,7 @@
       </div>
     </div>
     <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-[#f5f5f7]">节点配置</label>
+      <label class="w-32 shrink-0 font-medium text-text-primary">节点配置</label>
       <div class="flex-1 min-w-0">
         <Select
           :modelValue="profile.nodesPath || ''"

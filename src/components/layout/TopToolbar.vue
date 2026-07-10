@@ -81,11 +81,11 @@ const saveStatusIcon = computed(() => {
   }
 });
 
-const saveStatusVariant = computed<'ghost' | 'primary' | 'danger' | 'success'>(() => {
+const saveStatusVariant = computed<'secondary' | 'primary' | 'danger' | 'success'>(() => {
   switch (props.saveStatus) {
     case 'success': return 'success';
     case 'error': return 'danger';
-    default: return 'ghost';
+    default: return 'secondary';
   }
 });
 

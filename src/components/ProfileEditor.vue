@@ -14,7 +14,7 @@
     <template #actions>
       <button
         @click.stop="$emit('copyLink', profile.name || '', index)"
-        :class="['flex-1 md:flex-none flex items-center justify-center gap-1.5 h-10 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl md:rounded-full text-[13px] md:text-xs font-medium transition-colors cursor-pointer border', copyStatus ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border-[#38383a] hover:border-[#F596AA]']"
+        :class="['flex-1 md:flex-none flex items-center justify-center gap-1.5 h-10 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl md:rounded-full text-[13px] md:text-xs font-medium transition-colors cursor-pointer border', copyStatus ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-text-muted hover:text-text-primary bg-bg-elevated border-border-base hover:border-brand-pink']"
         :title="copyStatus ? '已复制' : '订阅'"
       >
         <component :is="copyStatus ? Check : Link2" :size="14" />

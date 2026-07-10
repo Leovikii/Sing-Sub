@@ -3,19 +3,19 @@
     <div
       class="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-300 backdrop-blur-md pointer-events-none"
       :class="status !== 'idle'
-        ? 'opacity-100 bg-[#1c1c1e]/90 border-[#38383a] shadow-xl translate-y-0'
+        ? 'opacity-100 bg-bg-surface/90 border-border-base shadow-xl translate-y-0'
         : 'opacity-0 border-transparent -translate-y-4'"
     >
       <span v-if="status !== 'idle'" class="relative flex h-2 w-2 shrink-0">
         <span
           v-if="status === 'saving' || status === 'refreshing'"
           class="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping"
-          :class="status === 'saving' ? 'bg-[#F596AA]' : 'bg-blue-400'"
+          :class="status === 'saving' ? 'bg-brand-pink' : 'bg-blue-400'"
         />
         <span
           class="relative inline-flex rounded-full h-2 w-2"
           :class="{
-            'bg-[#F596AA]': status === 'saving',
+            'bg-brand-pink': status === 'saving',
             'bg-blue-400': status === 'refreshing',
             'bg-emerald-400': status === 'success',
             'bg-amber-400': status === 'warning',
@@ -23,7 +23,7 @@
           }"
         />
       </span>
-      <span class="text-xs text-[#f5f5f7] whitespace-nowrap">{{ displayMessage }}</span>
+      <span class="text-xs text-text-primary whitespace-nowrap">{{ displayMessage }}</span>
     </div>
   </Teleport>
 </template>

@@ -18,6 +18,14 @@ export interface RepoSession {
   owner: string;
   repo: string;
   pat: string;
+  userLogin?: string;
+}
+
+function commitIdentity(session: RepoSession): { name: string; email: string } {
+  if (session.userLogin) {
+    return { name: session.userLogin, email: `${session.userLogin}@users.noreply.github.com` };
+  }
+  return { name: 'Sing-Sub Bot', email: 'bot@sing-sub.local' };
 }
 
 export async function githubFetch(
@@ -117,14 +125,14 @@ export async function putFileContent(
     }
   }
 
-  const botIdentity = { name: "Sing-Sub Bot", email: "bot@sing-sub.local" };
+  const identity = commitIdentity(session);
   const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
 
   const body: Record<string, unknown> = {
     message: formattedMessage,
     content: encodeToBase64(content),
-    committer: botIdentity,
-    author: botIdentity,
+    committer: identity,
+    author: identity,
   };
   if (fileSha) body.sha = fileSha;
 
@@ -148,14 +156,14 @@ export async function deleteFileContent(
   sha: string,
   message: string
 ): Promise<void> {
-  const botIdentity = { name: "Sing-Sub Bot", email: "bot@sing-sub.local" };
+  const identity = commitIdentity(session);
   const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
 
-  const body = { 
-    message: formattedMessage, 
+  const body = {
+    message: formattedMessage,
     sha,
-    committer: botIdentity,
-    author: botIdentity
+    committer: identity,
+    author: identity
   };
   const res = await repoFetch(`contents/${filePath}`, session, {
     method: 'DELETE',
@@ -182,7 +190,7 @@ export async function commitMultiFiles(
   message: string,
   branch: string = 'main'
 ): Promise<string> {
-  const botIdentity = { name: "Sing-Sub Bot", email: "bot@sing-sub.local" };
+  const botIdentity = commitIdentity(session);
   const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
 
   // 1. Get the latest commit SHA of the branch

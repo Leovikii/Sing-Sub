@@ -10,13 +10,13 @@
       @click="toggleOpen"
       @keydown="handleTriggerKeydown"
       :class="[
-        'appearance-none rounded-xl border bg-[#1c1c1e]/80 text-[#f5f5f7] transition-all duration-200 outline-none py-3 px-4 w-full text-[14px] flex items-center justify-between cursor-pointer select-none',
-        isOpen ? 'border-[#F596AA] ring-4 ring-[#F596AA]/20' : 'border-[#38383a] hover:border-[#F596AA]/50',
-        !selectedLabel && 'text-[#86868b]'
+        'appearance-none rounded-xl border bg-bg-surface/80 text-text-primary transition-all duration-200 outline-none py-3 px-4 w-full text-[14px] flex items-center justify-between cursor-pointer select-none',
+        isOpen ? 'border-brand-pink ring-4 ring-brand-pink/20' : 'border-border-base hover:border-brand-pink/50',
+        !selectedLabel && 'text-text-muted'
       ]"
     >
       <span class="truncate block pr-6">{{ selectedLabel || placeholder }}</span>
-      <div class="pointer-events-none flex items-center text-[#86868b] shrink-0">
+      <div class="pointer-events-none flex items-center text-text-muted shrink-0">
         <svg
           class="w-4 h-4 transition-transform duration-200"
           :class="{ 'rotate-180': isOpen }"
@@ -39,7 +39,7 @@
       <ul
         v-if="isOpen"
         role="listbox"
-        class="absolute z-50 w-full mt-2 py-1 bg-[#2c2c2e] border border-[#38383a] rounded-xl shadow-xl max-h-60 overflow-auto focus:outline-none"
+        class="absolute z-50 w-full mt-2 py-1 bg-bg-elevated border border-border-base rounded-xl shadow-xl max-h-60 overflow-auto focus:outline-none"
       >
         <li
           v-for="(opt, idx) in options"
@@ -52,16 +52,16 @@
           class="px-4 py-2 text-[14px] cursor-pointer transition-colors flex justify-between items-center group"
           :class="[
             modelValue === opt.value
-              ? 'text-[#F596AA] bg-[#F596AA]/10'
+              ? 'text-brand-pink bg-brand-pink/10'
               : idx === highlightedIndex
-                ? 'text-[#f5f5f7] bg-[#3a3a3c]'
-                : 'text-[#f5f5f7] hover:bg-[#3a3a3c]'
+                ? 'text-text-primary bg-bg-hover'
+                : 'text-text-primary hover:bg-bg-hover'
           ]"
         >
           <span class="truncate">{{ opt.label }}</span>
           <svg
             v-if="modelValue === opt.value"
-            class="w-4 h-4 text-[#F596AA] shrink-0 ml-2"
+            class="w-4 h-4 text-brand-pink shrink-0 ml-2"
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>

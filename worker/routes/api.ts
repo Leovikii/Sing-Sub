@@ -42,7 +42,7 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     await env.SESSIONS.put(`sub:${subToken}`, JSON.stringify({ owner, repo }));
   }
 
-  const session = { owner, repo, pat };
+  const session = { owner, repo, pat, userLogin: userData.login };
 
   const { warning } = await rebuildWithWarning(session, subToken, env);
 
@@ -135,7 +135,7 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
     cookieHeader = sessionCookieHeader(newSessionId);
   }
 
-  const session: RepoSession = { owner, repo, pat: effectivePat };
+  const session: RepoSession = { owner, repo, pat: effectivePat, userLogin: userData.login };
 
   const { warning } = await rebuildWithWarning(session, subToken, env);
 
@@ -420,7 +420,7 @@ jobs:
                       mergedRules = mergedRules.concat(upstream.rules);
                     }
                   } catch (e) {
-                    console.error('Failed to fetch', url, e);
+                    console.log('::warning::Failed to fetch ruleset URL ' + url + ': ' + (e && e.message ? e.message : e));
                   }
                 }
                 delete data._urls;

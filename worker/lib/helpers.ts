@@ -77,7 +77,7 @@ export function generateHex(byteLength: number): string {
 }
 
 export function toRepoSession(settings: UserSettings): RepoSession {
-  return { owner: settings.owner, repo: settings.repo, pat: settings.pat };
+  return { owner: settings.owner, repo: settings.repo, pat: settings.pat, userLogin: settings.userLogin };
 }
 
 export async function rebuildWithWarning(

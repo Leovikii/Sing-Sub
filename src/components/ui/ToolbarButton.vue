@@ -23,12 +23,12 @@ import { Loader2 } from 'lucide-vue-next';
 const props = withDefaults(defineProps<{
   icon: Component;
   label?: string;
-  variant?: 'ghost' | 'primary' | 'danger' | 'success';
+  variant?: 'secondary' | 'primary' | 'danger' | 'success';
   disabled?: boolean;
   loading?: boolean;
   active?: boolean;
 }>(), {
-  variant: 'ghost',
+  variant: 'secondary',
   disabled: false,
   loading: false,
   active: false,
@@ -45,20 +45,20 @@ const stateClass = computed(() => {
 
   if (props.active) {
     return props.variant === 'danger'
-      ? 'bg-[#ff6961]/20 text-[#ff6961] cursor-pointer'
-      : 'bg-[#F596AA]/20 text-[#F596AA] cursor-pointer';
+      ? 'bg-danger/20 text-danger cursor-pointer'
+      : 'bg-brand-pink/20 text-brand-pink cursor-pointer';
   }
 
   if (props.disabled || props.loading) {
     return props.variant === 'primary'
-      ? 'bg-[#2c2c2e] text-[#86868b] border border-[#38383a] cursor-not-allowed'
-      : 'text-[#86868b]/40 cursor-not-allowed';
+      ? 'bg-bg-elevated text-text-muted border border-border-base cursor-not-allowed'
+      : 'text-text-muted/40 cursor-not-allowed';
   }
 
   if (props.variant === 'primary') {
-    return 'bg-[#F596AA] text-[#f5f5f7] hover:bg-[#F596AA]/90 cursor-pointer shadow-lg shadow-[#F596AA]/20';
+    return 'bg-brand-pink text-text-primary hover:bg-brand-pink/90 cursor-pointer shadow-lg shadow-brand-pink/20';
   }
 
-  return 'text-[#86868b] hover:text-[#f5f5f7] hover:bg-[#2c2c2e] cursor-pointer';
+  return 'text-text-muted hover:text-text-primary hover:bg-bg-elevated cursor-pointer';
 });
 </script>
