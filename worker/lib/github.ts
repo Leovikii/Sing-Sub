@@ -20,7 +20,6 @@ export interface RepoSession {
   pat: string;
   userLogin?: string;
   defaultBranch?: string;
-  publicBaseUrl?: string;
 }
 
 export async function fetchRepository(owner: string, repo: string, pat: string): Promise<{ default_branch: string }> {

@@ -99,7 +99,7 @@ export async function handlePreview(request: Request, env: Env, name: string): P
   if (request.method === 'POST') {
     try {
       const profile = await request.json() as Profile;
-      return jsonResponse({ content: await buildProfile(profile, toRepoSession(auth.settings), auth.settings.subToken) });
+      return jsonResponse({ content: await buildProfile(profile, toRepoSession(auth.settings)) });
     } catch (error: any) {
       return errorResponse(`Preview build failed: ${error.message}`, 400);
     }

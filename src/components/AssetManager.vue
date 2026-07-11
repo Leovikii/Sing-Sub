@@ -6,8 +6,6 @@
         v-for="file in files"
         :key="file.path"
         :title="getBasename(file.path).replace(/\.json$/, '')"
-        :inboundCount="file.inboundsCount"
-        :outboundCount="file.outboundsCount"
         :note="file.note"
         :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'patch' ? Puzzle : Shield)"
         :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'patch' ? 'PATCH' : 'RULESET')"

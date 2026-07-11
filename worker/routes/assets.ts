@@ -27,9 +27,6 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
         const data = JSON.parse(file.content);
         return {
           path,
-          inboundsCount: Array.isArray(data.inbounds) ? data.inbounds.length : 0,
-          outboundsCount: Array.isArray(data.outbounds) ? data.outbounds.length : 0,
-          tags: Array.isArray(data.outbounds) ? data.outbounds.map((outbound: any) => outbound.tag).filter(Boolean).slice(0, 5) : [],
           note: typeof data[RULESET_METADATA_KEY]?.note === 'string'
             ? data[RULESET_METADATA_KEY].note
             : typeof data.note === 'string'
@@ -38,7 +35,7 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
         };
       }
     } catch { /* A malformed asset remains visible with empty metadata. */ }
-    return { path, inboundsCount: 0, outboundsCount: 0, tags: [], note: '' };
+    return { path, note: '' };
   });
 
   const [nodesWithMeta, templatesWithMeta, patchesWithMeta, rulesetsWithMeta] = await Promise.all([
