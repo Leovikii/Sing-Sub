@@ -45,7 +45,6 @@
       <TopToolbar
         v-if="activeTab !== 'settings'"
         :saveStatus="saveStatus"
-        :statusMessage="statusMessage"
         :refreshing="refreshing"
         :isDirty="isDirty"
         :activeTab="activeTab"
@@ -95,6 +94,7 @@
               ref="assetManagerRef"
               :type="assetType"
               :files="filteredAssets"
+              :loading="assetsLoading"
               :globalBusy="globalBusy"
               :subToken="settings?.subToken"
               @refresh="refreshAssets"
@@ -177,6 +177,8 @@ const copyStatus = ref<Record<number, boolean>>({});
 const showDisconnectConfirm = ref(false);
 const expandedIndex = ref<number | null>(null);
 const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }>({ nodes: [], templates: [], patches: [], rulesets: [] });
+const assetsLoaded = ref(false);
+const assetsLoading = ref(false);
 
 const activeTab = ref<'config' | 'assets' | 'settings'>('config');
 const assetType = ref<'node' | 'template' | 'patch' | 'ruleset'>('node');
@@ -244,22 +246,32 @@ function recomputeOrders() {
   isDirty.value = true;
 }
 
-const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets, deleteFile } = useApi();
+const { user, settings, login, bootstrap, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets, deleteFile } = useApi();
 
-async function refreshAssets(excludedPaths: Iterable<string> = []) {
+async function refreshAssets(excludedPaths: Iterable<string> = [], force = false): Promise<boolean> {
   const excluded = new Set(excludedPaths);
+  assetsLoading.value = true;
   try {
-    const data = await getAssets();
+    const data = await getAssets(force);
     availableAssets.value = {
       nodes: data.nodes.filter((item: any) => !excluded.has(item.path || item)),
       templates: data.templates.filter((item: any) => !excluded.has(item.path || item)),
       patches: data.patches.filter((item: any) => !excluded.has(item.path || item)),
       rulesets: data.rulesets.filter((item: any) => !excluded.has(item.path || item)),
     };
+    assetsLoaded.value = true;
+    pruneStaleReferences();
+    return true;
   } catch {
     availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    return false;
+  } finally {
+    assetsLoading.value = false;
   }
-  pruneStaleReferences();
+}
+
+async function ensureAssetsLoaded() {
+  if (!assetsLoaded.value) await refreshAssets();
 }
 
 function pruneStaleReferences() {
@@ -296,6 +308,10 @@ watch(() => stateData.value?.profiles.map(p => p.name).join(','), () => {
   isDirty.value = true;
 });
 
+watch(activeTab, (tab) => {
+  if (tab === 'assets') void ensureAssetsLoaded();
+});
+
 
 
 function updateViewportLayout() {
@@ -310,17 +326,15 @@ function handleAssetSaved(file: { path: string; oldPath?: string; note: string; 
   const next = { path: file.path, note: file.note };
   if (existing && typeof existing === 'object') Object.assign(existing, next);
   else if (!existing) list.unshift(next);
+  assetsLoaded.value = true;
 }
 
 onMounted(async () => {
   updateViewportLayout();
   window.addEventListener('resize', updateViewportLayout, { passive: true });
   try {
-    const s = await getSettings();
-    if (s) {
-      const [data] = await Promise.all([getState(), refreshAssets()]);
-      setStateData(data.state);
-    }
+    const data = await bootstrap();
+    if (data.settings && data.state) setStateData(data.state);
   } catch { /* not logged in */ }
   isInitializing.value = false;
 });
@@ -334,8 +348,10 @@ async function handleSetup() {
   loadingData.value = true;
   try {
     const result = await login(setupData);
-    const [data] = await Promise.all([getState(), refreshAssets()]);
-    setStateData(data.state);
+    const data = await bootstrap();
+    assetsLoaded.value = false;
+    availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    if (data.state) setStateData(data.state);
     setupData.pat = '';
     if (result.warning) {
       showStatus('warning', '登录成功，但配置构建失败: ' + result.warning, 5000);
@@ -351,8 +367,10 @@ async function handleSaveSettings(newSettings: { owner: string; repo: string; pa
   loadingData.value = true;
   try {
     const result = await saveSettings(newSettings);
-    const data = await getState();
-    setStateData(data.state);
+    assetsLoaded.value = false;
+    availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    const data = await bootstrap();
+    if (data.state) setStateData(data.state);
     if (result.warning) {
       showStatus('warning', '设置已保存，但配置构建失败: ' + result.warning, 5000);
     } else {
@@ -379,6 +397,8 @@ async function confirmDisconnect() {
   showDisconnectConfirm.value = false;
   await deleteSettings();
   stateData.value = null;
+  assetsLoaded.value = false;
+  availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
 }
 
 async function handleSave(): Promise<void> {
@@ -386,19 +406,19 @@ async function handleSave(): Promise<void> {
   saveStatus.value = 'saving';
   statusMessage.value = '';
   try {
-    const data = await saveState(stateData.value, null);
+    let failedPaths: string[] = [];
 
     if (deletedAssets.value.length > 0) {
       const paths = [...new Set(deletedAssets.value)];
       const results = await Promise.allSettled(paths.map(path => deleteFile(path)));
       const deletedPaths = paths.filter((_, index) => results[index].status === 'fulfilled');
-      const failedPaths = paths.filter((_, index) => results[index].status === 'rejected');
+      failedPaths = paths.filter((_, index) => results[index].status === 'rejected');
       deletedAssets.value = failedPaths;
       await refreshAssets(deletedPaths);
-      if (failedPaths.length > 0) {
-        throw new Error(`删除文件失败: ${failedPaths.join(', ')}`);
-      }
     }
+
+    const data = await saveState(stateData.value);
+    if (failedPaths.length > 0) throw new Error(`删除文件失败: ${failedPaths.join(', ')}`);
 
     isDirty.value = false;
     if (data.warning) {
@@ -422,7 +442,7 @@ async function handleSave(): Promise<void> {
   }
 }
 
-async function handleSaveProfile(profileName: string): Promise<void> {
+async function handleSaveProfile(profileName: string, oldProfileName?: string): Promise<void> {
   if (!stateData.value) return;
   const p = stateData.value.profiles.find(x => x.name === profileName);
   if (p) p.updated_at = Date.now();
@@ -432,7 +452,7 @@ async function handleSaveProfile(profileName: string): Promise<void> {
   savingProfileName.value = profileName;
   lastSaveAttemptName.value = profileName;
   try {
-    const data = await saveState(stateData.value, null, profileName);
+    const data = await saveState(stateData.value, profileName, oldProfileName);
     profileSaveError.value = null;
     if (p === draftProfile.value) {
       draftProfile.value = null;
@@ -481,7 +501,6 @@ async function handleRefresh() {
     const data = await rebuild();
     setStateData(data.state);
     deletedAssets.value = [];
-    await refreshAssets();
     if (data.warning) {
       showStatus('warning', '刷新成功，但构建失败: ' + data.warning, 5000);
     } else {
@@ -530,6 +549,7 @@ function addProfile() {
     suppressDirty = false;
     isDirty.value = wasDirty;
   });
+  void ensureAssetsLoaded();
 }
 
 function removeProfile(index: number) {
@@ -573,6 +593,7 @@ function duplicateProfile(source: Profile) {
   stateData.value.profiles.splice(index + 1, 0, copy);
   recomputeOrders();
   expandedIndex.value = index + 1;
+  void ensureAssetsLoaded();
 }
 
 function markAssetForDeletion(file: any) {
@@ -590,6 +611,7 @@ function toggleExpand(index: number, forceState?: boolean) {
   } else {
     expandedIndex.value = expandedIndex.value === index ? null : index;
   }
+  if (expandedIndex.value === index) void ensureAssetsLoaded();
 }
 
 async function handleGlobalAdd() {
@@ -607,7 +629,7 @@ function handleGlobalSave() {
 }
 
 function handleGlobalRefresh() {
-  handleRefresh(); // handleRefresh内部已经await refreshAssets()
+  handleRefresh();
 }
 </script>
 

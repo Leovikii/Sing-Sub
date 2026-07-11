@@ -97,12 +97,11 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  preview: [name: string];
   copyLink: [name: string, index: number];
   remove: [index: number];
   duplicate: [profile: Profile];
   discard: [profile: Profile];
-  save: [name: string];
+  save: [name: string, oldName?: string];
   'update:expanded': [value: boolean];
   status: [type: 'success' | 'warning' | 'error', message: string, duration?: number];
 }>();
@@ -139,6 +138,7 @@ const previewLoading = ref(false);
 
 const localProfile = ref<Profile>(JSON.parse(JSON.stringify(props.profile)));
 let initialProfileState = '';
+let originalProfileName = '';
 const localProfileName = ref('');
 const localProfileNote = ref('');
 
@@ -214,6 +214,7 @@ watch(isOpen, (open) => {
   if (open) {
     document.body.style.overflow = 'hidden';
     initialProfileState = JSON.stringify(props.profile);
+    originalProfileName = props.profile.name || '';
     localProfile.value = JSON.parse(initialProfileState);
     localProfileName.value = props.profile.name || '';
     localProfileNote.value = props.profile.note || '';
@@ -282,9 +283,6 @@ function handleLocalSave() {
   }
   Object.assign(props.profile, localProfile.value);
   
-  initialProfileState = JSON.stringify(props.profile);
-  
-  emit('save', props.profile.name || '');
-  isOpen.value = false;
+  emit('save', props.profile.name || '', originalProfileName || undefined);
 }
 </script>

@@ -1,7 +1,7 @@
 <template>
   <div class="asset-manager space-y-6">
     <!-- Assets List -->
-    <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,34rem),1fr))] gap-6">
+    <div v-if="!loading" class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,34rem),1fr))] gap-6">
       <FileCard
         v-for="file in files"
         :key="file.path"
@@ -31,7 +31,11 @@
 
 
 
-    <div v-if="files.length === 0" class="text-center py-20 text-text-muted">
+    <div v-if="loading" class="flex justify-center py-20">
+      <Loader2 class="h-7 w-7 animate-spin text-brand-pink" />
+    </div>
+
+    <div v-else-if="files.length === 0" class="text-center py-20 text-text-muted">
       {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : (type === 'template' ? '暂无模板文件。' : (type === 'patch' ? '暂无补丁文件。' : '暂无规则集文件。')) }}
     </div>
 
@@ -75,7 +79,7 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
-import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check } from 'lucide-vue-next';
+import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check, Loader2 } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
 import ToolbarButton from './ui/ToolbarButton.vue';
@@ -85,6 +89,7 @@ const RuleSetEditor = defineAsyncComponent(() => import('./ui/RuleSetEditor.vue'
 
 const props = defineProps<{
   files: any[];
+  loading?: boolean;
   type: 'node' | 'template' | 'patch' | 'ruleset';
   globalBusy?: boolean;
   subToken?: string;

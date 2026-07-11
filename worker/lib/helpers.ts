@@ -2,6 +2,7 @@ import type { Env, UserSettings, Profile } from '../types';
 import type { RepoSession } from './github';
 import { fetchFileContent, fetchDirectoryContents, GithubApiError } from './github';
 import { buildAllProfiles, buildProfile } from './builder';
+import { listAllKvKeys } from './kv';
 
 export function pLimit(concurrency: number) {
   let activeCount = 0;
@@ -110,8 +111,8 @@ export async function rebuildSingleWithWarning(
 
 export async function cleanupSubToken(token: string, env: Env): Promise<void> {
   await env.SESSIONS.delete(`sub:${token}`);
-  const list = await env.SESSIONS.list({ prefix: `config:${token}:` });
-  await Promise.all(list.keys.map((k: any) => env.SESSIONS.delete(k.name)));
+  const keys = await listAllKvKeys(env, `config:${token}:`);
+  await Promise.all(keys.map(key => env.SESSIONS.delete(key)));
 }
 
 export function subscriptionResponse(config: string): Response {

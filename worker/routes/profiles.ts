@@ -4,14 +4,24 @@ import { buildAllProfiles, buildProfile } from '../lib/builder';
 import { commitMultiFiles, fetchDirectoryContents, GithubApiError, type GitTreeItem } from '../lib/github';
 import { errorResponse, jsonResponse } from '../lib/security';
 import { fetchAllProfiles, rebuildSingleWithWarning, rebuildWithWarning, toRepoSession } from '../lib/helpers';
+import { getProfileSnapshot, putProfileSnapshot } from '../lib/dashboard';
 
 const SAFE_PROFILE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
-function validateProfiles(profiles: Profile[]): string | null {
+function validateProfiles(profiles: unknown): string | null {
+  if (!Array.isArray(profiles)) return '配置列表无效';
   const names = new Set<string>();
   for (const profile of profiles) {
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return '配置内容无效';
     if (!SAFE_PROFILE_NAME.test(profile.name)) return '配置名称只能包含字母、数字、点、下划线和连字符，且不能为空';
     if (names.has(profile.name)) return `配置名称重复: ${profile.name}`;
+    if (typeof profile.templateUrl !== 'string' || typeof profile.nodesPath !== 'string' ||
+        !Array.isArray(profile.rules) || !Array.isArray(profile.inboundRules) ||
+        !Number.isInteger(profile.order) || profile.order < 0 ||
+        (profile.patchUrl !== undefined && typeof profile.patchUrl !== 'string') ||
+        (profile.overrides !== undefined && (!profile.overrides || typeof profile.overrides !== 'object' || Array.isArray(profile.overrides)))) {
+      return `配置格式无效: ${profile.name}`;
+    }
     names.add(profile.name);
   }
   return null;
@@ -21,7 +31,13 @@ export async function handleGetState(request: Request, env: Env): Promise<Respon
   const auth = await requireAuth(request, env);
   if (auth instanceof Response) return auth;
 
-  return jsonResponse({ state: { profiles: await fetchAllProfiles(toRepoSession(auth.settings)) }, sha: 'split' });
+  const session = toRepoSession(auth.settings);
+  let profiles = await getProfileSnapshot(env, session);
+  if (!profiles) {
+    profiles = await fetchAllProfiles(session);
+    await putProfileSnapshot(env, session, profiles);
+  }
+  return jsonResponse({ state: { profiles } });
 }
 
 export async function handleRebuild(request: Request, env: Env): Promise<Response> {
@@ -30,22 +46,29 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
 
   const session = toRepoSession(auth.settings);
   const profiles = await fetchAllProfiles(session);
+  await putProfileSnapshot(env, session, profiles);
   try {
     await buildAllProfiles(profiles, session, auth.settings.subToken, env);
   } catch (error) {
     const warning = error instanceof Error ? error.message : 'Build failed';
-    return jsonResponse({ state: { profiles }, sha: 'split', warning });
+    return jsonResponse({ state: { profiles }, warning });
   }
-  return jsonResponse({ state: { profiles }, sha: 'split' });
+  return jsonResponse({ state: { profiles } });
 }
 
 export async function handlePutState(request: Request, env: Env): Promise<Response> {
   const auth = await requireAuth(request, env);
   if (auth instanceof Response) return auth;
 
-  const { state, profileName } = await request.json() as { state: StateData; profileName?: string };
-  const validationError = validateProfiles(state.profiles);
+  const { state, profileName, oldProfileName } = await request.json() as {
+    state?: StateData;
+    profileName?: string;
+    oldProfileName?: string;
+  };
+  const validationError = validateProfiles(state?.profiles);
   if (validationError) return errorResponse(validationError, 400);
+  if (profileName !== undefined && !SAFE_PROFILE_NAME.test(profileName)) return errorResponse('配置名称无效', 400);
+  if (oldProfileName !== undefined && !SAFE_PROFILE_NAME.test(oldProfileName)) return errorResponse('原配置名称无效', 400);
 
   const session = toRepoSession(auth.settings);
   let existingJson: string[] = [];
@@ -54,13 +77,17 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
       .filter(path => path.toLowerCase().endsWith('.json'));
   } catch { /* A first save creates the directory. */ }
 
-  const currentNames = new Set(state.profiles.map(profile => profile.name));
+  const profiles = state!.profiles;
+  const currentNames = new Set(profiles.map(profile => profile.name));
+  const renamedPath = profileName && oldProfileName && oldProfileName !== profileName
+    ? `sing-sub/configs/${oldProfileName}.json`
+    : null;
   const filesToDelete = profileName
-    ? []
+    ? (renamedPath && existingJson.includes(renamedPath) ? [renamedPath] : [])
     : existingJson.filter(path => !currentNames.has(path.split('/').pop()?.replace('.json', '') || ''));
   const profilesToUpdate = profileName
-    ? state.profiles.filter(profile => profile.name === profileName)
-    : state.profiles;
+    ? profiles.filter(profile => profile.name === profileName)
+    : profiles;
 
   const treeItems: GitTreeItem[] = [
     ...profilesToUpdate.map(profile => ({
@@ -73,7 +100,9 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
   ];
 
   if (treeItems.length > 0) {
-    const commitMessage = profileName
+    const commitMessage = renamedPath
+      ? `config: rename ${oldProfileName}.json to ${profileName}.json`
+      : profileName
       ? `config: update ${profileName}.json`
       : 'config: sync profiles';
     try {
@@ -86,10 +115,14 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
     }
   }
 
+  await putProfileSnapshot(env, session, profiles);
+
+  if (renamedPath) await env.SESSIONS.delete(`config:${auth.settings.subToken}:${oldProfileName}`);
+
   const { warning } = profileName
     ? await rebuildSingleWithWarning(session, auth.settings.subToken, env, profileName)
     : await rebuildWithWarning(session, auth.settings.subToken, env);
-  return jsonResponse({ sha: 'split', warning });
+  return jsonResponse({ warning });
 }
 
 export async function handlePreview(request: Request, env: Env, name: string): Promise<Response> {

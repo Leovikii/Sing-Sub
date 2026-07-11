@@ -1,5 +1,6 @@
 export const RULESET_METADATA_KEY = '_sing_sub';
-export const MAX_RULESET_IMPORT_BYTES = 5 * 1024 * 1024;
+export const MAX_REMOTE_JSON_BYTES = 5 * 1024 * 1024;
+export const MAX_RULESET_IMPORT_BYTES = MAX_REMOTE_JSON_BYTES;
 
 export interface RuleBucket {
   domain: string[];
@@ -34,7 +35,7 @@ function isPrivateHostname(hostname: string): boolean {
     (a === 192 && b === 168);
 }
 
-export function parseRulesetImportUrl(raw: string): URL {
+export function parsePublicJsonUrl(raw: string): URL {
   const url = new URL(raw);
   if (url.protocol !== 'https:' || url.username || url.password || url.hash || isPrivateHostname(url.hostname)) {
     throw new Error('Only public HTTPS rule-set URLs without credentials or fragments are allowed');
@@ -42,19 +43,19 @@ export function parseRulesetImportUrl(raw: string): URL {
   return url;
 }
 
-export async function fetchPublicRuleset(url: URL): Promise<Response> {
+export async function fetchPublicJson(url: URL): Promise<Response> {
   let current = url;
   for (let redirects = 0; redirects <= 3; redirects++) {
-    const response = await fetchRulesetWithRetry(current);
+    const response = await fetchJsonWithRetry(current);
     if (response.status < 300 || response.status >= 400) return response;
     const location = response.headers.get('location');
     if (!location) throw new Error('Import redirect has no location');
-    current = parseRulesetImportUrl(new URL(location, current).toString());
+    current = parsePublicJsonUrl(new URL(location, current).toString());
   }
   throw new Error('Import exceeded the redirect limit');
 }
 
-async function fetchRulesetWithRetry(url: URL): Promise<Response> {
+async function fetchJsonWithRetry(url: URL): Promise<Response> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const response = await fetch(url, {
       redirect: 'manual',
@@ -77,7 +78,7 @@ async function fetchRulesetWithRetry(url: URL): Promise<Response> {
 
 export async function readResponseTextLimited(response: Response): Promise<string> {
   const declaredSize = Number(response.headers.get('content-length') || '0');
-  if (declaredSize > MAX_RULESET_IMPORT_BYTES) throw new Error('source exceeds 5 MiB');
+  if (declaredSize > MAX_REMOTE_JSON_BYTES) throw new Error('source exceeds 5 MiB');
   if (!response.body) return '';
 
   const reader = response.body.getReader();
@@ -87,7 +88,7 @@ export async function readResponseTextLimited(response: Response): Promise<strin
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_RULESET_IMPORT_BYTES) {
+    if (size > MAX_REMOTE_JSON_BYTES) {
       await reader.cancel();
       throw new Error('source exceeds 5 MiB');
     }
@@ -101,6 +102,9 @@ export async function readResponseTextLimited(response: Response): Promise<strin
   }
   return new TextDecoder('utf-8', { fatal: true }).decode(merged);
 }
+
+export const parseRulesetImportUrl = parsePublicJsonUrl;
+export const fetchPublicRuleset = fetchPublicJson;
 
 function normalizeDomain(value: unknown, field: keyof RuleBucket): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} values must be non-empty strings`);

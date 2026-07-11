@@ -1,50 +1,19 @@
 import type { Env } from '../types';
 import { requireAuth } from '../lib/auth';
 import { loadTemplate } from '../lib/builder';
-import { fetchDirectoryContents, fetchFileContent } from '../lib/github';
-import { pLimit, toRepoSession } from '../lib/helpers';
+import { fetchFileContent } from '../lib/github';
+import { toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
 import { isManagedAssetPath, TEMPLATE_PATH } from '../lib/assets';
-import { RULESET_METADATA_KEY } from '../lib/rulesets';
+import { getAssetSnapshot } from '../lib/dashboard';
 
 export async function handleGetAssets(request: Request, env: Env): Promise<Response> {
   const auth = await requireAuth(request, env);
   if (auth instanceof Response) return auth;
 
   const session = toRepoSession(auth.settings);
-  const [nodes, templates, patches, rulesets] = await Promise.all([
-    fetchDirectoryContents('sing-sub/nodes', session),
-    fetchDirectoryContents('sing-sub/templates', session),
-    fetchDirectoryContents('sing-sub/patches', session),
-    fetchDirectoryContents('sing-sub/rulesets', session),
-  ]);
-  const jsonFiles = (paths: string[] | null) => (paths || []).filter(path => path.toLowerCase().endsWith('.json'));
-  const limit = pLimit(5);
-  const parseFileMeta = (path: string) => limit(async () => {
-    try {
-      const file = await fetchFileContent(path, session);
-      if (file?.content) {
-        const data = JSON.parse(file.content);
-        return {
-          path,
-          note: typeof data[RULESET_METADATA_KEY]?.note === 'string'
-            ? data[RULESET_METADATA_KEY].note
-            : typeof data.note === 'string'
-              ? data.note
-              : '',
-        };
-      }
-    } catch { /* A malformed asset remains visible with empty metadata. */ }
-    return { path, note: '' };
-  });
-
-  const [nodesWithMeta, templatesWithMeta, patchesWithMeta, rulesetsWithMeta] = await Promise.all([
-    Promise.all(jsonFiles(nodes).map(parseFileMeta)),
-    Promise.all(jsonFiles(templates).map(parseFileMeta)),
-    Promise.all(jsonFiles(patches).map(parseFileMeta)),
-    Promise.all(jsonFiles(rulesets).map(parseFileMeta)),
-  ]);
-  return jsonResponse({ nodes: nodesWithMeta, templates: templatesWithMeta, patches: patchesWithMeta, rulesets: rulesetsWithMeta });
+  const force = new URL(request.url).searchParams.get('refresh') === '1';
+  return jsonResponse(await getAssetSnapshot(env, session, force));
 }
 
 export async function handleGetFile(request: Request, env: Env): Promise<Response> {

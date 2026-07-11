@@ -7,6 +7,33 @@ import {
 import { fetchRepository, fetchUser, type RepoSession } from '../lib/github';
 import { errorResponse, jsonResponse } from '../lib/security';
 import { cleanupSubToken, generateHex, rebuildWithWarning } from '../lib/helpers';
+import { getProfileSnapshot, putProfileSnapshot } from '../lib/dashboard';
+import { fetchAllProfiles, toRepoSession } from '../lib/helpers';
+
+export async function handleBootstrap(request: Request, env: Env): Promise<Response> {
+  const session = await getSessionData(request, env);
+  if (!session) return jsonResponse({ settings: null });
+
+  const settings = await getUserSettings(session.owner, session.repo, env);
+  if (!settings) return jsonResponse({ settings: null });
+
+  const repoSession = toRepoSession(settings);
+  let profiles = await getProfileSnapshot(env, repoSession);
+  if (!profiles) {
+    profiles = await fetchAllProfiles(repoSession);
+    await putProfileSnapshot(env, repoSession, profiles);
+  }
+  return jsonResponse({
+    settings: {
+      owner: settings.owner,
+      repo: settings.repo,
+      subToken: settings.subToken,
+      userLogin: settings.userLogin,
+      userAvatar: settings.userAvatar,
+    },
+    state: { profiles },
+  });
+}
 
 export async function handleLogin(request: Request, env: Env): Promise<Response> {
   const { owner, repo, pat } = await request.json() as { owner: string; repo: string; pat: string };

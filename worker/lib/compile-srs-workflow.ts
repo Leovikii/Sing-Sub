@@ -17,6 +17,9 @@ on:
 jobs:
   compile:
     if: "\${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'ruleset: delete ') }}"
+    concurrency:
+      group: compile-srs-\${{ github.repository }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -28,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
