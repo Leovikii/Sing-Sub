@@ -1,7 +1,7 @@
 <template>
   <div class="asset-manager space-y-6">
     <!-- Assets List -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,34rem),1fr))] gap-6">
       <FileCard
         v-for="file in files"
         :key="file.path"
@@ -45,11 +45,12 @@
       @save="saveFileCode"
       @close="closeEditor"
     >
-      <template v-if="type === 'ruleset' && viewMode === 'edit'" #header-actions>
+      <template v-if="type === 'ruleset'" #header-actions>
         <PopoverMenu
           v-model:isOpen="addRuleMenuOpen"
+          :class="viewMode === 'preview' ? 'invisible pointer-events-none' : ''"
           wrapperClass="relative flex"
-          contentClass="right-0 top-full mt-2 w-52 p-1.5 rounded-2xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-0.5"
+          contentClass="right-0 top-full mt-2 w-52 p-1.5 rounded-xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-lg origin-top-right flex flex-col gap-0.5"
         >
           <template #trigger="{ toggle, isOpen }">
             <ToolbarButton
@@ -223,6 +224,11 @@ function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
 }
 
 async function saveFileCode() {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(localFileName.value)) {
+    emit('status', 'error', '文件名只能包含字母、数字、点、下划线和连字符，且不能为空');
+    return;
+  }
+
   let parsed: any;
   try {
     parsed = JSON.parse(editorContent.value);

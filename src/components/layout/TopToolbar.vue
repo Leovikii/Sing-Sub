@@ -1,7 +1,7 @@
 <template>
-  <div class="flex items-center justify-between gap-4 mb-6">
+  <div class="flex min-h-9 items-center justify-between gap-4 mb-6">
     <!-- Left: Asset type selector (replaces old status toast position) -->
-    <div class="flex items-center">
+    <div class="flex min-h-9 items-center">
       <SegmentedControl
         v-if="activeTab === 'assets'"
         :modelValue="assetType ?? 'node'"

@@ -1,7 +1,7 @@
 <template>
   <div class="max-w-3xl mx-auto space-y-5 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
     <!-- Profile Card -->
-    <div class="glass border border-border-base rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-4 md:gap-6 relative overflow-hidden">
+    <div class="glass border border-border-base rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-4 md:gap-6 relative overflow-hidden">
       <div class="absolute inset-0 bg-gradient-to-br from-brand-pink/10 to-transparent pointer-events-none"></div>
 
       <div class="relative">
@@ -28,7 +28,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
       
       <!-- Repository Settings -->
-      <div class="glass border border-border-base rounded-3xl p-5 md:p-6 space-y-4 md:space-y-6">
+      <div class="glass border border-border-base rounded-2xl p-5 md:p-6 space-y-4 md:space-y-6">
         <div class="flex items-center gap-3">
           <div class="p-2 md:p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
             <Database :size="20" class="md:w-6 md:h-6" />
@@ -53,7 +53,7 @@
       </div>
 
       <!-- Access Settings -->
-      <div class="glass border border-border-base rounded-3xl p-5 md:p-6 space-y-4 md:space-y-6 flex flex-col">
+      <div class="glass border border-border-base rounded-2xl p-5 md:p-6 space-y-4 md:space-y-6 flex flex-col">
         <div class="flex items-center gap-3">
           <div class="p-2 md:p-2.5 rounded-xl bg-brand-pink/10 text-brand-pink">
             <Key :size="20" class="md:w-6 md:h-6" />

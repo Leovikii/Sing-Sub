@@ -4,10 +4,28 @@ import {
   createSession, deleteSession, requireAuth,
   sessionCookieHeader, clearSessionCookieHeader,
 } from '../lib/auth';
-import { fetchUser, fetchFileContent, putFileContent, deleteFileContent, fetchDirectoryContents, commitMultiFiles, GithubApiError, type GitTreeItem, type RepoSession } from '../lib/github';
-import { buildAllProfiles } from '../lib/builder';
+import { fetchUser, fetchRepository, fetchFileContent, putFileContent, deleteFileContent, fetchDirectoryContents, commitMultiFiles, GithubApiError, type GitTreeItem, type RepoSession } from '../lib/github';
+import { buildAllProfiles, loadTemplate } from '../lib/builder';
 import { jsonResponse, errorResponse } from '../lib/security';
 import { generateHex, toRepoSession, rebuildWithWarning, rebuildSingleWithWarning, cleanupSubToken, fetchAllProfiles, pLimit } from '../lib/helpers';
+
+const SAFE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+const MANAGED_ASSET_PATH = /^sing-sub\/(nodes|templates|patches|rulesets)\/([a-zA-Z0-9][a-zA-Z0-9._-]*)\.json$/;
+const TEMPLATE_PATH = /^sing-sub\/templates\/([a-zA-Z0-9][a-zA-Z0-9._-]*)\.json$/;
+
+function isManagedAssetPath(path: string): boolean {
+  return MANAGED_ASSET_PATH.test(path);
+}
+
+function validateProfiles(profiles: Profile[]): string | null {
+  const names = new Set<string>();
+  for (const profile of profiles) {
+    if (!SAFE_NAME.test(profile.name)) return '配置名称只能包含字母、数字、点、下划线和连字符，且不能为空';
+    if (names.has(profile.name)) return `配置名称重复: ${profile.name}`;
+    names.add(profile.name);
+  }
+  return null;
+}
 
 
 export async function handleLogin(request: Request, env: Env): Promise<Response> {
@@ -22,6 +40,12 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
   const userRes = await fetchUser(pat);
   if (!userRes.ok) return errorResponse('Invalid PAT', 401);
   const userData = await userRes.json() as { login: string; avatar_url: string };
+  let repository: { default_branch: string };
+  try {
+    repository = await fetchRepository(owner, repo, pat);
+  } catch {
+    return errorResponse('Repository not found or not accessible', 404);
+  }
 
   const existing = await getUserSettings(owner, repo, env);
 
@@ -34,6 +58,7 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     subToken,
     userLogin: userData.login,
     userAvatar: userData.avatar_url,
+    defaultBranch: repository.default_branch,
   };
 
   await putUserSettings(settings, env);
@@ -42,7 +67,7 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     await env.SESSIONS.put(`sub:${subToken}`, JSON.stringify({ owner, repo }));
   }
 
-  const session = { owner, repo, pat, userLogin: userData.login };
+  const session = { owner, repo, pat, userLogin: userData.login, defaultBranch: repository.default_branch };
 
   const { warning } = await rebuildWithWarning(session, subToken, env);
 
@@ -97,6 +122,12 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
   const userRes = await fetchUser(effectivePat);
   if (!userRes.ok) return errorResponse('Invalid PAT', 401);
   const userData = await userRes.json() as { login: string; avatar_url: string };
+  let repository: { default_branch: string };
+  try {
+    repository = await fetchRepository(owner, repo, effectivePat);
+  } catch {
+    return errorResponse('Repository not found or not accessible', 404);
+  }
 
   if (auth.settings.subToken !== subToken) {
     const taken = await env.SESSIONS.get(`sub:${subToken}`);
@@ -118,6 +149,7 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
     subToken,
     userLogin: userData.login,
     userAvatar: userData.avatar_url,
+    defaultBranch: repository.default_branch,
   };
 
   if (isRepoChange) {
@@ -135,7 +167,7 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
     cookieHeader = sessionCookieHeader(newSessionId);
   }
 
-  const session: RepoSession = { owner, repo, pat: effectivePat, userLogin: userData.login };
+  const session: RepoSession = { owner, repo, pat: effectivePat, userLogin: userData.login, defaultBranch: repository.default_branch };
 
   const { warning } = await rebuildWithWarning(session, subToken, env);
 
@@ -191,6 +223,8 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
 
   const { state, profileName } = await request.json() as { state: StateData; profileName?: string };
   const session = toRepoSession(auth.settings);
+  const validationError = validateProfiles(state.profiles);
+  if (validationError) return errorResponse(validationError, 400);
 
   // Read existing files to detect deletions
   let existingJson: string[] = [];
@@ -200,7 +234,7 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
   } catch {}
 
   const currentNames = state.profiles.map((p: Profile) => p.name);
-  const filesToDelete = existingJson.filter(p => {
+  const filesToDelete = profileName ? [] : existingJson.filter(p => {
     const name = p.split('/').pop()?.replace('.json', '');
     return !currentNames.includes(name || '');
   });
@@ -302,12 +336,11 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const session = toRepoSession(auth.settings);
 
   // Fetch directories concurrently
-  let [nodes, templates, patches, rulesets, configs] = await Promise.all([
+  const [nodes, templates, patches, rulesets] = await Promise.all([
     fetchDirectoryContents('sing-sub/nodes', session),
     fetchDirectoryContents('sing-sub/templates', session),
     fetchDirectoryContents('sing-sub/patches', session),
     fetchDirectoryContents('sing-sub/rulesets', session),
-    fetchDirectoryContents('sing-sub/configs', session),
   ]);
 
 
@@ -359,12 +392,26 @@ export async function handleGetFile(request: Request, env: Env): Promise<Respons
   const url = new URL(request.url);
   const path = url.searchParams.get('path');
   if (!path) return errorResponse('Missing path parameter', 400);
+  if (!isManagedAssetPath(path)) return errorResponse('Unsupported file path', 400);
 
   const session = toRepoSession(auth.settings);
   const file = await fetchFileContent(path, session);
   if (!file) return errorResponse('File not found', 404);
 
   return jsonResponse({ content: file.content, sha: file.sha });
+}
+
+export async function handleGetTemplate(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  const source = new URL(request.url).searchParams.get('source');
+  if (!source) return errorResponse('Missing template source', 400);
+  const isExternal = source.startsWith('http://') || source.startsWith('https://');
+  if (!isExternal && !TEMPLATE_PATH.test(source)) return errorResponse('Unsupported template source', 400);
+
+  const content = await loadTemplate(source, toRepoSession(auth.settings));
+  return jsonResponse({ content });
 }
 
 const COMPILE_SRS_WORKFLOW_PATH = '.github/workflows/compile-srs.yml';
@@ -394,10 +441,11 @@ jobs:
         run: |
           mkdir -p sing-sub/rulesets/compiled
 
-          # Get latest sing-box
-          LATEST=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\\1/')
-          if [ -z "$LATEST" ]; then LATEST="v1.9.3"; fi
-          wget "https://github.com/SagerNet/sing-box/releases/download/\${LATEST}/sing-box-\${LATEST#v}-linux-amd64.tar.gz" -O sing-box.tar.gz
+          set -euo pipefail
+          SING_BOX_VERSION="v1.9.3"
+          curl --fail --location --retry 3 --connect-timeout 10 \\
+            "https://github.com/SagerNet/sing-box/releases/download/\${SING_BOX_VERSION}/sing-box-\${SING_BOX_VERSION#v}-linux-amd64.tar.gz" \\
+            --output sing-box.tar.gz
           tar -xzf sing-box.tar.gz
           mv sing-box-*/sing-box ./sing-box
           chmod +x ./sing-box
@@ -414,8 +462,15 @@ jobs:
               if (data._urls && Array.isArray(data._urls)) {
                 for (const url of data._urls) {
                   try {
-                    const res = await fetch(url);
-                    const upstream = await res.json();
+                    const parsedUrl = new URL(url);
+                    if (parsedUrl.protocol !== 'https:') throw new Error('only HTTPS URLs are allowed');
+                    const res = await fetch(parsedUrl, { signal: AbortSignal.timeout(10000) });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const length = Number(res.headers.get('content-length') || '0');
+                    if (length > 5 * 1024 * 1024) throw new Error('response exceeds 5 MiB');
+                    const body = await res.text();
+                    if (body.length > 5 * 1024 * 1024) throw new Error('response exceeds 5 MiB');
+                    const upstream = JSON.parse(body);
                     if (upstream.rules && Array.isArray(upstream.rules)) {
                       mergedRules = mergedRules.concat(upstream.rules);
                     }
@@ -438,7 +493,7 @@ jobs:
               fs.writeFileSync(tmpPath, JSON.stringify(data));
             }
           }
-          main();
+          main().catch(error => { console.error(error); process.exit(1); });
           EOF
 
           node process.js
@@ -454,8 +509,8 @@ jobs:
         run: |
           git config user.name "Sing-Sub Bot"
           git config user.email "bot@sing-sub.local"
-          git add sing-sub/rulesets/compiled/*.srs
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-compile SRS rulesets" && git push)
+          git add -A sing-sub/rulesets/compiled
+          git diff --cached --quiet || (git commit -m "🤖 Sing-Sub: ruleset: compile" && git push)
 `;
 
 export async function handlePutFile(request: Request, env: Env): Promise<Response> {
@@ -464,21 +519,46 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
 
   const { path, content, sha, message, oldPath } = await request.json() as { path: string; content: string; sha?: string; message?: string; oldPath?: string };
   if (!path || content === undefined) return errorResponse('Missing path or content', 400);
+  if (!isManagedAssetPath(path) || (oldPath && !isManagedAssetPath(oldPath))) {
+    return errorResponse('Unsupported file path', 400);
+  }
 
   const session = toRepoSession(auth.settings);
   const isRuleset = path.startsWith('sing-sub/rulesets/');
   const isRename = !!oldPath && oldPath !== path;
   let warning: string | undefined;
+  const fileName = path.split('/').pop()!;
+  const actionMessage = isRename
+    ? `🤖 Sing-Sub: asset: rename ${oldPath!.split('/').pop()} to ${fileName}`
+    : `🤖 Sing-Sub: asset: update ${fileName}`;
 
   try {
-    if (isRename) {
-      // Atomic rename: combine new content + old file deletion (+ stale .srs cleanup) into one commit
+    const workflowFile = isRuleset ? await fetchFileContent(COMPILE_SRS_WORKFLOW_PATH, session) : null;
+    const needsWorkflow = isRuleset && !workflowFile;
+
+    if (isRename || needsWorkflow) {
+      // Keep renames and first-time ruleset setup in one atomic commit.
       const treeItems: GitTreeItem[] = [
         { path, mode: '100644', type: 'blob', content },
-        { path: oldPath!, mode: '100644', type: 'blob', sha: null },
       ];
 
-      if (oldPath!.startsWith('sing-sub/rulesets/')) {
+      if (isRename) {
+        treeItems.push({ path: oldPath!, mode: '100644', type: 'blob', sha: null });
+      } else if (sha) {
+        const current = await fetchFileContent(path, session);
+        if (!current || current.sha !== sha) return errorResponse('文件已被修改，请重新加载后再试', 409);
+      }
+
+      if (needsWorkflow) {
+        treeItems.push({
+          path: COMPILE_SRS_WORKFLOW_PATH,
+          mode: '100644',
+          type: 'blob',
+          content: COMPILE_SRS_WORKFLOW_CONTENT,
+        });
+      }
+
+      if (isRename && oldPath!.startsWith('sing-sub/rulesets/')) {
         const oldBasename = oldPath!.split('/').pop()!.replace(/\.json$/, '');
         const compiledPath = `sing-sub/rulesets/compiled/${oldBasename}.srs`;
         const compiledFile = await fetchFileContent(compiledPath, session);
@@ -487,27 +567,15 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
         }
       }
 
-      await commitMultiFiles(session, treeItems, message || `Rename ${oldPath!.split('/').pop()} to ${path.split('/').pop()}`);
+      await commitMultiFiles(session, treeItems, needsWorkflow ? '🤖 Sing-Sub: ruleset: initialize compiler and update source' : actionMessage);
     } else {
-      await putFileContent(path, session, content, sha || null, message || `Update ${path.split('/').pop()}`);
+      await putFileContent(path, session, content, sha || null, actionMessage);
     }
   } catch (e) {
     if (e instanceof GithubApiError && e.status === 409) {
       return errorResponse('文件已被修改，请重新加载后再试', 409);
     }
     throw e;
-  }
-
-  if (isRuleset && !isRename) {
-    try {
-      const wfFile = await fetchFileContent(COMPILE_SRS_WORKFLOW_PATH, session);
-      if (!wfFile) {
-        await putFileContent(COMPILE_SRS_WORKFLOW_PATH, session, COMPILE_SRS_WORKFLOW_CONTENT, null, 'Add SRS compilation workflow');
-      }
-    } catch (e) {
-      console.error('Failed to inject workflow:', e);
-      warning = '规则集编译流水线创建失败：' + (e instanceof Error ? e.message : String(e));
-    }
   }
 
   return jsonResponse({ success: true, warning });
@@ -520,6 +588,7 @@ export async function handleDeleteFile(request: Request, env: Env): Promise<Resp
   const url = new URL(request.url);
   const path = url.searchParams.get('path');
   if (!path) return errorResponse('Missing path parameter', 400);
+  if (!isManagedAssetPath(path)) return errorResponse('Unsupported file path', 400);
 
   const session = toRepoSession(auth.settings);
 
@@ -527,25 +596,24 @@ export async function handleDeleteFile(request: Request, env: Env): Promise<Resp
   const file = await fetchFileContent(path, session);
   if (!file) return errorResponse('File not found', 404);
 
-  try {
-    await deleteFileContent(path, session, file.sha, `Delete ${path.split('/').pop()}`);
-  } catch (e) {
-    if (e instanceof GithubApiError && e.status === 409) {
-      return errorResponse('文件已被修改，请重新加载后再试', 409);
-    }
-    throw e;
-  }
-
   if (path.startsWith('sing-sub/rulesets/')) {
     const basename = path.split('/').pop()!.replace(/\.json$/, '');
     const compiledPath = `sing-sub/rulesets/compiled/${basename}.srs`;
     const compiledFile = await fetchFileContent(compiledPath, session);
-    if (compiledFile) {
-      try {
-        await deleteFileContent(compiledPath, session, compiledFile.sha, `Delete ${basename}.srs`);
-      } catch (e) {
-        console.error('Failed to delete compiled ruleset:', e);
-      }
+    const treeItems: GitTreeItem[] = [{ path, mode: '100644', type: 'blob', sha: null }];
+    if (compiledFile) treeItems.push({ path: compiledPath, mode: '100644', type: 'blob', sha: null });
+    try {
+      await commitMultiFiles(session, treeItems, `🤖 Sing-Sub: ruleset: delete ${basename}${compiledFile ? ' and compiled artifact' : ''}`);
+    } catch (e) {
+      if (e instanceof GithubApiError && e.status === 409) return errorResponse('文件已被修改，请重新加载后再试', 409);
+      throw e;
+    }
+  } else {
+    try {
+      await deleteFileContent(path, session, file.sha, `🤖 Sing-Sub: asset: delete ${path.split('/').pop()}`);
+    } catch (e) {
+      if (e instanceof GithubApiError && e.status === 409) return errorResponse('文件已被修改，请重新加载后再试', 409);
+      throw e;
     }
   }
 

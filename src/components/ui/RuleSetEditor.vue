@@ -11,7 +11,7 @@
           <p>{{ readonly ? '当前规则集为空。' : '当前规则集为空，请点击右上角添加规则。' }}</p>
         </div>
 
-        <div v-for="(rule, index) in rules" :key="rule.id" class="glass p-4 rounded-xl border border-border-base group relative transition-all focus-within:border-brand-pink/50">
+        <div v-for="(rule, index) in rules" :key="rule.id" class="glass p-4 rounded-xl border border-border-base group relative transition-colors focus-within:border-brand-pink/50">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
               <span class="px-2 py-0.5 rounded text-[11px] font-medium tracking-wider font-mono border"
@@ -29,13 +29,14 @@
           <textarea
             v-model="rule.content"
             :class="[
-              'w-full bg-[#0a0a0a] border border-bg-elevated rounded-lg p-3 text-sm text-[#e5e5ea] font-mono focus:outline-none focus:border-brand-pink transition-colors resize-y min-h-[100px] placeholder:text-[#48484a]',
-              (readonly || rule.type === 'raw') ? 'opacity-70 cursor-default' : ''
+              'w-full bg-[#0a0a0a] border border-bg-elevated rounded-md p-3 text-sm text-[#e5e5ea] font-mono focus:outline-none focus:border-brand-pink transition-colors resize-y min-h-[100px] placeholder:text-[#48484a]',
+              readonly ? 'opacity-70 cursor-default' : ''
             ]"
             :placeholder="getPlaceholder(rule.type)"
-            :readonly="readonly || rule.type === 'raw'"
+            :readonly="readonly"
             @input="emitChange"
           ></textarea>
+          <p v-if="rule.rawError" class="mt-2 text-xs text-danger">{{ rule.rawError }}</p>
         </div>
       </div>
     </div>
@@ -63,9 +64,11 @@ interface RuleBlock {
   type: RuleType;
   content: string;
   raw?: any;
+  rawError?: string;
 }
 
 const rules = ref<RuleBlock[]>([]);
+const sourceDocument = ref<Record<string, any>>({});
 
 // Tracks the last value we emitted ourselves, so the reflected v-model update
 // doesn't get reparsed into a fresh set of rule ids (which would tear down and
@@ -77,6 +80,8 @@ watch(() => props.modelValue, (newVal) => {
   if (!newVal || newVal === lastEmitted) return;
   try {
     const parsed = JSON.parse(newVal);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    sourceDocument.value = parsed;
     const parsedRules: RuleBlock[] = [];
 
     // Parse _urls
@@ -122,7 +127,7 @@ function isEmptyBlock(block: RuleBlock) {
 }
 
 function getSubtitle(block: RuleBlock) {
-  if (block.type === 'raw') return '该规则类型暂不支持可视化编辑，已只读展示以防止数据丢失';
+  if (block.type === 'raw') return '原始规则块，可直接编辑 JSON；无效 JSON 不会写回文件';
   if (isEmptyBlock(block)) return '此规则块为空，保存后不会写入文件';
   return '每行输入一项';
 }
@@ -142,16 +147,22 @@ function removeRule(index: number) {
 }
 
 function emitChange() {
-  const output: any = {
-    version: 4,
-    rules: []
-  };
+  const output = JSON.parse(JSON.stringify(sourceDocument.value || {})) as Record<string, any>;
+  if (output.version === undefined) output.version = 4;
+  output.rules = [];
 
   const urls: string[] = [];
 
   for (const block of rules.value) {
     if (block.type === 'raw') {
-      if (block.raw) output.rules.push(block.raw);
+      try {
+        block.raw = JSON.parse(block.content);
+        block.rawError = undefined;
+        output.rules.push(block.raw);
+      } catch {
+        block.rawError = '请输入有效的 JSON 对象后再保存';
+        return;
+      }
       continue;
     }
 
@@ -169,9 +180,12 @@ function emitChange() {
 
   if (urls.length > 0) {
     output._urls = urls;
+  } else {
+    delete output._urls;
   }
 
   const json = JSON.stringify(output, null, 2);
+  sourceDocument.value = output;
   lastEmitted = json;
   emit('update:modelValue', json);
 }

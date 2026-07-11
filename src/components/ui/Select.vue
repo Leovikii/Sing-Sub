@@ -10,7 +10,7 @@
       @click="toggleOpen"
       @keydown="handleTriggerKeydown"
       :class="[
-        'appearance-none rounded-xl border bg-bg-surface/80 text-text-primary transition-all duration-200 outline-none py-3 px-4 w-full text-[14px] flex items-center justify-between cursor-pointer select-none',
+        'appearance-none rounded-lg border bg-bg-surface/80 text-text-primary transition-[border-color,box-shadow,background-color] duration-200 outline-none py-3 px-4 w-full text-[14px] flex items-center justify-between cursor-pointer select-none',
         isOpen ? 'border-brand-pink ring-4 ring-brand-pink/20' : 'border-border-base hover:border-brand-pink/50',
         !selectedLabel && 'text-text-muted'
       ]"

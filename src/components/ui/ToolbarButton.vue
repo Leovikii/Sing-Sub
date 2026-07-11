@@ -1,18 +1,20 @@
 <template>
   <button
     :disabled="disabled || loading"
-    :title="label"
+    :title="tooltip || label"
+    :aria-label="tooltip || label"
     :class="[
-      label
-        ? 'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium'
-        : 'w-8 h-8 flex items-center justify-center rounded-full',
-      'transition-colors',
+      sizeClass,
+      'toolbar-button group relative transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink',
       stateClass
     ]"
   >
-    <Loader2 v-if="loading" :size="label ? 14 : 16" class="animate-spin" />
-    <component :is="icon" v-else :size="label ? 14 : 16" />
-    <span v-if="label" class="hidden md:inline">{{ label }}</span>
+    <Loader2 v-if="loading" :size="iconSize" class="animate-spin" />
+    <component :is="icon" v-else :size="iconSize" aria-hidden="true" />
+    <span v-if="label && !iconOnly" class="toolbar-button-label whitespace-nowrap" :class="mobileLabel ? 'inline' : 'hidden md:inline'">{{ label }}</span>
+    <span v-if="showTooltip && (tooltip || label)" class="toolbar-button-tooltip pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-border-base bg-bg-elevated px-2 py-1 text-xs font-medium text-text-primary opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      {{ tooltip || label }}
+    </span>
   </button>
 </template>
 
@@ -23,20 +25,48 @@ import { Loader2 } from 'lucide-vue-next';
 const props = withDefaults(defineProps<{
   icon: Component;
   label?: string;
-  variant?: 'secondary' | 'primary' | 'danger' | 'success';
+  tooltip?: string;
+  variant?: 'secondary' | 'primary' | 'danger' | 'success' | 'emphasis';
+  size?: 'compact' | 'card';
+  iconOnly?: boolean;
+  mobileLabel?: boolean;
+  showTooltip?: boolean;
   disabled?: boolean;
   loading?: boolean;
   active?: boolean;
 }>(), {
   variant: 'secondary',
+  size: 'compact',
+  iconOnly: false,
+  mobileLabel: false,
+  showTooltip: false,
   disabled: false,
   loading: false,
   active: false,
 });
 
+const sizeClass = computed(() => {
+  if (props.size === 'card') {
+    return props.iconOnly
+      ? 'h-9 w-9 inline-flex items-center justify-center rounded-lg text-sm'
+      : 'h-9 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 text-sm';
+  }
+  return props.label && !props.iconOnly
+    ? 'h-9 inline-flex items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium'
+    : 'h-8 w-8 inline-flex items-center justify-center rounded-full';
+});
+
+const iconSize = computed(() => props.size === 'card' ? 18 : (props.label && !props.iconOnly ? 14 : 16));
+
 const stateClass = computed(() => {
   if (props.variant === 'success') {
     return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-not-allowed';
+  }
+
+  if (props.variant === 'emphasis') {
+    return props.disabled || props.loading
+      ? 'border border-brand-pink/10 bg-brand-pink/5 text-brand-pink/40 cursor-not-allowed'
+      : 'border border-brand-pink/20 bg-brand-pink/10 text-brand-pink hover:bg-brand-pink/20 cursor-pointer';
   }
 
   if (props.variant === 'danger' && (props.disabled || props.loading)) {
@@ -46,7 +76,9 @@ const stateClass = computed(() => {
   if (props.active) {
     return props.variant === 'danger'
       ? 'bg-danger/20 text-danger cursor-pointer'
-      : 'bg-brand-pink/20 text-brand-pink cursor-pointer';
+      : props.variant === 'primary'
+        ? 'bg-brand-pink/20 text-brand-pink cursor-pointer'
+        : 'bg-bg-elevated text-text-primary cursor-pointer';
   }
 
   if (props.disabled || props.loading) {

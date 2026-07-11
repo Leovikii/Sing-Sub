@@ -19,6 +19,15 @@ export interface RepoSession {
   repo: string;
   pat: string;
   userLogin?: string;
+  defaultBranch?: string;
+}
+
+export async function fetchRepository(owner: string, repo: string, pat: string): Promise<{ default_branch: string }> {
+  const res = await githubFetch(`/repos/${owner}/${repo}`, pat);
+  if (!res.ok) {
+    throw new GithubApiError(`GitHub repository lookup failed (${res.status}): ${await res.text()}`, res.status);
+  }
+  return res.json() as Promise<{ default_branch: string }>;
 }
 
 function commitIdentity(session: RepoSession): { name: string; email: string } {
@@ -77,8 +86,9 @@ export async function fetchFileContent(
   filePath: string,
   session: RepoSession
 ): Promise<{ content: string; sha: string } | null> {
-  const res = await repoFetch(`contents/${filePath}`, session);
-  if (!res.ok) return null;
+  const res = await repoFetch(`contents/${filePath}?ref=${encodeURIComponent(session.defaultBranch || 'main')}`, session);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new GithubApiError(`GitHub file lookup failed (${res.status}): ${await res.text()}`, res.status);
   const data = await res.json() as { content: string; sha: string };
   return { content: decodeGithubContent(data.content), sha: data.sha };
 }
@@ -92,16 +102,16 @@ export async function fetchRawFile(
     'Accept': 'application/vnd.github.v3.raw',
     'User-Agent': 'sing-sub-worker',
   };
-  return fetch(`${GITHUB_API}/repos/${session.owner}/${session.repo}/contents/${filePath}`, { headers });
+  return fetch(`${GITHUB_API}/repos/${session.owner}/${session.repo}/contents/${filePath}?ref=${encodeURIComponent(session.defaultBranch || 'main')}`, { headers });
 }
 
 export async function fetchDirectoryContents(
   dirPath: string,
   session: RepoSession
 ): Promise<string[] | null> {
-  const res = await repoFetch(`contents/${dirPath}`, session);
+  const res = await repoFetch(`contents/${dirPath}?ref=${encodeURIComponent(session.defaultBranch || 'main')}`, session);
   if (res.status === 404) return []; // Directory doesn't exist
-  if (!res.ok) return null; // Other error, rate limit, etc.
+  if (!res.ok) throw new GithubApiError(`GitHub directory lookup failed (${res.status}): ${await res.text()}`, res.status);
   const data = await res.json() as Array<{ name: string; path: string; type: string }>;
   if (!Array.isArray(data)) return [];
   // Return only file paths, ignore subdirectories
@@ -133,6 +143,7 @@ export async function putFileContent(
     content: encodeToBase64(content),
     committer: identity,
     author: identity,
+    branch: session.defaultBranch || 'main',
   };
   if (fileSha) body.sha = fileSha;
 
@@ -163,7 +174,8 @@ export async function deleteFileContent(
     message: formattedMessage,
     sha,
     committer: identity,
-    author: identity
+    author: identity,
+    branch: session.defaultBranch || 'main',
   };
   const res = await repoFetch(`contents/${filePath}`, session, {
     method: 'DELETE',
@@ -188,7 +200,7 @@ export async function commitMultiFiles(
   session: RepoSession,
   treeItems: GitTreeItem[],
   message: string,
-  branch: string = 'main'
+  branch: string = session.defaultBranch || 'main'
 ): Promise<string> {
   const botIdentity = commitIdentity(session);
   const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;

@@ -106,6 +106,10 @@ export function useApi() {
     return apiCall(`/api/file?path=${encodeURIComponent(path)}`);
   }
 
+  async function getTemplate(source: string): Promise<{ content: unknown }> {
+    return apiCall(`/api/template?source=${encodeURIComponent(source)}`);
+  }
+
   async function deleteFile(path: string): Promise<void> {
     return apiCall(`/api/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
   }
@@ -113,6 +117,6 @@ export function useApi() {
   return {
     user, settings,
     login, logout, getSettings, saveSettings, deleteSettings,
-    getState, saveState, rebuild, getPreview, postPreview, getAssets, getFile, deleteFile,
+    getState, saveState, rebuild, getPreview, postPreview, getAssets, getFile, getTemplate, deleteFile,
   };
 }

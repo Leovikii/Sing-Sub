@@ -12,7 +12,7 @@
         />
         <div v-else class="flex gap-2 items-center">
           <Input v-model="profile.templateUrl" placeholder="https://..." class="flex-1" />
-          <button @click="cancelCustomTemplate" title="删除自定义模板并返回选择" class="w-10 h-10 flex items-center justify-center rounded-xl bg-danger/10 text-danger hover:bg-danger/20 transition shrink-0 cursor-pointer">
+          <button @click="cancelCustomTemplate" title="删除自定义模板并返回选择" class="w-10 h-10 flex items-center justify-center rounded-lg bg-danger/10 text-danger hover:bg-danger/20 transition shrink-0 cursor-pointer">
             <Trash2 class="w-4 h-4" />
           </button>
         </div>

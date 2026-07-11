@@ -16,7 +16,7 @@
     <div
       v-for="group in selectorGroups"
       :key="group.tag"
-      class="bg-bg-elevated/40 border border-border-base rounded-xl p-4 transition-all"
+      class="bg-bg-elevated/40 border border-border-base rounded-xl p-4 transition-colors"
     >
       <div class="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-start gap-y-3 gap-x-4">
         <!-- Left: Tag -->

@@ -52,27 +52,28 @@
             <div class="flex items-center gap-1.5 md:gap-2 shrink-0">
               <slot name="header-actions"></slot>
 
-              <!-- View Mode Toggle -->
+              <ToolbarButton
+                v-if="showSave"
+                :icon="Save"
+                :label="saveText"
+                variant="primary"
+                :disabled="viewMode === 'preview' || !isDirty || isSaving"
+                :loading="isSaving"
+                :class="viewMode === 'preview' ? 'invisible pointer-events-none' : ''"
+                @click="$emit('save')"
+              />
+
+              <!-- Keep the mode switch at the trailing edge of the action group. -->
               <SegmentedControl
                 v-if="showViewToggle"
                 :modelValue="viewMode ?? 'edit'"
                 @update:modelValue="$emit('update:viewMode', $event as 'preview' | 'edit')"
                 :options="viewModeOptions"
               />
-
-              <ToolbarButton
-                v-if="showSave && viewMode !== 'preview'"
-                :icon="Save"
-                :label="saveText"
-                variant="primary"
-                :disabled="!isDirty || isSaving"
-                :loading="isSaving"
-                @click="$emit('save')"
-              />
               <PopoverMenu
                 v-model:isOpen="showUnsavedConfirm"
                 wrapperClass="relative flex"
-                contentClass="right-0 top-full mt-2 w-[220px] p-3 rounded-2xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)] origin-top-right flex flex-col gap-2"
+                contentClass="right-0 top-full mt-2 w-[220px] p-3 rounded-xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-lg origin-top-right flex flex-col gap-2"
               >
                 <template #trigger="{ toggle, isOpen }">
                   <ToolbarButton

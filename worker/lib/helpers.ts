@@ -1,6 +1,6 @@
 import type { Env, UserSettings, Profile } from '../types';
 import type { RepoSession } from './github';
-import { fetchFileContent, fetchDirectoryContents } from './github';
+import { fetchFileContent, fetchDirectoryContents, GithubApiError } from './github';
 import { buildAllProfiles, buildProfile } from './builder';
 
 export function pLimit(concurrency: number) {
@@ -35,39 +35,27 @@ export function pLimit(concurrency: number) {
 
 
 export async function fetchAllProfiles(session: RepoSession): Promise<Profile[]> {
-  let profiles: Profile[] = [];
-  try {
-    const files = await fetchDirectoryContents('sing-sub/configs', session);
-    const jsonFiles = (files || []).filter(f => f.toLowerCase().endsWith('.json'));
-    
-    const limit = pLimit(3);
-    const profileResults = await Promise.all(jsonFiles.map(path => limit(async () => {
-      try {
-        const file = await fetchFileContent(path, session);
-        if (file && file.content) {
-          return JSON.parse(file.content) as Profile;
-        }
-      } catch {}
-      return null;
-    })));
-    
-    profiles = profileResults.filter((p): p is Profile => p !== null);
-    
-    profiles.sort((a, b) => a.order - b.order);
-  } catch {}
+  const files = await fetchDirectoryContents('sing-sub/configs', session);
+  const jsonFiles = files.filter(f => f.toLowerCase().endsWith('.json'));
+  const limit = pLimit(3);
+  const profileResults = await Promise.all(jsonFiles.map(path => limit(async () => {
+    try {
+      const file = await fetchFileContent(path, session);
+      if (file?.content) return JSON.parse(file.content) as Profile;
+    } catch (error) {
+      if (error instanceof GithubApiError) throw error;
+    }
+    return null;
+  })));
 
+  const profiles = profileResults.filter((p): p is Profile => p !== null);
+  profiles.sort((a, b) => a.order - b.order);
   return profiles;
 }
 
 export async function fetchProfile(session: RepoSession, profileName: string): Promise<Profile | null> {
-  try {
-    const file = await fetchFileContent(`sing-sub/configs/${profileName}.json`, session);
-    if (file && file.content) {
-      return JSON.parse(file.content);
-    }
-  } catch {}
-
-  return null;
+  const file = await fetchFileContent(`sing-sub/configs/${profileName}.json`, session);
+  return file?.content ? JSON.parse(file.content) : null;
 }
 
 export function generateHex(byteLength: number): string {
@@ -77,7 +65,13 @@ export function generateHex(byteLength: number): string {
 }
 
 export function toRepoSession(settings: UserSettings): RepoSession {
-  return { owner: settings.owner, repo: settings.repo, pat: settings.pat, userLogin: settings.userLogin };
+  return {
+    owner: settings.owner,
+    repo: settings.repo,
+    pat: settings.pat,
+    userLogin: settings.userLogin,
+    defaultBranch: settings.defaultBranch || 'main',
+  };
 }
 
 export async function rebuildWithWarning(

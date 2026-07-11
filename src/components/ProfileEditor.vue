@@ -12,14 +12,14 @@
     @action="handleCardAction"
   >
     <template #actions>
-      <button
+      <ToolbarButton
         @click.stop="$emit('copyLink', profile.name || '', index)"
-        :class="['flex-1 md:flex-none flex items-center justify-center gap-1.5 h-10 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl md:rounded-full text-[13px] md:text-xs font-medium transition-colors cursor-pointer border', copyStatus ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-text-muted hover:text-text-primary bg-bg-elevated border-border-base hover:border-brand-pink']"
-        :title="copyStatus ? '已复制' : '订阅'"
-      >
-        <component :is="copyStatus ? Check : Link2" :size="14" />
-        <span class="ml-1">{{ copyStatus ? '已复制' : '订阅' }}</span>
-      </button>
+        :icon="copyStatus ? Check : Link2"
+        :label="copyStatus ? '已复制订阅链接' : '订阅'"
+        variant="emphasis"
+        size="card"
+        mobileLabel
+      />
     </template>
   </FileCard>
 
@@ -71,6 +71,7 @@
 import { ref, computed, watch, onUnmounted, defineAsyncComponent } from 'vue';
 import { Trash2, Copy, Link2, Check } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
+import ToolbarButton from './ui/ToolbarButton.vue';
 import EditorModal from './ui/EditorModal.vue';
 import ProfileTemplateConfig from './profile/ProfileTemplateConfig.vue';
 import ProfileInbounds from './profile/ProfileInbounds.vue';
@@ -122,7 +123,7 @@ function handleCardAction(action: string) {
   if (action === 'remove') emit('remove', props.index);
 }
 
-const { getFile, postPreview } = useApi();
+const { getFile, getTemplate, postPreview } = useApi();
 const fetchedTemplateData = ref<any>(null);
 const fetchedNodesData = ref<any>(null);
 
@@ -173,15 +174,9 @@ async function fetchTemplateData(url: string) {
     return;
   }
   try {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      const res = await fetch(url);
-      if (seq !== fetchTemplateSeq) return;
-      fetchedTemplateData.value = await res.json();
-    } else {
-      const res = await getFile(url);
-      if (seq !== fetchTemplateSeq) return;
-      fetchedTemplateData.value = JSON.parse(res.content);
-    }
+    const res = await getTemplate(url);
+    if (seq !== fetchTemplateSeq) return;
+    fetchedTemplateData.value = res.content;
   } catch (e: any) {
     if (seq !== fetchTemplateSeq) return;
     console.error('Failed to fetch template', e);

@@ -1,5 +1,5 @@
 <template>
-  <div class="relative" ref="wrapperRef" :class="wrapperClass">
+  <div class="relative" ref="wrapperRef" :class="wrapperClass" @keydown.esc.stop="close">
     <!-- 触发器插槽 -->
     <slot name="trigger" :toggle="toggle" :isOpen="isOpenInternal"></slot>
     
@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 
 const props = defineProps<{
   isOpen?: boolean;
@@ -48,6 +48,7 @@ function toggle() {
 function close() {
   if (isOpenInternal.value) {
     setOpen(false);
+    nextTick(() => wrapperRef.value?.querySelector<HTMLElement>('button, [tabindex]')?.focus());
   }
 }
 

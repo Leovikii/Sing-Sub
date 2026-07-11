@@ -1,5 +1,5 @@
 <template>
-  <div class="relative flex items-center p-1 bg-bg-surface/80 backdrop-blur-xl border border-border-base rounded-full shadow-md">
+  <div class="relative flex h-9 items-center p-0.5 bg-bg-surface/80 backdrop-blur-xl border border-border-base rounded-full shadow-md">
     <!-- Animated slider background -->
     <div
       class="absolute rounded-full bg-border-base shadow-sm pointer-events-none"
@@ -7,8 +7,8 @@
       :style="{
         left: `${sliderLeft}px`,
         width: `${sliderWidth}px`,
-        height: `calc(100% - 8px)`,
-        top: '4px',
+        height: `calc(100% - 4px)`,
+        top: '2px',
       }"
     />
 

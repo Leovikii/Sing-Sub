@@ -1,14 +1,33 @@
 <template>
-  <div class="max-w-7xl mx-auto space-y-10 p-6 md:p-12 pb-32">
+  <div class="min-h-screen bg-bg-page">
     <GlobalToast :status="saveStatus" :message="statusMessage" />
 
-    <AppHeader
-      :user="user"
-      :appVersion="APP_VERSION"
-      :settings="settings"
-      :loading="loadingData"
-      @open-settings="activeTab = 'settings'"
-    />
+    <header class="sticky top-0 z-40 border-b border-border-base bg-bg-surface/95 backdrop-blur-xl">
+      <div
+        class="hidden h-36 items-center justify-center transition-[width] duration-200 md:absolute md:flex"
+        :class="sidebarExpanded ? 'md:w-52' : 'md:w-24'"
+      >
+        <div class="flex h-14 w-14 items-center justify-center rounded-2xl border border-border-base bg-bg-elevated/40 shadow-md">
+          <img src="/favicon.svg" alt="Sing Sub Logo" class="h-8 w-8" />
+        </div>
+      </div>
+      <div
+        class="mx-auto max-w-7xl px-6 py-5 transition-[margin] duration-200 md:max-w-none md:px-12 md:py-0"
+        :class="sidebarExpanded ? 'md:ml-52' : 'md:ml-24'"
+      >
+        <AppHeader
+          :user="user"
+          :appVersion="APP_VERSION"
+          :settings="settings"
+          :loading="loadingData"
+          class="md:h-36"
+          @open-settings="activeTab = 'settings'"
+        />
+      </div>
+    </header>
+
+    <main class="transition-[margin] duration-200" :class="sidebarExpanded ? 'md:ml-52' : 'md:ml-24'">
+      <div class="mx-auto max-w-7xl space-y-10 p-6 pb-28 md:p-12">
 
     <div v-if="isInitializing" class="flex justify-center items-center py-32">
       <Loader2 :size="32" class="animate-spin text-brand-pink" />
@@ -43,7 +62,7 @@
             item-key="name"
             :delay="200"
             :animation="200"
-            class="grid grid-cols-1 lg:grid-cols-2 gap-6"
+            class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,34rem),1fr))] gap-6"
             @end="recomputeOrders"
           >
             <template #item="{ element: profile, index: pIndex }">
@@ -92,7 +111,7 @@
           </div>
         </transition>
 
-      <AppDock v-model:activeTab="activeTab" />
+      <AppDock v-model:activeTab="activeTab" v-model:expanded="sidebarExpanded" :can-expand="isWideDesktop" />
     </template>
 
 
@@ -112,11 +131,13 @@
       @cancel="handleConflictAction('cancel')"
     />
 
+      </div>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { Loader2 } from 'lucide-vue-next';
 import AppHeader from './components/layout/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
@@ -149,6 +170,12 @@ const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[], ru
 const activeTab = ref<'config' | 'assets' | 'settings'>('config');
 const assetType = ref<'node' | 'template' | 'patch' | 'ruleset'>('node');
 const assetManagerRef = ref<any>(null);
+const sidebarPreference = ref(true);
+const isWideDesktop = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches);
+const sidebarExpanded = computed({
+  get: () => isWideDesktop.value && sidebarPreference.value,
+  set: (value: boolean) => { sidebarPreference.value = value; },
+});
 
 const isDirty = ref(false);
 let suppressDirty = false;
@@ -252,7 +279,13 @@ watch(() => stateData.value?.profiles.map(p => p.name).join(','), () => {
 
 
 
+function updateViewportLayout() {
+  isWideDesktop.value = window.matchMedia('(min-width: 1280px)').matches;
+}
+
 onMounted(async () => {
+  updateViewportLayout();
+  window.addEventListener('resize', updateViewportLayout, { passive: true });
   try {
     const s = await getSettings();
     if (s) {
@@ -261,6 +294,10 @@ onMounted(async () => {
     }
   } catch { /* not logged in */ }
   isInitializing.value = false;
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateViewportLayout);
 });
 
 async function handleSetup() {
@@ -445,7 +482,7 @@ async function handleCopyLink(name: string) {
 function addProfile() {
   if (!stateData.value) return;
   stateData.value.profiles.push({
-    name: '', note: '', templateUrl: '', nodesPath: 'sing-sub/nodes.json',
+    name: '', note: '', templateUrl: '', nodesPath: '',
     rules: [], inboundRules: [],
     created_at: Date.now(),
     updated_at: Date.now(),
