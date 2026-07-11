@@ -1,73 +1,105 @@
-# Sing Sub
+# Sing-Sub
 
-[中文文档](README_zh-CN.md)
+[简体中文](README_zh-CN.md)
 
-Edge-based multi-environment configuration distribution console for [sing-box](https://sing-box.sagernet.org/). Manage sing-box profiles through a web UI, store configurations in a private GitHub repo, and distribute subscription links via Cloudflare Workers.
+Sing-Sub is a self-hosted control plane for managing and distributing [sing-box](https://sing-box.sagernet.org/) configurations. It stores configuration sources in GitHub, builds subscriptions at the edge with Cloudflare Workers, and provides a focused web interface for daily operations.
 
-## Features
+## What It Does
 
-- **Cookie-based auth** — Login with GitHub repo + PAT. Session stored as HttpOnly Secure cookie, no third-party auth required.
-- **Server-side security** — GitHub PAT stored in Cloudflare KV (encrypted at rest), never exposed to the browser. Same repo from different devices shares one user entry.
-- **Edge config building** — Worker fetches templates and nodes from GitHub, merges them on the fly, and caches in KV. No GitHub Actions or Gist needed.
-- **Automated Bot Commits** — Configuration changes via the UI are pushed to your repository under a dedicated "Sing-Sub Bot" identity, keeping your commit history clean and easily distinguishable from manual edits.
-- **Subscription distribution** — `/sub/{token}/{name}.json` with User-Agent filtering (sing-box clients only).
-- **Next-Gen Glassmorphism UI** — A stunning, fully responsive interface optimized for both desktop and mobile, featuring dynamic layout adaptation, intelligent protocol tag rendering, and seamless mode toggles.
-- **Dual-Mode Profile Editor** — Switch instantly between Visual UI Builder and Live JSON Preview with animated segmented controls.
-- **Nodes Manager** — Dedicated interface for inspecting node definitions and previewing remote node files instantly.
-- **Multi-profile** — Manage multiple environments (e.g. `home`, `office`, `travel`) with independent inbound/outbound rules and templates.
-- **Auto-deploy** — Push to `main` triggers GitHub Actions to deploy the Worker automatically.
+- Manage multiple profiles, node sets, templates, patches, and rule sets.
+- Build profile JSON from templates, filtered nodes, and patches.
+- Serve sing-box subscriptions at /sub/{token}/{profile}.json.
+- Compile managed rule-set JSON into .srs through GitHub Actions and serve it at /rules/{token}/{ruleset}.srs.
+- Keep GitHub PATs server-side in Cloudflare KV; the browser receives only a secure session cookie.
+- Provide visual editors, JSON validation, conflict handling, and responsive desktop and mobile navigation.
 
-## Tech Stack
+## Architecture
 
-- **Frontend**: Vue 3 (Composition API) + TypeScript + Vite + Tailwind CSS v4
-- **Backend**: Cloudflare Workers + KV
-- **Auth**: Cookie-based sessions (HttpOnly, Secure, SameSite=Strict)
-- **CI/CD**: GitHub Actions (deploy only)
+~~~
+Browser UI -> Cloudflare Worker + KV -> GitHub configuration repository
+                                      -> GitHub Actions (rule-set compilation)
+~~~
+
+The Worker reads source files from GitHub and builds profile subscriptions on demand. Rule-set source files are compiled by a separate workflow because .srs is a binary sing-box artifact.
+
+## Repository Layout
+
+Use a private GitHub repository for your configuration data:
+
+~~~
+sing-sub/
+  configs/                 # Profile source files
+  nodes/                   # Node-set JSON files
+  templates/               # Template JSON files
+  patches/                 # Patch JSON files
+  rulesets/                # Rule-set source JSON files
+    compiled/              # Generated .srs artifacts
+~~~
+
+The compiled directory is maintained by the rule-set compilation workflow. Do not edit its .srs files manually.
 
 ## Prerequisites
 
-1. A **private GitHub repo** with your sing-box data:
-
-   ```
-   your-private-repo/
-   ├── sing-sub/
-   │   ├── configs/             # Configuration profiles managed by UI
-   │   ├── nodes/               # Node files (.json)
-   │   ├── templates/           # Base templates (.json)
-   │   └── patches/             # Patch definitions (.json)
-   ```
-   *Note: Templates can also be hosted anywhere as public URLs (e.g., raw GitHub links).*
-
-2. A **GitHub Personal Access Token (PAT)** with `repo` and `workflow` permissions. (`repo` is for reading/writing configs, and `workflow` is required for automatically compiling custom rule-sets via Actions). Create one at: https://github.com/settings/tokens
-3. A **Cloudflare account** with a custom domain.
+- Node.js 20
+- A Cloudflare account and KV namespace
+- A GitHub repository for configuration data
+- A GitHub PAT with repo and workflow permissions
+- A Cloudflare API token with permission to deploy Workers
 
 ## Deployment
 
-### 1. Create KV Namespace
-- Cloudflare Dashboard → Storage & Databases → KV → Create a namespace
-- Copy the Namespace ID and update `id` under `[[kv_namespaces]]` in `wrangler.toml`
+1. Create a KV namespace and set its ID in wrangler.toml.
+2. Add CLOUDFLARE_API_TOKEN to this repository's GitHub Actions secrets.
+3. Install dependencies and verify the application:
 
-### 2. Set GitHub Secrets
-- Go to your repo → Settings → Secrets → Actions
-- Add `CLOUDFLARE_API_TOKEN` (use the "Edit Cloudflare Workers" template from Cloudflare Dashboard)
+   ~~~bash
+   npm ci
+   npm run build
+   ~~~
 
-### 3. Push to Deploy
-```bash
-git push origin main
-```
+4. Merge to main. The deployment workflow builds the project and deploys the Worker.
 
-## Usage & Documentation
+After deployment, open the dashboard and provide the GitHub owner/repo, PAT, and a subscription token. The application creates managed paths when they are first needed.
 
-For detailed usage instructions, how to organize your repository, and a comprehensive guide on the **Patch Syntax** (`$set`, `$append`, `$replace`, `$remove`), please refer to our [WIKI](WIKI.md).
+## CI And Main-Branch Protection
 
-Subscription URL format: `https://your-domain/sub/{token}/{profile_name}.json`
+.github/workflows/ci.yml runs npm ci and npm run build for pull requests targeting main. It does not run for ordinary pushes to development branches.
+
+In the repository ruleset, add CI / typecheck as a required status check and enable Require branches to be up to date before merging:
+
+~~~
+Pull request to main -> CI passes -> merge allowed -> push to main -> deploy
+~~~
+
+The deployment workflow runs only after a commit reaches main and has access to the Cloudflare deployment secret. PR CI is read-only and receives no deployment credentials.
+
+## Rule Sets
+
+The first rule-set save creates .github/workflows/compile-srs.yml in the configuration repository. That workflow:
+
+1. Reads every sing-sub/rulesets/*.json source file.
+2. Optionally merges HTTPS sources listed in _urls.
+3. Compiles each source with sing-box.
+4. Commits changed artifacts under sing-sub/rulesets/compiled/.
+
+Rule-set URLs return 404 until the corresponding .srs artifact has been compiled successfully.
 
 ## Security
 
-- PAT is only stored once in KV, keyed by `owner/repo`. No duplication across sessions.
-- Session cookies are HttpOnly + Secure + SameSite=Strict (30-day expiry).
-- CSP headers restrict scripts and connections to same-origin + GitHub API.
-- Login page includes a disclaimer and link to source code, encouraging self-deployment.
+- GitHub PATs are stored server-side in KV and are never returned to the browser.
+- Sessions use HttpOnly, Secure, and SameSite=Strict cookies.
+- Subscription and rule-set endpoints accept supported sing-box user agents only.
+- Treat the subscription token as a credential and rotate it from Settings if it is exposed.
+
+## Development
+
+~~~bash
+npm run dev
+npm run build
+npm run preview
+~~~
+
+See [WIKI.md](WIKI.md) for patch syntax and detailed usage notes.
 
 ## License
 
