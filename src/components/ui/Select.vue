@@ -10,7 +10,8 @@
       @click="toggleOpen"
       @keydown="handleTriggerKeydown"
       :class="[
-        'appearance-none rounded-lg border bg-bg-surface/80 text-text-primary transition-[border-color,box-shadow,background-color] duration-200 outline-none py-3 px-4 w-full text-[14px] flex items-center justify-between cursor-pointer select-none',
+        'appearance-none rounded-lg border bg-bg-surface/80 text-text-primary transition-[border-color,box-shadow,background-color] duration-200 outline-none w-full flex items-center justify-between cursor-pointer select-none',
+        size === 'compact' ? 'h-9 px-3 text-sm' : 'py-3 px-4 text-[14px]',
         isOpen ? 'border-brand-pink ring-4 ring-brand-pink/20' : 'border-border-base hover:border-brand-pink/50',
         !selectedLabel && 'text-text-muted'
       ]"
@@ -79,6 +80,7 @@ const props = defineProps<{
   modelValue: string;
   options: { label: string; value: string }[];
   placeholder?: string;
+  size?: 'default' | 'compact';
 }>();
 
 const emit = defineEmits<{
