@@ -6,7 +6,7 @@ export interface RuleBucket {
   domain_suffix: string[];
 }
 
-export interface RulesetSource extends RuleBucket {
+export interface RulesetSource {
   url: string;
   interval_hours: number;
   last_updated?: string;
@@ -190,19 +190,18 @@ function parseBucket(value: unknown, label: string): RuleBucket {
 function parseSource(value: unknown, index: number): RulesetSource {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`source ${index + 1} must be an object`);
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).some(key => !['url', 'interval_hours', 'last_updated', 'domain', 'domain_suffix'].includes(key))) {
+  if (Object.keys(record).some(key => !['url', 'interval_hours', 'last_updated'].includes(key))) {
     throw new Error(`source ${index + 1} has unsupported fields`);
   }
   if (typeof record.url !== 'string') throw new Error(`source ${index + 1} URL is required`);
   const url = parseRulesetImportUrl(record.url).toString();
   if (![0, 24, 168, 720, 8760].includes(record.interval_hours as number)) throw new Error(`source ${index + 1} has invalid interval`);
   if (record.last_updated !== undefined && typeof record.last_updated !== 'string') throw new Error(`source ${index + 1} has invalid timestamp`);
-  const bucket = parseBucket({ domain: record.domain ?? [], domain_suffix: record.domain_suffix ?? [] }, `source ${index + 1}`);
-  return { url, interval_hours: record.interval_hours as number, last_updated: record.last_updated as string | undefined, ...bucket };
+  return { url, interval_hours: record.interval_hours as number, last_updated: record.last_updated as string | undefined };
 }
 
-export function createRulesetDocument(metadata: RulesetMetadata): string {
-  const merged = mergeRuleBuckets([metadata.manual, ...metadata.sources]);
+export function createRulesetDocument(metadata: RulesetMetadata, imported: RuleBucket[]): string {
+  const merged = mergeRuleBuckets([metadata.manual, ...imported]);
   const rule: Record<string, string[]> = {};
   if (merged.domain.length) rule.domain = merged.domain;
   if (merged.domain_suffix.length) rule.domain_suffix = merged.domain_suffix;

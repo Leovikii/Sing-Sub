@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../lib/auth';
 import { isManagedAssetPath, isRulesetPath } from '../lib/assets';
 import { COMPILE_SRS_WORKFLOW_CONTENT, COMPILE_SRS_WORKFLOW_PATH } from '../lib/compile-srs-workflow';
-import { createRulesetDocument, fetchPublicRuleset, mergeRuleBuckets, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource, type RulesetSource } from '../lib/rulesets';
+import { createRulesetDocument, fetchPublicRuleset, mergeRuleBuckets, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource } from '../lib/rulesets';
 import { commitMultiFiles, deleteFileContent, fetchFileContent, GithubApiError, putFileContent, type GitTreeItem } from '../lib/github';
 import { pLimit, toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
@@ -41,19 +41,21 @@ export async function handleImportRuleset(request: Request, env: Env): Promise<R
 async function refreshRulesetSources(content: string): Promise<string> {
   const metadata = readRulesetMetadata(content);
   const limit = pLimit(2);
-  const sources = await Promise.all(metadata.sources.map((source, index) => limit(async (): Promise<RulesetSource> => {
-    if (source.last_updated && (source.domain.length || source.domain_suffix.length)) return source;
+  const refreshed = await Promise.all(metadata.sources.map((source, index) => limit(async () => {
     try {
       const response = await fetchPublicRuleset(parseRulesetImportUrl(source.url));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const bucket = parseImportedRules(await readResponseTextLimited(response));
       if (!bucket.domain.length && !bucket.domain_suffix.length) throw new Error('source contains no domain rules');
-      return { ...source, ...bucket, last_updated: new Date().toISOString() };
+      return { source: { ...source, last_updated: new Date().toISOString() }, bucket };
     } catch (error: any) {
       throw new Error(`Source ${index + 1} (${source.url}) failed: ${error.message}`);
     }
   })));
-  return createRulesetDocument({ ...metadata, sources });
+  return createRulesetDocument(
+    { ...metadata, sources: refreshed.map(result => result.source) },
+    refreshed.map(result => result.bucket),
+  );
 }
 
 export async function handlePutFile(request: Request, env: Env): Promise<Response> {

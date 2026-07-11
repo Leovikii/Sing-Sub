@@ -79,7 +79,7 @@ const emit = defineEmits<{
 
 interface RuleBucket { domain: string[]; domain_suffix: string[] }
 
-interface SourceConfig extends RuleBucket {
+interface SourceConfig {
   url: string;
   interval_hours: number;
   last_updated?: string;
@@ -116,10 +116,14 @@ function readSources(document: Record<string, unknown>): SourceConfig[] {
     if (!source || typeof source !== 'object' || Array.isArray(source)) return [];
     const entry = source as Record<string, unknown>;
     if (typeof entry.url !== 'string' || !Number.isInteger(entry.interval_hours) ||
-        !Array.isArray(entry.domain) || !Array.isArray(entry.domain_suffix)) {
+        (entry.last_updated !== undefined && typeof entry.last_updated !== 'string')) {
       return [];
     }
-    validSources.push(clone(entry as unknown as SourceConfig));
+    validSources.push({
+      url: entry.url,
+      interval_hours: entry.interval_hours as number,
+      ...(typeof entry.last_updated === 'string' ? { last_updated: entry.last_updated } : {}),
+    });
   }
   return validSources;
 }
@@ -216,19 +220,11 @@ function emitChange() {
     const previous = previousSources.get(url);
     const changed = !previous || previous.interval_hours !== sourceIntervalHours.value;
     return changed
-      ? { url, interval_hours: sourceIntervalHours.value, domain: [], domain_suffix: [] }
+      ? { url, interval_hours: sourceIntervalHours.value }
       : previous;
   });
   sourceLastUpdated.value = nextSources.map(source => source.last_updated).filter((value): value is string => !!value).sort().at(-1);
   const manual: RuleBucket = { domain: lines(domainContent.value), domain_suffix: lines(domainSuffixContent.value) };
-  const merged = {
-    domain: [...new Set([...manual.domain, ...nextSources.flatMap(source => source.domain)])],
-    domain_suffix: [...new Set([...manual.domain_suffix, ...nextSources.flatMap(source => source.domain_suffix)])],
-  };
-  const rule: Record<string, string[]> = {};
-  if (merged.domain.length) rule.domain = merged.domain;
-  if (merged.domain_suffix.length) rule.domain_suffix = merged.domain_suffix;
-  output.rules = Object.keys(rule).length ? [rule] : [];
 
   const metadata = output._sing_sub && typeof output._sing_sub === 'object' && !Array.isArray(output._sing_sub)
     ? clone(output._sing_sub as Record<string, unknown>)

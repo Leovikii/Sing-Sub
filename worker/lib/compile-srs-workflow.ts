@@ -85,7 +85,7 @@ jobs:
           const fs = require('fs');
           const allowedKeys = new Set(['version', 'rules', '_sing_sub']);
           const metadataKeys = new Set(['note', 'manual', 'sources']);
-          const sourceKeys = new Set(['url', 'interval_hours', 'last_updated', 'domain', 'domain_suffix']);
+          const sourceKeys = new Set(['url', 'interval_hours', 'last_updated']);
           const maxBytes = 5 * 1024 * 1024;
           const compileFiles = new Set(fs.readFileSync('.ruleset-staging/compile-list', 'utf8').split(/\\r?\\n/).filter(Boolean));
 
@@ -167,11 +167,10 @@ jobs:
             if (![0, 24, 168, 720, 8760].includes(source.interval_hours)) {
               throw new Error(file + ' has invalid source update settings');
             }
-            normalizeImportedRules({ rules: [{ domain: source.domain || [], domain_suffix: source.domain_suffix || [] }] });
           }
 
-          function materialize(data, metadata) {
-            const buckets = [metadata.manual, ...metadata.sources];
+          function materialize(data, metadata, imported) {
+            const buckets = [metadata.manual, ...imported];
             const merged = normalizeImportedRules({ rules: buckets.map(bucket => ({
               domain: bucket.domain || [], domain_suffix: bucket.domain_suffix || []
             })) });
@@ -187,6 +186,8 @@ jobs:
             const data = JSON.parse(fs.readFileSync(path, 'utf8'));
             const originalData = JSON.stringify(data);
             if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.rules)) throw new Error(file + ' must contain a rules array');
+            if (data.version !== 2) throw new Error(file + ' must use rule-set version 2');
+            normalizeImportedRules(data);
             for (const key of Object.keys(data)) if (!allowedKeys.has(key)) throw new Error(file + ' has unsupported top-level field: ' + key);
             const metadata = data._sing_sub;
             if (metadata !== undefined && (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))) throw new Error(file + ' has invalid _sing_sub metadata');
@@ -200,13 +201,16 @@ jobs:
             }
 
             let changed = false;
-            if (process.env.REFRESH_SOURCES === 'true' || sources.some(source => !Number.isFinite(Date.parse(source.last_updated || '')))) {
-              const now = Date.now();
+            const now = Date.now();
+            const uninitialized = sources.some(source => !Number.isFinite(Date.parse(source.last_updated || '')));
+            const due = sources.some(source => {
+              const lastUpdated = Date.parse(source.last_updated || '');
+              return !Number.isFinite(lastUpdated) ||
+                (source.interval_hours > 0 && now - lastUpdated >= source.interval_hours * 60 * 60 * 1000);
+            });
+            if (sources.length && (uninitialized || (process.env.REFRESH_SOURCES === 'true' && due))) {
+              const imported = [];
               for (const source of sources) {
-                const lastUpdated = Date.parse(source.last_updated || '');
-                const initialImport = !Number.isFinite(lastUpdated);
-                const due = initialImport || (source.interval_hours > 0 && now - lastUpdated >= source.interval_hours * 60 * 60 * 1000);
-                if (!due) continue;
                 const response = await fetchPublicRuleset(source.url);
                 if (!response.ok) throw new Error(file + ' source request failed with HTTP ' + response.status);
                 const contentLength = Number(response.headers.get('content-length') || '0');
@@ -214,13 +218,13 @@ jobs:
                 const body = await response.text();
                 if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error(file + ' source exceeds 5 MiB');
                 const bucket = normalizeImportedRules(JSON.parse(body));
-                source.domain = bucket.domain;
-                source.domain_suffix = bucket.domain_suffix;
+                if (!bucket.domain.length && !bucket.domain_suffix.length) throw new Error(file + ' source contains no domain rules');
+                imported.push(bucket);
                 source.last_updated = new Date().toISOString();
-                changed = true;
               }
+              materialize(data, metadata, imported);
+              changed = true;
             }
-            materialize(data, metadata);
             const normalized = JSON.stringify(data) !== originalData;
             if (changed || normalized) {
               fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\\n');
