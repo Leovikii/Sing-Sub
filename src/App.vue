@@ -240,10 +240,16 @@ function recomputeOrders() {
 
 const { user, settings, login, getSettings, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets, deleteFile } = useApi();
 
-async function refreshAssets() {
+async function refreshAssets(excludedPaths: Iterable<string> = []) {
+  const excluded = new Set(excludedPaths);
   try {
     const data = await getAssets();
-    availableAssets.value = data;
+    availableAssets.value = {
+      nodes: data.nodes.filter((item: any) => !excluded.has(item.path || item)),
+      templates: data.templates.filter((item: any) => !excluded.has(item.path || item)),
+      patches: data.patches.filter((item: any) => !excluded.has(item.path || item)),
+      rulesets: data.rulesets.filter((item: any) => !excluded.has(item.path || item)),
+    };
   } catch {
     availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
   }
@@ -377,16 +383,15 @@ async function handleSave(): Promise<void> {
     const data = await saveState(stateData.value, null);
 
     if (deletedAssets.value.length > 0) {
-      const paths = deletedAssets.value;
+      const paths = [...new Set(deletedAssets.value)];
       const results = await Promise.allSettled(paths.map(path => deleteFile(path)));
-      results.forEach((res, i) => {
-        if (res.status === 'rejected') {
-          console.error('Failed to delete asset', paths[i], res.reason);
-          showStatus('error', `删除文件失败: ${paths[i]}`, 3000);
-        }
-      });
-      deletedAssets.value = [];
-      await refreshAssets();
+      const deletedPaths = paths.filter((_, index) => results[index].status === 'fulfilled');
+      const failedPaths = paths.filter((_, index) => results[index].status === 'rejected');
+      deletedAssets.value = failedPaths;
+      await refreshAssets(deletedPaths);
+      if (failedPaths.length > 0) {
+        throw new Error(`删除文件失败: ${failedPaths.join(', ')}`);
+      }
     }
 
     isDirty.value = false;
