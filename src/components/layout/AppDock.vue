@@ -6,10 +6,10 @@
     @mouseenter="isHoverExpanded = true"
     @mouseleave="isHoverExpanded = false"
   >
-      <AppNavigationItem label="配置" :icon="Settings2" :active="activeTab === 'config'" :expanded="isPanelExpanded" :show-label="showLabels" @select="$emit('update:activeTab', 'config')" />
-      <AppNavigationItem label="组件" :icon="Box" :active="activeTab === 'assets'" :expanded="isPanelExpanded" :show-label="showLabels" @select="$emit('update:activeTab', 'assets')" />
+      <AppNavigationItem label="配置" :icon="Settings2" :active="activeTab === 'config'" :show-label="showLabels" @select="$emit('update:activeTab', 'config')" />
+      <AppNavigationItem label="组件" :icon="Box" :active="activeTab === 'assets'" :show-label="showLabels" @select="$emit('update:activeTab', 'assets')" />
       <div class="flex flex-1 justify-center md:mt-auto md:w-full md:flex-none">
-        <AppNavigationItem label="设置" :icon="User" :active="activeTab === 'settings'" :expanded="isPanelExpanded" :show-label="showLabels" @select="$emit('update:activeTab', 'settings')" />
+        <AppNavigationItem label="设置" :icon="User" :active="activeTab === 'settings'" :show-label="showLabels" @select="$emit('update:activeTab', 'settings')" />
       </div>
       <button
         v-if="canExpand"
