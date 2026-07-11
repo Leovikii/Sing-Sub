@@ -16,6 +16,7 @@ on:
 
 jobs:
   compile:
+    if: \${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'ruleset: delete ') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -88,6 +89,7 @@ jobs:
           const sourceKeys = new Set(['url', 'interval_hours', 'last_updated']);
           const maxBytes = 5 * 1024 * 1024;
           const compileFiles = new Set(fs.readFileSync('.ruleset-staging/compile-list', 'utf8').split(/\\r?\\n/).filter(Boolean));
+          const repairMissing = process.env.EVENT_NAME !== 'push' || compileFiles.size > 0;
 
           function isPrivateHostname(hostname) {
             const host = hostname.toLowerCase();
@@ -230,7 +232,7 @@ jobs:
               fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\\n');
             }
             const output = 'sing-sub/rulesets/compiled/' + file.replace(/\\.json$/, '.srs');
-            if (compileFiles.has(file) || changed || normalized || !fs.existsSync(output)) {
+            if (compileFiles.has(file) || changed || normalized || (repairMissing && !fs.existsSync(output))) {
               compileFiles.add(file);
               const compileData = JSON.parse(JSON.stringify(data));
               delete compileData._sing_sub;
