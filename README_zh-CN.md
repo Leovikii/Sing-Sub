@@ -77,10 +77,10 @@ compiled 目录由规则集编译工作流维护，请勿手动编辑其中的 .
 
 首次保存规则集时，应用会在配置仓库创建 .github/workflows/compile-srs.yml。工作流将：
 
-1. 读取所有 sing-sub/rulesets/*.json。
-2. 可选合并 _urls 中列出的 HTTPS 规则源。
-3. 使用 sing-box 编译每份规则集。
-4. 将变更后的产物提交到 sing-sub/rulesets/compiled/。
+1. 仅编译新增或修改的规则集 JSON；删除规则集时同步删除同名 .srs。
+2. 定时任务只下载到期规则集的 HTTPS 来源，校验后仅重建对应规则集。
+3. 编译前剔除 _sing_sub 元数据，并使用最新稳定版 sing-box 编译物化后的 version 2 规则集 JSON。
+4. 将变更后的来源与产物提交到 sing-sub/rulesets/compiled/。
 
 对应 .srs 尚未成功编译前，规则集 URL 会返回 404。
 

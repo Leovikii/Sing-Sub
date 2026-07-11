@@ -53,7 +53,6 @@ import SegmentedControl from '../ui/SegmentedControl.vue';
 
 const props = defineProps<{
   saveStatus: 'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error';
-  statusMessage?: string;
   refreshing: boolean;
   isDirty: boolean;
   activeTab: 'config' | 'assets' | 'settings';

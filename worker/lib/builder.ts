@@ -1,6 +1,8 @@
 import type { Env, Profile } from '../types';
 import { fetchFileContent, type RepoSession } from './github';
 import { pLimit } from './helpers';
+import { fetchPublicJson, parsePublicJsonUrl, readResponseTextLimited } from './rulesets';
+import { listAllKvKeys } from './kv';
 
 interface Outbound {
   tag?: string;
@@ -118,27 +120,12 @@ function sanitizeMetadata(obj: any): any {
 }
 
 async function fetchJson(url: string): Promise<unknown> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
-  
   try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'sing-sub-worker',
-        'Accept': 'application/json',
-      },
-      signal: controller.signal,
-    });
+    const res = await fetchPublicJson(parsePublicJsonUrl(url));
     if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
-    const data = await res.json();
-    return sanitizeMetadata(data);
+    return sanitizeMetadata(JSON.parse(await readResponseTextLimited(res)));
   } catch (e: any) {
-    if (e.name === 'AbortError') {
-      throw new Error(`获取外部模板超时: ${url}`);
-    }
     throw e;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
@@ -154,11 +141,23 @@ export async function loadTemplate(templateUrl: string, session: RepoSession): P
   return isExternalTemplate ? fetchJson(templateUrl) : fetchRepoJson(templateUrl, session);
 }
 
-export async function buildProfile(profile: Profile, session: RepoSession): Promise<string> {
+interface BuildResourceLoader {
+  loadTemplate(templateUrl: string): Promise<unknown>;
+  loadRepoJson(path: string): Promise<unknown>;
+}
+
+export async function buildProfile(
+  profile: Profile,
+  session: RepoSession,
+  resources: BuildResourceLoader = {
+    loadTemplate: (url) => loadTemplate(url, session),
+    loadRepoJson: (path) => fetchRepoJson(path, session),
+  },
+): Promise<string> {
   const templateUrl = profile.templateUrl;
   let [template, nodesData] = await Promise.all([
-    loadTemplate(templateUrl, session) as Promise<Record<string, unknown>>,
-    fetchRepoJson(profile.nodesPath, session),
+    resources.loadTemplate(templateUrl) as Promise<Record<string, unknown>>,
+    resources.loadRepoJson(profile.nodesPath),
   ]);
   
   template = template || {};
@@ -171,7 +170,7 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
   // Step 2: Apply patch (before node insertion, so patch modifications to
   // template structure are in place before we inject nodes into it)
   if (profile.patchUrl) {
-    const patch = await fetchRepoJson(profile.patchUrl, session) as Record<string, unknown>;
+    const patch = await resources.loadRepoJson(profile.patchUrl) as Record<string, unknown>;
     if (patch) {
       template = smartMerge(template, patch);
     }
@@ -234,19 +233,32 @@ export async function buildAllProfiles(
   env: Env
 ): Promise<void> {
   const prefix = `config:${subToken}:`;
-  const list = await env.SESSIONS.list({ prefix });
+  const keys = await listAllKvKeys(env, prefix);
   const currentNames = profiles.map(p => p.name);
+  const resourceCache = new Map<string, Promise<unknown>>();
+  const cached = (key: string, loader: () => Promise<unknown>) => {
+    let value = resourceCache.get(key);
+    if (!value) {
+      value = loader();
+      resourceCache.set(key, value);
+    }
+    return value;
+  };
+  const resources: BuildResourceLoader = {
+    loadTemplate: (url) => cached(`template:${url}`, () => loadTemplate(url, session)),
+    loadRepoJson: (path) => cached(`repo:${path}`, () => fetchRepoJson(path, session)),
+  };
 
   const limit = pLimit(3);
   await Promise.all([
-    ...list.keys.map(async (key: any) => {
-      const name = key.name.substring(prefix.length);
+    ...keys.map(async key => {
+      const name = key.substring(prefix.length);
       if (!currentNames.includes(name)) {
-        await env.SESSIONS.delete(key.name);
+        await env.SESSIONS.delete(key);
       }
     }),
     ...profiles.map(profile => limit(async () => {
-      const config = await buildProfile(profile, session);
+      const config = await buildProfile(profile, session, resources);
       await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
     }))
   ]);

@@ -77,10 +77,10 @@ The deployment workflow runs only after a commit reaches main and has access to 
 
 The first rule-set save creates .github/workflows/compile-srs.yml in the configuration repository. That workflow:
 
-1. Reads every sing-sub/rulesets/*.json source file.
-2. Optionally merges HTTPS sources listed in _urls.
-3. Compiles each source with sing-box.
-4. Commits changed artifacts under sing-sub/rulesets/compiled/.
+1. Compiles only added or changed rule-set JSON files, and removes the matching .srs artifact on deletion.
+2. On the scheduled refresh, downloads each due rule-set's HTTPS sources, validates them, and rebuilds only that rule set.
+3. Strips _sing_sub metadata before compiling the materialized version 2 rule-set JSON with the latest stable sing-box release.
+4. Commits changed sources and artifacts under sing-sub/rulesets/compiled/.
 
 Rule-set URLs return 404 until the corresponding .srs artifact has been compiled successfully.
 

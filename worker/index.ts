@@ -6,7 +6,7 @@ import {
   handleGetState, handlePutState, handleRebuild, handlePreview,
 } from './routes/profiles';
 import { handleGetAssets, handleGetFile, handleGetTemplate } from './routes/assets';
-import { handlePutFile, handleDeleteFile, handleImportRuleset } from './routes/rulesets';
+import { handlePutFile, handleDeleteFile } from './routes/rulesets';
 import { handleSubscription, handleRuleset } from './routes/sub';
 import { addSecurityHeaders, errorResponse } from './lib/security';
 
@@ -46,8 +46,6 @@ export default {
         response = await handleGetFile(request, env);
       } else if (path === '/api/template' && method === 'GET') {
         response = await handleGetTemplate(request, env);
-      } else if (path === '/api/ruleset/import' && method === 'POST') {
-        response = await handleImportRuleset(request, env);
       } else if (path === '/api/file' && method === 'PUT') {
         response = await handlePutFile(request, env);
       } else if (path === '/api/file' && method === 'DELETE') {

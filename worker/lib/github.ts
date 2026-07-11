@@ -51,10 +51,30 @@ export async function githubFetch(
     'User-Agent': 'sing-sub-worker',
   };
 
-  const init: RequestInit = { method, headers };
-  if (body) init.body = JSON.stringify(body);
-
-  return fetch(`${GITHUB_API}${path}`, init);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const init: RequestInit = { method, headers, signal: controller.signal };
+      if (body) init.body = JSON.stringify(body);
+      const response = await fetch(`${GITHUB_API}${path}`, init);
+      const retryable = method === 'GET' && (response.status === 429 || [502, 503, 504].includes(response.status));
+      if (!retryable || attempt === 2) return response;
+      await response.body?.cancel();
+      const retryAfter = Number(response.headers.get('retry-after'));
+      const delay = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 5_000) : 300 * (2 ** attempt);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    } catch (error) {
+      if (attempt === 2) {
+        const detail = error instanceof Error && error.name === 'AbortError' ? 'request timed out' : 'request failed';
+        throw new GithubApiError(`GitHub ${detail}`, 504);
+      }
+      await new Promise(resolve => setTimeout(resolve, 300 * (2 ** attempt)));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw new GithubApiError('GitHub request failed', 504);
 }
 
 export function repoFetch(
@@ -79,8 +99,12 @@ function decodeGithubContent(content: string): string {
 
 function encodeToBase64(str: string): string {
   const bytes = new TextEncoder().encode(str);
-  const binary = String.fromCharCode(...bytes);
-  return btoa(binary);
+  const chunks: string[] = [];
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
+  }
+  return btoa(chunks.join(''));
 }
 
 export async function fetchFileContent(

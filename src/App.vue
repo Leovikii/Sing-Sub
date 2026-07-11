@@ -45,7 +45,6 @@
       <TopToolbar
         v-if="activeTab !== 'settings'"
         :saveStatus="saveStatus"
-        :statusMessage="statusMessage"
         :refreshing="refreshing"
         :isDirty="isDirty"
         :activeTab="activeTab"
@@ -386,19 +385,19 @@ async function handleSave(): Promise<void> {
   saveStatus.value = 'saving';
   statusMessage.value = '';
   try {
-    const data = await saveState(stateData.value, null);
+    let failedPaths: string[] = [];
 
     if (deletedAssets.value.length > 0) {
       const paths = [...new Set(deletedAssets.value)];
       const results = await Promise.allSettled(paths.map(path => deleteFile(path)));
       const deletedPaths = paths.filter((_, index) => results[index].status === 'fulfilled');
-      const failedPaths = paths.filter((_, index) => results[index].status === 'rejected');
+      failedPaths = paths.filter((_, index) => results[index].status === 'rejected');
       deletedAssets.value = failedPaths;
       await refreshAssets(deletedPaths);
-      if (failedPaths.length > 0) {
-        throw new Error(`删除文件失败: ${failedPaths.join(', ')}`);
-      }
     }
+
+    const data = await saveState(stateData.value);
+    if (failedPaths.length > 0) throw new Error(`删除文件失败: ${failedPaths.join(', ')}`);
 
     isDirty.value = false;
     if (data.warning) {
@@ -422,7 +421,7 @@ async function handleSave(): Promise<void> {
   }
 }
 
-async function handleSaveProfile(profileName: string): Promise<void> {
+async function handleSaveProfile(profileName: string, oldProfileName?: string): Promise<void> {
   if (!stateData.value) return;
   const p = stateData.value.profiles.find(x => x.name === profileName);
   if (p) p.updated_at = Date.now();
@@ -432,7 +431,7 @@ async function handleSaveProfile(profileName: string): Promise<void> {
   savingProfileName.value = profileName;
   lastSaveAttemptName.value = profileName;
   try {
-    const data = await saveState(stateData.value, null, profileName);
+    const data = await saveState(stateData.value, profileName, oldProfileName);
     profileSaveError.value = null;
     if (p === draftProfile.value) {
       draftProfile.value = null;

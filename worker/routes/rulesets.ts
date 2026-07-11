@@ -2,41 +2,10 @@ import type { Env } from '../types';
 import { requireAuth } from '../lib/auth';
 import { isManagedAssetPath, isRulesetPath } from '../lib/assets';
 import { COMPILE_SRS_WORKFLOW_CONTENT, COMPILE_SRS_WORKFLOW_PATH } from '../lib/compile-srs-workflow';
-import { createRulesetDocument, fetchPublicRuleset, mergeRuleBuckets, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource } from '../lib/rulesets';
+import { createRulesetDocument, fetchPublicRuleset, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource } from '../lib/rulesets';
 import { commitMultiFiles, deleteFileContent, fetchFileContent, GithubApiError, putFileContent, type GitTreeItem } from '../lib/github';
 import { pLimit, toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
-
-export async function handleImportRuleset(request: Request, env: Env): Promise<Response> {
-  const auth = await requireAuth(request, env);
-  if (auth instanceof Response) return auth;
-
-  let urls: unknown;
-  try {
-    ({ urls } = await request.json() as { urls?: unknown });
-  } catch {
-    return errorResponse('Invalid request JSON', 400);
-  }
-  if (!Array.isArray(urls) || urls.length === 0 ||
-      urls.some(url => typeof url !== 'string' || !url.trim())) {
-    return errorResponse('Provide one or more rule-set URLs', 400);
-  }
-
-  const buckets = [];
-  try {
-    for (const rawUrl of urls) {
-      const response = await fetchPublicRuleset(parseRulesetImportUrl(rawUrl.trim()));
-      if (!response.ok) throw new Error(`Import request failed with HTTP ${response.status}`);
-
-      buckets.push(parseImportedRules(await readResponseTextLimited(response)));
-    }
-  } catch (error: any) {
-    return errorResponse(`Rule-set import failed: ${error.message || 'invalid source'}`, 400);
-  }
-
-  const merged = mergeRuleBuckets(buckets);
-  return jsonResponse({ rules: [merged], ...merged, updated_at: new Date().toISOString() });
-}
 
 async function refreshRulesetSources(content: string): Promise<string> {
   const metadata = readRulesetMetadata(content);

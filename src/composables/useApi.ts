@@ -72,18 +72,18 @@ export function useApi() {
     settings.value = null;
   }
 
-  async function getState(): Promise<{ state: StateData; sha: string | null }> {
+  async function getState(): Promise<{ state: StateData }> {
     return apiCall('/api/state');
   }
 
-  async function saveState(state: StateData, sha: string | null, profileName?: string): Promise<{ sha: string; warning?: string }> {
+  async function saveState(state: StateData, profileName?: string, oldProfileName?: string): Promise<{ warning?: string }> {
     return apiCall('/api/state', {
       method: 'PUT',
-      body: JSON.stringify({ state, sha, profileName }),
+      body: JSON.stringify({ state, profileName, oldProfileName }),
     });
   }
 
-  async function rebuild(): Promise<{ state: StateData; sha: string | null; warning?: string }> {
+  async function rebuild(): Promise<{ state: StateData; warning?: string }> {
     return apiCall('/api/rebuild', { method: 'POST' });
   }
 
