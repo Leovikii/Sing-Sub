@@ -126,16 +126,16 @@ jobs:
           }
 
           async function fetchWithRetry(url) {
-            for (let attempt = 0; attempt < 3; attempt++) {
-              const response = await fetch(url, { redirect: 'manual', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+            for (let attempt = 0; attempt < 4; attempt++) {
+              const response = await fetch(url, { redirect: 'manual', headers: { Accept: 'application/json', 'User-Agent': 'sing-sub-worker' }, signal: AbortSignal.timeout(10000) });
               const retryable = response.status === 429 || [502, 503, 504].includes(response.status);
-              if (!retryable || attempt === 2) return response;
+              if (!retryable || attempt === 3) return response;
               await response.body?.cancel();
               const retryAfter = response.headers.get('retry-after');
               const retryAfterSeconds = retryAfter ? Number(retryAfter) : NaN;
               const delay = Number.isFinite(retryAfterSeconds)
-                ? Math.min(retryAfterSeconds * 1000, 2000)
-                : 350 * (2 ** attempt) + Math.floor(Math.random() * 150);
+                ? Math.min(Math.max(retryAfterSeconds * 1000, 750), 8000)
+                : 750 * (2 ** attempt) + Math.floor(Math.random() * 250);
               await new Promise(resolve => setTimeout(resolve, delay));
             }
             throw new Error('source request retry failed');

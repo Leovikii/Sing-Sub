@@ -4,24 +4,24 @@ import { isManagedAssetPath, isRulesetPath } from '../lib/assets';
 import { COMPILE_SRS_WORKFLOW_CONTENT, COMPILE_SRS_WORKFLOW_PATH } from '../lib/compile-srs-workflow';
 import { createRulesetDocument, fetchPublicRuleset, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource } from '../lib/rulesets';
 import { commitMultiFiles, deleteFileContent, fetchFileContent, GithubApiError, putFileContent, type GitTreeItem } from '../lib/github';
-import { pLimit, toRepoSession } from '../lib/helpers';
+import { toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
 import { invalidateAssetSnapshot } from '../lib/dashboard';
 
 async function refreshRulesetSources(content: string): Promise<string> {
   const metadata = readRulesetMetadata(content);
-  const limit = pLimit(2);
-  const refreshed = await Promise.all(metadata.sources.map((source, index) => limit(async () => {
+  const refreshed = [];
+  for (const [index, source] of metadata.sources.entries()) {
     try {
       const response = await fetchPublicRuleset(parseRulesetImportUrl(source.url));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const bucket = parseImportedRules(await readResponseTextLimited(response));
       if (!Object.values(bucket).some(values => values.length)) throw new Error('source contains no supported rules');
-      return { source: { ...source, last_updated: new Date().toISOString() }, bucket };
+      refreshed.push({ source: { ...source, last_updated: new Date().toISOString() }, bucket });
     } catch (error: any) {
       throw new Error(`Source ${index + 1} (${source.url}) failed: ${error.message}`);
     }
-  })));
+  }
   return createRulesetDocument(
     { ...metadata, sources: refreshed.map(result => result.source) },
     refreshed.map(result => result.bucket),

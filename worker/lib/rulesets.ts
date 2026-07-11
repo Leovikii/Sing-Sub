@@ -61,24 +61,28 @@ export async function fetchPublicJson(url: URL): Promise<Response> {
 }
 
 async function fetchJsonWithRetry(url: URL): Promise<Response> {
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     const response = await fetch(url, {
       redirect: 'manual',
       signal: AbortSignal.timeout(10_000),
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'User-Agent': 'sing-sub-worker' },
     });
     const retryable = response.status === 429 || [502, 503, 504].includes(response.status);
-    if (!retryable || attempt === 2) return response;
+    if (!retryable || attempt === 3) return response;
 
     await response.body?.cancel();
-    const retryAfter = response.headers.get('retry-after');
-    const retryAfterSeconds = retryAfter ? Number(retryAfter) : NaN;
-    const delay = Number.isFinite(retryAfterSeconds)
-      ? Math.min(retryAfterSeconds * 1000, 2_000)
-      : 350 * (2 ** attempt) + Math.floor(Math.random() * 150);
+    const delay = retryDelay(response.headers.get('retry-after'), attempt);
     await new Promise(resolve => setTimeout(resolve, delay));
   }
   throw new Error('Source request retry failed');
+}
+
+function retryDelay(retryAfter: string | null, attempt: number): number {
+  const retryAfterSeconds = retryAfter ? Number(retryAfter) : NaN;
+  if (Number.isFinite(retryAfterSeconds)) {
+    return Math.min(Math.max(retryAfterSeconds * 1_000, 750), 8_000);
+  }
+  return 750 * (2 ** attempt) + Math.floor(Math.random() * 250);
 }
 
 export async function readResponseTextLimited(response: Response): Promise<string> {
