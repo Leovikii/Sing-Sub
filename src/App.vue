@@ -1,33 +1,14 @@
 <template>
-  <div class="min-h-screen bg-bg-page">
+  <AppShell
+    :user="user"
+    v-model:activeTab="activeTab"
+    v-model:expanded="sidebarExpanded"
+    :show-navigation="!!stateData"
+    @open-settings="activeTab = 'settings'"
+  >
     <GlobalToast :status="saveStatus" :message="statusMessage" />
 
-    <header class="sticky top-0 z-40 border-b border-border-base bg-bg-surface/95 backdrop-blur-xl">
-      <div
-        class="hidden h-36 items-center justify-center transition-[width] duration-200 md:absolute md:flex"
-        :class="sidebarExpanded ? 'md:w-52' : 'md:w-24'"
-      >
-        <div class="flex h-14 w-14 items-center justify-center rounded-2xl border border-border-base bg-bg-elevated/40 shadow-md">
-          <img src="/favicon.svg" alt="Sing Sub Logo" class="h-8 w-8" />
-        </div>
-      </div>
-      <div
-        class="mx-auto max-w-7xl px-6 py-5 transition-[margin] duration-200 md:max-w-none md:px-12 md:py-0"
-        :class="sidebarExpanded ? 'md:ml-52' : 'md:ml-24'"
-      >
-        <AppHeader
-          :user="user"
-          :appVersion="APP_VERSION"
-          :settings="settings"
-          :loading="loadingData"
-          class="md:h-36"
-          @open-settings="activeTab = 'settings'"
-        />
-      </div>
-    </header>
-
-    <main class="transition-[margin] duration-200" :class="sidebarExpanded ? 'md:ml-52' : 'md:ml-24'">
-      <div class="mx-auto max-w-7xl space-y-10 p-6 pb-28 md:p-12">
+    <div class="mx-auto max-w-7xl space-y-10 p-6 md:p-12">
 
     <div v-if="isInitializing" class="flex justify-center items-center py-32">
       <Loader2 :size="32" class="animate-spin text-brand-pink" />
@@ -108,6 +89,7 @@
             <SettingsView
               :user="user"
               :settings="settings"
+              :appVersion="APP_VERSION"
               :loading="loadingData"
               @save="handleSaveSettings"
               @disconnect="handleDisconnect"
@@ -135,29 +117,20 @@
       @cancel="handleConflictAction('cancel')"
     />
 
-      </div>
-    </main>
-
-    <AppNavigation
-      v-if="stateData"
-      v-model:activeTab="activeTab"
-      v-model:expanded="sidebarExpanded"
-      :can-expand="isWideDesktop"
-    />
-  </div>
+    </div>
+  </AppShell>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { Loader2 } from 'lucide-vue-next';
-import AppHeader from './components/layout/AppHeader.vue';
+import AppShell from './components/layout/AppShell.vue';
 import ConnectForm from './components/ConnectForm.vue';
 import ProfileEditor from './components/ProfileEditor.vue';
 import ConfirmModal from './components/ui/ConfirmModal.vue';
 import ConflictModal from './components/ui/ConflictModal.vue';
 import GlobalToast from './components/ui/GlobalToast.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
-import AppNavigation from './components/layout/AppNavigation.vue';
 import AssetManager from './components/AssetManager.vue';
 import SettingsView from './components/SettingsView.vue';
 import { useApi } from './composables/useApi';
@@ -185,11 +158,11 @@ const assetType = ref<'node' | 'template' | 'patch' | 'ruleset'>('node');
 const assetManagerRef = ref<any>(null);
 const draftProfile = ref<Profile | null>(null);
 const draftProfileWasDirty = ref<boolean | null>(null);
-const sidebarPreference = ref(true);
+const sidebarOverride = ref<boolean | null>(null);
 const isWideDesktop = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches);
 const sidebarExpanded = computed({
-  get: () => isWideDesktop.value && sidebarPreference.value,
-  set: (value: boolean) => { sidebarPreference.value = value; },
+  get: () => sidebarOverride.value ?? isWideDesktop.value,
+  set: (value: boolean) => { sidebarOverride.value = value; },
 });
 
 const isDirty = ref(false);
