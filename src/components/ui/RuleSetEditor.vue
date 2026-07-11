@@ -36,6 +36,18 @@
             :readonly="readonly"
             @input="emitChange"
           ></textarea>
+          <div v-if="rule.type === 'external_url' && !readonly" class="mt-3 flex justify-end">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-medium text-text-primary bg-bg-elevated border border-border-base hover:border-brand-pink/50 hover:text-brand-pink transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+              :disabled="importingRuleId === rule.id || isEmptyBlock(rule)"
+              @click="importExternalRule(index)"
+            >
+              <Loader2 v-if="importingRuleId === rule.id" class="w-3.5 h-3.5 animate-spin" />
+              <Download v-else class="w-3.5 h-3.5" />
+              导入
+            </button>
+          </div>
           <p v-if="rule.rawError" class="mt-2 text-xs text-danger">{{ rule.rawError }}</p>
         </div>
       </div>
@@ -45,7 +57,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { Loader2, ListPlus, Trash2 } from 'lucide-vue-next';
+import { Download, Loader2, ListPlus, Trash2 } from 'lucide-vue-next';
 
 const props = defineProps<{
   modelValue: string;
@@ -70,6 +82,7 @@ interface RuleBlock {
 
 const rules = ref<RuleBlock[]>([]);
 const sourceDocument = ref<Record<string, any>>({});
+const importingRuleId = ref<string | null>(null);
 
 // Tracks the last value we emitted ourselves, so the reflected v-model update
 // doesn't get reparsed into a fresh set of rule ids (which would tear down and
@@ -84,15 +97,6 @@ watch(() => props.modelValue, (newVal) => {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
     sourceDocument.value = parsed;
     const parsedRules: RuleBlock[] = [];
-
-    // Parse _urls
-    if (parsed._urls && Array.isArray(parsed._urls) && parsed._urls.length > 0) {
-      parsedRules.push({
-        id: Math.random().toString(36).slice(2),
-        type: 'external_url',
-        content: parsed._urls.join('\n')
-      });
-    }
 
     // Parse rules. Anything beyond a single plain domain/domain_suffix key
     // (combined conditions, invert, domain_keyword, ip_cidr, ...) is preserved
@@ -148,12 +152,55 @@ function removeRule(index: number) {
   emitChange();
 }
 
+function mergeImportedRules(type: 'domain' | 'domain_suffix', values: string[]) {
+  if (values.length === 0) return;
+  const existing = rules.value.find(block => block.type === type);
+  if (existing) {
+    const merged = [...existing.content.split('\n'), ...values]
+      .map(value => value.trim())
+      .filter((value, index, all) => value && all.indexOf(value) === index);
+    existing.content = merged.join('\n');
+    return;
+  }
+  rules.value.push({
+    id: Math.random().toString(36).slice(2),
+    type,
+    content: values.join('\n'),
+  });
+}
+
+async function importExternalRule(index: number) {
+  const block = rules.value[index];
+  if (!block || block.type !== 'external_url') return;
+  const urls = block.content.split('\n').map(url => url.trim()).filter(Boolean);
+  if (urls.length === 0) return;
+
+  importingRuleId.value = block.id;
+  block.rawError = undefined;
+  try {
+    const response = await fetch('/api/ruleset/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || '导入失败');
+    mergeImportedRules('domain', Array.isArray(data.domain) ? data.domain : []);
+    mergeImportedRules('domain_suffix', Array.isArray(data.domain_suffix) ? data.domain_suffix : []);
+    rules.value.splice(index, 1);
+    emitChange();
+  } catch (error: any) {
+    block.rawError = error.message || '导入失败';
+    emit('validity-change', false);
+  } finally {
+    importingRuleId.value = null;
+  }
+}
+
 function emitChange() {
   const output = JSON.parse(JSON.stringify(sourceDocument.value || {})) as Record<string, any>;
   if (output.version === undefined) output.version = 4;
   output.rules = [];
-
-  const urls: string[] = [];
 
   for (const block of rules.value) {
     if (block.type === 'raw') {
@@ -173,18 +220,14 @@ function emitChange() {
     if (lines.length === 0) continue;
 
     if (block.type === 'external_url') {
-      urls.push(...lines);
+      block.rawError = '请先导入 URL 内容后再保存';
+      emit('validity-change', false);
+      return;
     } else if (block.type === 'domain') {
       output.rules.push({ domain: lines });
     } else if (block.type === 'domain_suffix') {
       output.rules.push({ domain_suffix: lines });
     }
-  }
-
-  if (urls.length > 0) {
-    output._urls = urls;
-  } else {
-    delete output._urls;
   }
 
   const json = JSON.stringify(output, null, 2);
