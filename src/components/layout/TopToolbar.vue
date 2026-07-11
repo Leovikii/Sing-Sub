@@ -85,6 +85,8 @@ const saveStatusIcon = computed(() => {
 });
 
 const saveStatusVariant = computed<'secondary' | 'primary' | 'danger' | 'success'>(() => {
+  if (props.saveStatus === 'idle' && props.isDirty) return 'primary';
+
   switch (props.saveStatus) {
     case 'success': return 'success';
     case 'error': return 'danger';

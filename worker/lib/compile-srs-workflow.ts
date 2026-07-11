@@ -16,7 +16,7 @@ on:
 
 jobs:
   compile:
-    if: \${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'ruleset: delete ') }}
+    if: "\${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'ruleset: delete ') }}"
     runs-on: ubuntu-latest
     permissions:
       contents: write
