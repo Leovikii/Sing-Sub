@@ -1,9 +1,12 @@
 import type { Env } from './types';
 import {
-  handleLogin, handleLogout, handleGetSettings, handlePutSettings,
-  handleDeleteSettings, handleGetState, handlePutState, handleRebuild, handlePreview, handleGetAssets,
-  handleGetFile, handleGetTemplate, handlePutFile, handleDeleteFile, handleImportRuleset
-} from './routes/api';
+  handleLogin, handleLogout, handleGetSettings, handlePutSettings, handleDeleteSettings,
+} from './routes/auth';
+import {
+  handleGetState, handlePutState, handleRebuild, handlePreview,
+} from './routes/profiles';
+import { handleGetAssets, handleGetFile, handleGetTemplate } from './routes/assets';
+import { handlePutFile, handleDeleteFile, handleImportRuleset } from './routes/rulesets';
 import { handleSubscription, handleRuleset } from './routes/sub';
 import { addSecurityHeaders, errorResponse } from './lib/security';
 
