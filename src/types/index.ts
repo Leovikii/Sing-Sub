@@ -35,7 +35,6 @@ export interface Profile {
   templateUrl: string;
   patchUrl?: string;
   nodesPath: string;
-  rulesetPaths?: string[];
   rules: Rule[];
   inboundRules: InboundRule[];
   overrides?: Record<string, unknown>;

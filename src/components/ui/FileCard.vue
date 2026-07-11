@@ -16,11 +16,6 @@
         <div class="flex items-center gap-2 min-w-0">
           <span class="card-title text-lg font-semibold text-text-primary truncate group-hover:text-brand-pink transition-colors">{{ title }}</span>
           <span class="text-text-muted font-mono text-sm select-none hidden sm:inline">.json</span>
-          
-          <div class="flex items-center gap-1.5 md:gap-2 ml-auto md:ml-2 shrink-0">
-            <span class="bg-bg-elevated text-text-muted text-[11px] md:text-xs rounded-full px-2 py-0.5 md:px-2.5 md:py-1 flex items-center gap-1 border border-white/5"><ArrowDown :size="12"/> {{ inboundCount }}</span>
-            <span class="bg-bg-elevated text-text-muted text-[11px] md:text-xs rounded-full px-2 py-0.5 md:px-2.5 md:py-1 flex items-center gap-1 border border-white/5"><ArrowUp :size="12"/> {{ outboundCount }}</span>
-          </div>
         </div>
 
         <div class="flex items-center gap-2">
@@ -81,7 +76,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Pencil, MoreHorizontal, ArrowDown, ArrowUp } from 'lucide-vue-next';
+import { Pencil, MoreHorizontal } from 'lucide-vue-next';
 import PopoverMenu from './PopoverMenu.vue';
 import ToolbarButton from './ToolbarButton.vue';
 
@@ -95,8 +90,6 @@ interface MenuItem {
 const props = defineProps<{
   title: string;
   note?: string;
-  inboundCount: number;
-  outboundCount: number;
   updatedAt?: number;
   menuItems: MenuItem[];
 }>();

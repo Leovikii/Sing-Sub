@@ -6,7 +6,7 @@ export interface RuleBucket {
   domain_suffix: string[];
 }
 
-export interface RulesetSource extends RuleBucket {
+export interface RulesetSource {
   url: string;
   interval_hours: number;
   last_updated?: string;
@@ -45,17 +45,34 @@ export function parseRulesetImportUrl(raw: string): URL {
 export async function fetchPublicRuleset(url: URL): Promise<Response> {
   let current = url;
   for (let redirects = 0; redirects <= 3; redirects++) {
-    const response = await fetch(current, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10_000),
-      headers: { Accept: 'application/json' },
-    });
+    const response = await fetchRulesetWithRetry(current);
     if (response.status < 300 || response.status >= 400) return response;
     const location = response.headers.get('location');
     if (!location) throw new Error('Import redirect has no location');
     current = parseRulesetImportUrl(new URL(location, current).toString());
   }
   throw new Error('Import exceeded the redirect limit');
+}
+
+async function fetchRulesetWithRetry(url: URL): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10_000),
+      headers: { Accept: 'application/json' },
+    });
+    const retryable = response.status === 429 || [502, 503, 504].includes(response.status);
+    if (!retryable || attempt === 2) return response;
+
+    await response.body?.cancel();
+    const retryAfter = response.headers.get('retry-after');
+    const retryAfterSeconds = retryAfter ? Number(retryAfter) : NaN;
+    const delay = Number.isFinite(retryAfterSeconds)
+      ? Math.min(retryAfterSeconds * 1000, 2_000)
+      : 350 * (2 ** attempt) + Math.floor(Math.random() * 150);
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+  throw new Error('Source request retry failed');
 }
 
 export async function readResponseTextLimited(response: Response): Promise<string> {
@@ -173,19 +190,18 @@ function parseBucket(value: unknown, label: string): RuleBucket {
 function parseSource(value: unknown, index: number): RulesetSource {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`source ${index + 1} must be an object`);
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).some(key => !['url', 'interval_hours', 'last_updated', 'domain', 'domain_suffix'].includes(key))) {
+  if (Object.keys(record).some(key => !['url', 'interval_hours', 'last_updated'].includes(key))) {
     throw new Error(`source ${index + 1} has unsupported fields`);
   }
   if (typeof record.url !== 'string') throw new Error(`source ${index + 1} URL is required`);
   const url = parseRulesetImportUrl(record.url).toString();
   if (![0, 24, 168, 720, 8760].includes(record.interval_hours as number)) throw new Error(`source ${index + 1} has invalid interval`);
   if (record.last_updated !== undefined && typeof record.last_updated !== 'string') throw new Error(`source ${index + 1} has invalid timestamp`);
-  const bucket = parseBucket({ domain: record.domain ?? [], domain_suffix: record.domain_suffix ?? [] }, `source ${index + 1}`);
-  return { url, interval_hours: record.interval_hours as number, last_updated: record.last_updated as string | undefined, ...bucket };
+  return { url, interval_hours: record.interval_hours as number, last_updated: record.last_updated as string | undefined };
 }
 
-export function createRulesetDocument(metadata: RulesetMetadata): string {
-  const merged = mergeRuleBuckets([metadata.manual, ...metadata.sources]);
+export function createRulesetDocument(metadata: RulesetMetadata, imported: RuleBucket[]): string {
+  const merged = mergeRuleBuckets([metadata.manual, ...imported]);
   const rule: Record<string, string[]> = {};
   if (merged.domain.length) rule.domain = merged.domain;
   if (merged.domain_suffix.length) rule.domain_suffix = merged.domain_suffix;

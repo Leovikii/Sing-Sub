@@ -30,12 +30,11 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
     userLogin: userData.login,
     userAvatar: userData.avatar_url,
     defaultBranch: repository.default_branch,
-    publicBaseUrl: new URL(request.url).origin,
   };
   await putUserSettings(settings, env);
   if (!existing) await env.SESSIONS.put(`sub:${subToken}`, JSON.stringify({ owner, repo }));
 
-  const session: RepoSession = { owner, repo, pat, userLogin: userData.login, defaultBranch: repository.default_branch, publicBaseUrl: settings.publicBaseUrl };
+  const session: RepoSession = { owner, repo, pat, userLogin: userData.login, defaultBranch: repository.default_branch };
   const { warning } = await rebuildWithWarning(session, subToken, env);
   const sessionId = await createSession(owner, repo, env);
 
@@ -104,7 +103,6 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
     userLogin: userData.login,
     userAvatar: userData.avatar_url,
     defaultBranch: repository.default_branch,
-    publicBaseUrl: new URL(request.url).origin,
   };
   if (isRepoChange) await env.SESSIONS.delete(`user:${auth.session.owner}/${auth.session.repo}`);
   await putUserSettings(settings, env);
@@ -116,7 +114,7 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
     cookieHeader = sessionCookieHeader(await createSession(owner, repo, env));
   }
 
-  const session: RepoSession = { owner, repo, pat: effectivePat, userLogin: userData.login, defaultBranch: repository.default_branch, publicBaseUrl: settings.publicBaseUrl };
+  const session: RepoSession = { owner, repo, pat: effectivePat, userLogin: userData.login, defaultBranch: repository.default_branch };
   const { warning } = await rebuildWithWarning(session, subToken, env);
   return jsonResponse(
     { owner, repo, subToken, userLogin: settings.userLogin, userAvatar: settings.userAvatar, warning },

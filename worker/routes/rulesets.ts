@@ -2,7 +2,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../lib/auth';
 import { isManagedAssetPath, isRulesetPath } from '../lib/assets';
 import { COMPILE_SRS_WORKFLOW_CONTENT, COMPILE_SRS_WORKFLOW_PATH } from '../lib/compile-srs-workflow';
-import { createRulesetDocument, fetchPublicRuleset, mergeRuleBuckets, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource, type RulesetSource } from '../lib/rulesets';
+import { createRulesetDocument, fetchPublicRuleset, mergeRuleBuckets, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource } from '../lib/rulesets';
 import { commitMultiFiles, deleteFileContent, fetchFileContent, GithubApiError, putFileContent, type GitTreeItem } from '../lib/github';
 import { pLimit, toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
@@ -40,19 +40,22 @@ export async function handleImportRuleset(request: Request, env: Env): Promise<R
 
 async function refreshRulesetSources(content: string): Promise<string> {
   const metadata = readRulesetMetadata(content);
-  const limit = pLimit(4);
-  const sources = await Promise.all(metadata.sources.map((source, index) => limit(async (): Promise<RulesetSource> => {
+  const limit = pLimit(2);
+  const refreshed = await Promise.all(metadata.sources.map((source, index) => limit(async () => {
     try {
       const response = await fetchPublicRuleset(parseRulesetImportUrl(source.url));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const bucket = parseImportedRules(await readResponseTextLimited(response));
       if (!bucket.domain.length && !bucket.domain_suffix.length) throw new Error('source contains no domain rules');
-      return { ...source, ...bucket, last_updated: new Date().toISOString() };
+      return { source: { ...source, last_updated: new Date().toISOString() }, bucket };
     } catch (error: any) {
       throw new Error(`Source ${index + 1} (${source.url}) failed: ${error.message}`);
     }
   })));
-  return createRulesetDocument({ ...metadata, sources });
+  return createRulesetDocument(
+    { ...metadata, sources: refreshed.map(result => result.source) },
+    refreshed.map(result => result.bucket),
+  );
 }
 
 export async function handlePutFile(request: Request, env: Env): Promise<Response> {
@@ -107,9 +110,9 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
     if (oldCompiledPath) addDeletion(oldCompiledPath, !!oldCompiledFile);
 
     const actionMessage = isRename
-      ? `🤖 Sing-Sub: asset: rename ${oldPath!.split('/').pop()} to ${fileName}`
-      : `🤖 Sing-Sub: asset: update ${fileName}`;
-    await commitMultiFiles(session, treeItems, workflowNeedsSync ? 'ruleset: synchronize compiler and update source' : actionMessage);
+      ? `ruleset: rename ${oldPath!.split('/').pop()} to ${fileName}`
+      : `ruleset: ${sha ? 'update' : 'create'} ${fileName}`;
+    await commitMultiFiles(session, treeItems, actionMessage);
   } catch (error) {
     if (error instanceof GithubApiError && error.status === 409) return errorResponse('File was modified; reload it before saving', 409);
     throw error;
@@ -120,9 +123,12 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
 async function putAssetFile(path: string, content: string, sha: string | undefined, oldPath: string | undefined, session: ReturnType<typeof toRepoSession>): Promise<Response> {
   const isRename = !!oldPath && oldPath !== path;
   const fileName = path.split('/').pop()!;
+  const scope = path.startsWith('sing-sub/nodes/') ? 'node'
+    : path.startsWith('sing-sub/templates/') ? 'template'
+      : path.startsWith('sing-sub/patches/') ? 'patch' : 'asset';
   const actionMessage = isRename
-    ? `🤖 Sing-Sub: asset: rename ${oldPath!.split('/').pop()} to ${fileName}`
-    : `🤖 Sing-Sub: asset: update ${fileName}`;
+    ? `${scope}: rename ${oldPath!.split('/').pop()} to ${fileName}`
+    : `${scope}: ${sha ? 'update' : 'create'} ${fileName}`;
   try {
     if (isRename) {
       const treeItems: GitTreeItem[] = [
@@ -161,14 +167,17 @@ export async function handleDeleteFile(request: Request, env: Env): Promise<Resp
 
   try {
     if (!isRulesetPath(path)) {
-      await deleteFileContent(path, session, file.sha, `🤖 Sing-Sub: asset: delete ${path.split('/').pop()}`);
+      const scope = path.startsWith('sing-sub/nodes/') ? 'node'
+        : path.startsWith('sing-sub/templates/') ? 'template'
+          : path.startsWith('sing-sub/patches/') ? 'patch' : 'asset';
+      await deleteFileContent(path, session, file.sha, `${scope}: delete ${path.split('/').pop()}`);
     } else {
       const basename = path.split('/').pop()!.replace(/\.json$/, '');
       const compiledPath = `sing-sub/rulesets/compiled/${basename}.srs`;
       const compiledFile = await fetchFileContent(compiledPath, session);
       const treeItems: GitTreeItem[] = [{ path, mode: '100644', type: 'blob', sha: null }];
       if (compiledFile) treeItems.push({ path: compiledPath, mode: '100644', type: 'blob', sha: null });
-      await commitMultiFiles(session, treeItems, `🤖 Sing-Sub: ruleset: delete ${basename}${compiledFile ? ' and compiled artifact' : ''}`);
+      await commitMultiFiles(session, treeItems, `ruleset: delete ${basename}.json`);
     }
   } catch (error) {
     if (error instanceof GithubApiError && error.status === 409) return errorResponse('文件已被修改，请重新加载后再试', 409);

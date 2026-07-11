@@ -6,8 +6,6 @@
         v-for="file in files"
         :key="file.path"
         :title="getBasename(file.path).replace(/\.json$/, '')"
-        :inboundCount="file.inboundsCount"
-        :outboundCount="file.outboundsCount"
         :note="file.note"
         :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'patch' ? Puzzle : Shield)"
         :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'patch' ? 'PATCH' : 'RULESET')"
@@ -96,6 +94,7 @@ const emit = defineEmits<{
   'refresh': [];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
   'delete': [file: any];
+  'saved': [file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'patch' | 'ruleset' }];
   'conflict': [resolve: (action: 'reload' | 'overwrite' | 'cancel') => void];
 }>();
 
@@ -295,12 +294,19 @@ async function saveFileCode() {
     isEditorDirty.value = false;
     originalContent.value = editorContent.value;
     originalFileNote.value = localFileNote.value;
+    emit('saved', {
+      path: newPath,
+      oldPath: isRename ? editingFile.value.path : undefined,
+      note: localFileNote.value,
+      type: props.type,
+    });
     if (data.warning) {
       emit('status', 'warning', data.warning, 5000);
+    } else if (props.type === 'ruleset') {
+      emit('status', 'success', '规则集已保存，SRS 正在编译', 5000);
     } else {
       emit('status', 'success', '保存成功');
     }
-    emit('refresh');
     editingFile.value = null;
   } catch (e: any) {
     emit('status', 'error', '保存失败: ' + e.message);

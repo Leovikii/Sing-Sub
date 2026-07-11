@@ -12,7 +12,6 @@ export interface UserSettings {
   userLogin: string;
   userAvatar: string;
   defaultBranch?: string;
-  publicBaseUrl: string;
 }
 
 export interface SessionData {
@@ -26,7 +25,6 @@ export interface Profile {
   templateUrl: string;
   patchUrl?: string;
   nodesPath: string;
-  rulesetPaths?: string[];
   rules: { group: string; filters: { action: 'include' | 'exclude'; keyword: string }[] }[];
   inboundRules: { tag: string; filters: { action: 'include' | 'exclude'; keyword: string }[] }[];
   overrides?: Record<string, unknown>;
