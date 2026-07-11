@@ -22,7 +22,7 @@ import { ref, onMounted, onBeforeUnmount, watch, shallowRef } from 'vue';
 import EditorToolbar from './EditorToolbar.vue';
 
 // CodeMirror Core
-import { EditorState, Compartment } from '@codemirror/state';
+import { EditorState, Compartment, Transaction } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, undo, redo, undoDepth, redoDepth } from '@codemirror/commands';
 import { search, searchKeymap, openSearchPanel } from '@codemirror/search';
@@ -127,9 +127,9 @@ const themeExtensions = EditorView.theme({
     borderTop: "none !important",
     borderTopLeftRadius: "0px !important",
     borderTopRightRadius: "0px !important",
-    borderBottomLeftRadius: "8px !important",
-    borderBottomRightRadius: "8px !important",
-    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5) !important",
+    borderBottomLeftRadius: "var(--radius-md) !important",
+    borderBottomRightRadius: "var(--radius-md) !important",
+    boxShadow: "var(--shadow-lg) !important",
     color: "#f5f5f7",
     padding: "6px 8px !important",
     width: "320px",
@@ -144,7 +144,7 @@ const themeExtensions = EditorView.theme({
     width: "140px",
     backgroundColor: "#0a0a0a !important",
     border: "1px solid #38383a !important",
-    borderRadius: "4px !important",
+    borderRadius: "var(--radius-xs) !important",
     padding: "4px 8px !important",
     color: "#f5f5f7 !important",
     outline: "none !important",
@@ -157,7 +157,7 @@ const themeExtensions = EditorView.theme({
   ".cm-search button": {
     backgroundColor: "transparent !important",
     border: "1px solid transparent !important",
-    borderRadius: "4px !important",
+    borderRadius: "var(--radius-xs) !important",
     padding: "4px 8px !important",
     color: "#86868b !important",
     cursor: "pointer !important",
@@ -273,7 +273,8 @@ watch(() => props.modelValue, (newVal) => {
   const v = getActiveView();
   if (v && v.state.doc.toString() !== newVal) {
     v.dispatch({
-      changes: { from: 0, to: v.state.doc.length, insert: newVal }
+      changes: { from: 0, to: v.state.doc.length, insert: newVal },
+      annotations: Transaction.addToHistory.of(false),
     });
   }
 });

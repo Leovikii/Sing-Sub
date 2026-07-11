@@ -2,9 +2,9 @@ import type { Env } from './types';
 import {
   handleLogin, handleLogout, handleGetSettings, handlePutSettings,
   handleDeleteSettings, handleGetState, handlePutState, handleRebuild, handlePreview, handleGetAssets,
-  handleGetFile, handlePutFile, handleDeleteFile
+  handleGetFile, handleGetTemplate, handlePutFile, handleDeleteFile
 } from './routes/api';
-import { handleSubscription } from './routes/sub';
+import { handleSubscription, handleRuleset } from './routes/sub';
 import { addSecurityHeaders, errorResponse } from './lib/security';
 
 export default {
@@ -41,6 +41,8 @@ export default {
         response = await handleGetAssets(request, env);
       } else if (path === '/api/file' && method === 'GET') {
         response = await handleGetFile(request, env);
+      } else if (path === '/api/template' && method === 'GET') {
+        response = await handleGetTemplate(request, env);
       } else if (path === '/api/file' && method === 'PUT') {
         response = await handlePutFile(request, env);
       } else if (path === '/api/file' && method === 'DELETE') {
@@ -53,7 +55,14 @@ export default {
         } else {
           response = errorResponse('Invalid subscription URL', 400);
         }
-      } else if (path.startsWith('/api/') || path.startsWith('/sub/')) {
+      } else if (path.startsWith('/rules/') && path.endsWith('.srs') && method === 'GET') {
+        const parts = path.slice(7, -4).split('/');
+        if (parts.length === 2) {
+          response = await handleRuleset(request, env, parts[0], parts[1]);
+        } else {
+          response = errorResponse('Invalid ruleset URL', 400);
+        }
+      } else if (path.startsWith('/api/') || path.startsWith('/sub/') || path.startsWith('/rules/')) {
         response = errorResponse('Not found', 404);
       } else {
         return new Response(null, { status: 404 });

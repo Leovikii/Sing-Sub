@@ -2,26 +2,26 @@
   <div class="max-w-md mx-auto mt-20">
     <div class="glass p-8 space-y-8 shadow-2xl">
       <div class="text-center space-y-2">
-        <h2 class="text-2xl font-semibold text-[#f5f5f7]">连接 GitHub 仓库</h2>
-        <p class="text-sm text-[#86868b]">关联私有仓库以管理订阅配置</p>
+        <h2 class="text-2xl font-semibold text-text-primary">连接 GitHub 仓库</h2>
+        <p class="text-sm text-text-muted">关联私有仓库以管理订阅配置</p>
       </div>
       <form @submit.prevent="$emit('save')" class="space-y-6">
         <div class="space-y-4">
-          <AppleInput :modelValue="ownerRepo" @update:modelValue="onOwnerRepoChange" placeholder="owner/repo (如: user/singbox-private)" />
-          <AppleInput :modelValue="setupData.pat" @update:modelValue="update('pat', $event)" type="password" placeholder="GitHub PAT (repo 读写权限)" />
+          <Input :modelValue="ownerRepo" @update:modelValue="onOwnerRepoChange" placeholder="owner/repo (如: user/singbox-private)" />
+          <Input :modelValue="setupData.pat" @update:modelValue="update('pat', $event)" type="password" placeholder="GitHub PAT (repo 读写权限)" />
         </div>
-        <AppleButton type="submit" :loading="loading" variant="primary" class="w-full !py-3">
+        <Button type="submit" :loading="loading" variant="primary" class="w-full !py-3">
           登录
-        </AppleButton>
+        </Button>
       </form>
-      <div class="border-t border-[#38383a] pt-4 space-y-2">
-        <p class="text-xs text-[#86868b] leading-relaxed">
+      <div class="border-t border-border-base pt-4 space-y-2">
+        <p class="text-xs text-text-muted leading-relaxed">
           本站不存储您的 GitHub 密码，PAT 仅用于访问您指定的仓库。
           建议为 PAT 设置最小权限范围（仅 repo）并定期轮换。
         </p>
-        <p class="text-xs text-[#86868b] leading-relaxed">
+        <p class="text-xs text-text-muted leading-relaxed">
           本项目完全开源，建议自行部署使用。
-          <a href="https://github.com/Leovikii/Sing-Sub" target="_blank" rel="noopener" class="text-[#F596AA] hover:underline">查看源码</a>
+          <a href="https://github.com/Leovikii/Sing-Sub" target="_blank" rel="noopener" class="text-brand-pink hover:underline">查看源码</a>
         </p>
       </div>
     </div>
@@ -30,8 +30,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import AppleInput from './ui/AppleInput.vue';
-import AppleButton from './ui/AppleButton.vue';
+import Input from './ui/Input.vue';
+import Button from './ui/Button.vue';
 import type { SetupData } from '../types';
 
 const props = defineProps<{

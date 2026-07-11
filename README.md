@@ -38,7 +38,7 @@ Edge-based multi-environment configuration distribution console for [sing-box](h
    ```
    *Note: Templates can also be hosted anywhere as public URLs (e.g., raw GitHub links).*
 
-2. A **GitHub Personal Access Token (PAT)** with `repo` permission (read/write private repos). Create one at: https://github.com/settings/tokens
+2. A **GitHub Personal Access Token (PAT)** with `repo` and `workflow` permissions. (`repo` is for reading/writing configs, and `workflow` is required for automatically compiling custom rule-sets via Actions). Create one at: https://github.com/settings/tokens
 3. A **Cloudflare account** with a custom domain.
 
 ## Deployment

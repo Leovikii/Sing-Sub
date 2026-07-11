@@ -1,11 +1,13 @@
-name: Deploy to Cloudflare Workers
+name: CI
 
 on:
-  push:
+  pull_request:
     branches: [main]
+    types: [closed]
 
 jobs:
-  deploy:
+  typecheck:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -14,6 +16,3 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run build
-      - run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -12,14 +12,14 @@
     @action="handleCardAction"
   >
     <template #actions>
-      <button
+      <ToolbarButton
         @click.stop="$emit('copyLink', profile.name || '', index)"
-        :class="['flex-1 md:flex-none flex items-center justify-center gap-1.5 h-10 md:w-auto md:h-auto md:px-3 md:py-2 rounded-xl md:rounded-full text-[13px] md:text-xs font-medium transition-colors cursor-pointer border', copyStatus ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-[#86868b] hover:text-[#f5f5f7] bg-[#2c2c2e] border-[#38383a] hover:border-[#F596AA]']"
-        :title="copyStatus ? '已复制' : '订阅'"
-      >
-        <component :is="copyStatus ? Check : Link2" :size="14" />
-        <span class="ml-1">{{ copyStatus ? '已复制' : '订阅' }}</span>
-      </button>
+        :icon="copyStatus ? Check : Link2"
+        :label="copyStatus ? '已复制订阅链接' : '订阅'"
+        variant="emphasis"
+        size="card"
+        mobileLabel
+      />
     </template>
   </FileCard>
 
@@ -34,14 +34,13 @@
     :editableNote="true"
     extension=".json"
     :isDirty="isDirty"
-    :isSaving="false"
-    :showSave="isDirty"
+    :isSaving="isSaving || globalBusy"
+    :showSave="true"
     saveText="保存"
     :showViewToggle="true"
     v-model:viewMode="viewMode"
     @save="handleLocalSave"
-    @reset="handleLocalReset"
-    @close="isOpen = false"
+    @close="handleClose"
   >
     <template #default>
       <!-- Visual Editor -->
@@ -69,16 +68,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted, defineAsyncComponent } from 'vue';
 import { Trash2, Copy, Link2, Check } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
+import ToolbarButton from './ui/ToolbarButton.vue';
 import EditorModal from './ui/EditorModal.vue';
-import CodeEditor from './ui/CodeEditor.vue';
 import ProfileTemplateConfig from './profile/ProfileTemplateConfig.vue';
 import ProfileInbounds from './profile/ProfileInbounds.vue';
 import ProfileOutbounds from './profile/ProfileOutbounds.vue';
 import type { Profile } from '../types';
 import { useApi } from '../composables/useApi';
+
+const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
 
 
 const props = defineProps<{
@@ -89,6 +90,10 @@ const props = defineProps<{
   availablePatches?: string[];
   copyStatus: boolean;
   expanded?: boolean;
+  isDraft?: boolean;
+  globalBusy?: boolean;
+  isSaving?: boolean;
+  saveFailed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -96,6 +101,7 @@ const emit = defineEmits<{
   copyLink: [name: string, index: number];
   remove: [index: number];
   duplicate: [profile: Profile];
+  discard: [profile: Profile];
   save: [name: string];
   'update:expanded': [value: boolean];
   status: [type: 'success' | 'warning' | 'error', message: string, duration?: number];
@@ -119,7 +125,12 @@ function handleCardAction(action: string) {
   if (action === 'remove') emit('remove', props.index);
 }
 
-const { getFile, postPreview } = useApi();
+function handleClose() {
+  if (props.isDraft) emit('discard', props.profile);
+  isOpen.value = false;
+}
+
+const { getFile, getTemplate, postPreview } = useApi();
 const fetchedTemplateData = ref<any>(null);
 const fetchedNodesData = ref<any>(null);
 
@@ -160,6 +171,45 @@ async function fetchPreview() {
   }
 }
 
+let fetchTemplateSeq = 0;
+let fetchNodesSeq = 0;
+
+async function fetchTemplateData(url: string) {
+  const seq = ++fetchTemplateSeq;
+  if (!url) {
+    fetchedTemplateData.value = null;
+    return;
+  }
+  try {
+    const res = await getTemplate(url);
+    if (seq !== fetchTemplateSeq) return;
+    fetchedTemplateData.value = res.content;
+  } catch (e: any) {
+    if (seq !== fetchTemplateSeq) return;
+    console.error('Failed to fetch template', e);
+    emit('status', 'error', '获取模板失败: ' + e.message);
+    fetchedTemplateData.value = null;
+  }
+}
+
+async function fetchNodesData(path: string) {
+  const seq = ++fetchNodesSeq;
+  if (!path) {
+    fetchedNodesData.value = null;
+    return;
+  }
+  try {
+    const res = await getFile(path);
+    if (seq !== fetchNodesSeq) return;
+    fetchedNodesData.value = JSON.parse(res.content);
+  } catch (e: any) {
+    if (seq !== fetchNodesSeq) return;
+    console.error('Failed to fetch nodes', e);
+    emit('status', 'error', '获取节点文件失败: ' + e.message);
+    fetchedNodesData.value = null;
+  }
+}
+
 watch(isOpen, (open) => {
   if (open) {
     document.body.style.overflow = 'hidden';
@@ -167,6 +217,8 @@ watch(isOpen, (open) => {
     localProfile.value = JSON.parse(initialProfileState);
     localProfileName.value = props.profile.name || 'untitled';
     localProfileNote.value = props.profile.note || '';
+    fetchTemplateData(localProfile.value.templateUrl || '');
+    fetchNodesData(localProfile.value.nodesPath || '');
     if (viewMode.value === 'preview') {
       fetchPreview();
     }
@@ -174,6 +226,21 @@ watch(isOpen, (open) => {
     document.body.style.overflow = '';
   }
 }, { immediate: true });
+
+watch(() => localProfile.value.templateUrl, (url) => { if (isOpen.value) fetchTemplateData(url || ''); });
+watch(() => localProfile.value.nodesPath, (path) => { if (isOpen.value) fetchNodesData(path || ''); });
+
+// Watch for save completion
+watch(() => props.isSaving, (saving, wasSaving) => {
+  if (wasSaving && !saving) {
+    if (!props.saveFailed) {
+      // Save succeeded: clear dirty and close modal
+      initialProfileState = JSON.stringify(props.profile);
+      isOpen.value = false;
+    }
+    // If saveFailed, keep modal open so user can see error and retry
+  }
+});
 
 onUnmounted(() => {
   if (isOpen.value) {
@@ -184,51 +251,6 @@ onUnmounted(() => {
 watch(viewMode, (mode) => {
   if (mode === 'preview') {
     fetchPreview();
-  }
-});
-
-async function fetchTemplateData(url: string) {
-  if (!url) {
-    fetchedTemplateData.value = null;
-    return;
-  }
-  try {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      const res = await fetch(url);
-      fetchedTemplateData.value = await res.json();
-    } else {
-      const res = await getFile(url);
-      fetchedTemplateData.value = JSON.parse(res.content);
-    }
-  } catch (e: any) {
-    console.error('Failed to fetch template', e);
-    emit('status', 'error', '获取模板失败: ' + e.message);
-    fetchedTemplateData.value = null;
-  }
-}
-
-async function fetchNodesData(path: string) {
-  if (!path) {
-    fetchedNodesData.value = null;
-    return;
-  }
-  try {
-    const res = await getFile(path);
-    fetchedNodesData.value = JSON.parse(res.content);
-  } catch (e: any) {
-    console.error('Failed to fetch nodes', e);
-    emit('status', 'error', '获取节点文件失败: ' + e.message);
-    fetchedNodesData.value = null;
-  }
-}
-
-watch(() => localProfile.value.templateUrl, (url) => { if(isOpen.value) fetchTemplateData(url || '') }, { immediate: true });
-watch(() => localProfile.value.nodesPath, (path) => { if(isOpen.value) fetchNodesData(path || '') }, { immediate: true });
-
-watch(isOpen, (open) => {
-  if (open) {
-    fetchTemplateData(localProfile.value.templateUrl || '');
-    fetchNodesData(localProfile.value.nodesPath || '');
   }
 });
 
@@ -259,13 +281,5 @@ function handleLocalSave() {
   
   emit('save', props.profile.name || '');
   isOpen.value = false;
-}
-
-function handleLocalReset() {
-  if (!initialProfileState) return;
-  localProfile.value = JSON.parse(initialProfileState);
-  
-  localProfileName.value = localProfile.value.name || 'untitled';
-  localProfileNote.value = localProfile.value.note || '';
 }
 </script>

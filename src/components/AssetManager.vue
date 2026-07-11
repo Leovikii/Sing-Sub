@@ -1,16 +1,16 @@
 <template>
   <div class="asset-manager space-y-6">
     <!-- Assets List -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,34rem),1fr))] gap-6">
       <FileCard
         v-for="file in files"
         :key="file.path"
         :title="getBasename(file.path).replace(/\.json$/, '')"
         :inboundCount="file.inboundsCount"
         :outboundCount="file.outboundsCount"
-        :icon="type === 'node' ? 'network' : (type === 'template' ? 'layout-template' : 'puzzle')"
-        :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : 'PATCH')"
-        :tagStyle="type === 'node' ? 'bg-[#F596AA]/10 text-[#F596AA] border border-[#F596AA]/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20')"
+        :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'patch' ? Puzzle : Shield)"
+        :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'patch' ? 'PATCH' : 'RULESET')"
+        :tagStyle="type === 'node' ? 'bg-brand-pink/10 text-brand-pink border border-brand-pink/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : type === 'patch' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20')"
         :menuItems="fileMenuItems"
         @click="editFile(file, 'preview')"
         @edit="editFile(file)"
@@ -20,8 +20,8 @@
 
 
 
-    <div v-if="files.length === 0" class="text-center py-20 text-[#86868b]">
-      {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : (type === 'template' ? '暂无模板文件。' : '暂无补丁文件。') }}
+    <div v-if="files.length === 0" class="text-center py-20 text-text-muted">
+      {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : (type === 'template' ? '暂无模板文件。' : (type === 'patch' ? '暂无补丁文件。' : '暂无规则集文件。')) }}
     </div>
 
     <!-- Editor Modal -->
@@ -38,17 +38,60 @@
       :editableNote="true"
       extension=".json"
       :isDirty="isEditorDirty || isNameDirty || isNoteDirty"
-      :isSaving="isSaving"
-      :showSave="isEditorDirty || isNameDirty || isNoteDirty"
+      :isSaving="isSaving || globalBusy"
+      :showSave="true"
+      :saveDisabled="!isValidJson"
       saveText="保存"
       :showViewToggle="true"
       @save="saveFileCode"
-      @reset="resetFileCode"
       @close="closeEditor"
     >
-      <CodeEditor
+      <template v-if="type === 'ruleset'" #header-actions>
+        <PopoverMenu
+          v-model:isOpen="addRuleMenuOpen"
+          :class="viewMode === 'preview' ? 'invisible pointer-events-none' : ''"
+          wrapperClass="relative flex"
+          contentClass="right-0 top-full mt-2 w-44 p-1.5 rounded-xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-lg origin-top-right flex flex-col gap-0.5"
+        >
+          <template #trigger="{ toggle, isOpen }">
+            <ToolbarButton
+              :icon="Plus"
+              label="新增"
+              size="compact"
+              :active="isOpen"
+              @click="toggle"
+            />
+          </template>
+
+          <template #content="{ close }">
+            <button
+              @click="ruleSetEditorRef?.addRule('domain'); close()"
+              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              添加完整域名
+            </button>
+            <button
+              @click="ruleSetEditorRef?.addRule('domain_suffix'); close()"
+              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              添加域名后缀
+            </button>
+            <button
+              @click="ruleSetEditorRef?.addRule('external_url'); close()"
+              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              导入外部 JSON
+            </button>
+          </template>
+        </PopoverMenu>
+      </template>
+
+      <component
+        :is="type === 'ruleset' && viewMode === 'edit' ? RuleSetEditor : CodeEditor"
+        :ref="type === 'ruleset' && viewMode === 'edit' ? (el => ruleSetEditorRef = (el as any)) : undefined"
         v-model="editorContent"
         :readonly="viewMode === 'preview'"
+        @validity-change="ruleSetContentValid = $event"
         :loading="isLoading"
         loadingText="读取中..."
         class="min-h-[60vh]"
@@ -60,21 +103,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { Trash2 } from 'lucide-vue-next';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { Trash2, Plus, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
-import CodeEditor from './ui/CodeEditor.vue';
+import PopoverMenu from './ui/PopoverMenu.vue';
+import ToolbarButton from './ui/ToolbarButton.vue';
+
+const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
+const RuleSetEditor = defineAsyncComponent(() => import('./ui/RuleSetEditor.vue'));
 
 const props = defineProps<{
   files: any[];
-  type: 'node' | 'template' | 'patch';
+  type: 'node' | 'template' | 'patch' | 'ruleset';
+  globalBusy?: boolean;
 }>();
 
 const emit = defineEmits<{
   'refresh': [];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
   'delete': [file: any];
+  'conflict': [resolve: (action: 'reload' | 'overwrite' | 'cancel') => void];
 }>();
 
 const editingFile = ref<any>(null);
@@ -89,6 +138,9 @@ const isEditorDirty = ref(false);
 const localFileName = ref('');
 const localFileNote = ref('');
 const originalFileNote = ref('');
+const addRuleMenuOpen = ref(false);
+const ruleSetEditorRef = ref<InstanceType<typeof RuleSetEditor> | null>(null);
+const ruleSetContentValid = ref(true);
 
 
 
@@ -101,6 +153,15 @@ const isNameDirty = computed(() => {
 const isNoteDirty = computed(() => {
   if (!editingFile.value) return false;
   return localFileNote.value !== originalFileNote.value;
+});
+
+const isValidJson = computed(() => {
+  try {
+    JSON.parse(editorContent.value);
+    return props.type !== 'ruleset' || ruleSetContentValid.value;
+  } catch {
+    return false;
+  }
 });
 
 
@@ -123,7 +184,10 @@ watch(editorContent, (newVal) => {
   isEditorDirty.value = newVal !== originalContent.value;
 });
 
+let editFileSeq = 0;
+
 async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
+  const seq = ++editFileSeq;
   editingFile.value = file;
   viewMode.value = mode;
   localFileName.value = getBasename(file.path).replace(/\.json$/, '');
@@ -131,15 +195,17 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
   editorContent.value = '';
   originalContent.value = '';
   isEditorDirty.value = false;
-  
+
   try {
     const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
     if (!res.ok) throw new Error('Failed to load file');
     const data = await res.json();
+    if (seq !== editFileSeq) return; // A newer editFile() call superseded this one
+
     originalContent.value = data.content;
     editorContent.value = data.content;
     fileSha.value = data.sha;
-    
+
     // Parse note if possible
     try {
       const parsed = JSON.parse(data.content);
@@ -149,29 +215,35 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
       originalFileNote.value = '';
       localFileNote.value = '';
     }
-    
+
   } catch (e: any) {
+    if (seq !== editFileSeq) return;
     emit('status', 'error', '加载失败: ' + e.message);
   } finally {
-    isLoading.value = false;
+    if (seq === editFileSeq) isLoading.value = false;
   }
 }
 
 function closeEditor() {
   isEditorDirty.value = false;
+  ruleSetContentValid.value = true;
   editingFile.value = null;
 }
 
-function resetFileCode() {
-  editorContent.value = originalContent.value;
-  if (editingFile.value && !editingFile.value.isNew) {
-    localFileName.value = getBasename(editingFile.value.path).replace(/\.json$/, '');
-  }
-  localFileNote.value = originalFileNote.value;
-  isEditorDirty.value = false;
+function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
+  return new Promise(resolve => { emit('conflict', resolve); });
 }
 
 async function saveFileCode() {
+  if (!isValidJson.value) {
+    emit('status', 'error', '请修复 JSON 语法错误后再保存');
+    return;
+  }
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(localFileName.value)) {
+    emit('status', 'error', '文件名只能包含字母、数字、点、下划线和连字符，且不能为空');
+    return;
+  }
+
   let parsed: any;
   try {
     parsed = JSON.parse(editorContent.value);
@@ -192,7 +264,7 @@ async function saveFileCode() {
   isSaving.value = true;
 
   try {
-    const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : 'patches');
+    const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : props.type === 'patch' ? 'patches' : 'rulesets');
     const newPath = `sing-sub/${dir}/${localFileName.value}.json`;
     const isRename = newPath !== editingFile.value.path && !editingFile.value.isNew;
 
@@ -203,30 +275,42 @@ async function saveFileCode() {
         path: newPath,
         content: editorContent.value,
         sha: isRename ? null : fileSha.value,
-        message: `${editingFile.value.isNew ? 'Create' : 'Update'} ${localFileName.value}.json`
+        oldPath: isRename ? editingFile.value.path : undefined,
+        message: `${editingFile.value.isNew ? 'Create' : (isRename ? 'Rename' : 'Update')} ${localFileName.value}.json`
       })
     });
-    
+
     if (!res.ok) {
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        const action = await resolveConflict();
+        isSaving.value = false;
+        if (action === 'reload') {
+          await editFile(editingFile.value);
+          emit('status', 'warning', '已重新加载最新版本，请检查改动是否需要重新应用', 5000);
+        } else if (action === 'overwrite') {
+          const latest = await fetch(`/api/file?path=${encodeURIComponent(editingFile.value.path)}`);
+          if (latest.ok) {
+            const latestData = await latest.json();
+            fileSha.value = latestData.sha;
+          }
+          return saveFileCode();
+        }
+        return;
+      }
       throw new Error(data.error || '保存失败');
     }
 
-    if (isRename && fileSha.value) {
-      try {
-        await fetch(`/api/file?path=${encodeURIComponent(editingFile.value.path)}`, {
-          method: 'DELETE',
-        });
-      } catch (deleteErr) {
-        console.error('Failed to delete old file after rename:', deleteErr);
-        emit('status', 'error', '重命名后删除旧文件失败: ' + (deleteErr as Error).message);
-      }
-    }
-    
+    const data = await res.json().catch(() => ({}));
+
     isEditorDirty.value = false;
     originalContent.value = editorContent.value;
     originalFileNote.value = localFileNote.value;
-    emit('status', 'success', '保存成功');
+    if (data.warning) {
+      emit('status', 'warning', data.warning, 5000);
+    } else {
+      emit('status', 'success', '保存成功');
+    }
     emit('refresh');
     editingFile.value = null;
   } catch (e: any) {
@@ -237,8 +321,8 @@ async function saveFileCode() {
 }
 
 function createFile() {
-  const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : 'patches');
-  const newName = props.type === 'node' ? 'new_node' : (props.type === 'template' ? 'new_template' : 'new_patch');
+  const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : props.type === 'patch' ? 'patches' : 'rulesets');
+  const newName = props.type === 'node' ? 'new_node' : (props.type === 'template' ? 'new_template' : props.type === 'patch' ? 'new_patch' : 'new_ruleset');
   viewMode.value = 'edit';
   editingFile.value = {
     path: `sing-sub/${dir}/untitled.json`,
@@ -247,11 +331,14 @@ function createFile() {
   localFileName.value = newName;
   localFileNote.value = '';
   originalFileNote.value = '';
-  editorContent.value = '{\n  "inbounds": [],\n  "outbounds": []\n}';
+  editorContent.value = props.type === 'ruleset' 
+    ? '{\n  "version": 4,\n  "rules": []\n}' 
+    : '{\n  "inbounds": [],\n  "outbounds": []\n}';
   originalContent.value = editorContent.value;
   fileSha.value = null;
   isEditorDirty.value = true;
   isLoading.value = false;
+  ruleSetContentValid.value = true;
 }
 
 defineExpose({ createFile });

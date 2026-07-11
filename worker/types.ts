@@ -11,6 +11,7 @@ export interface UserSettings {
   subToken: string;
   userLogin: string;
   userAvatar: string;
+  defaultBranch?: string;
 }
 
 export interface SessionData {

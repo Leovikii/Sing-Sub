@@ -149,14 +149,15 @@ async function fetchRepoJson(path: string, session: RepoSession): Promise<unknow
   return sanitizeMetadata(JSON.parse(file.content));
 }
 
+export async function loadTemplate(templateUrl: string, session: RepoSession): Promise<unknown> {
+  const isExternalTemplate = templateUrl.startsWith('http://') || templateUrl.startsWith('https://');
+  return isExternalTemplate ? fetchJson(templateUrl) : fetchRepoJson(templateUrl, session);
+}
+
 export async function buildProfile(profile: Profile, session: RepoSession): Promise<string> {
   const templateUrl = profile.templateUrl;
-  const isExternalTemplate = templateUrl.startsWith('http://') || templateUrl.startsWith('https://');
-
   let [template, nodesData] = await Promise.all([
-    (isExternalTemplate 
-      ? fetchJson(templateUrl) 
-      : fetchRepoJson(templateUrl, session)) as Promise<Record<string, unknown>>,
+    loadTemplate(templateUrl, session) as Promise<Record<string, unknown>>,
     fetchRepoJson(profile.nodesPath, session),
   ]);
   

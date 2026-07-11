@@ -1,15 +1,36 @@
 <template>
-  <div class="max-w-7xl mx-auto space-y-10 p-6 md:p-12 pb-32">
-    <AppHeader
-      :user="user"
-      :appVersion="APP_VERSION"
-      :settings="settings"
-      :loading="loadingData"
-      @open-settings="activeTab = 'settings'"
-    />
+  <div class="min-h-screen bg-bg-page">
+    <GlobalToast :status="saveStatus" :message="statusMessage" />
+
+    <header class="sticky top-0 z-40 border-b border-border-base bg-bg-surface/95 backdrop-blur-xl">
+      <div
+        class="hidden h-36 items-center justify-center transition-[width] duration-200 md:absolute md:flex"
+        :class="sidebarExpanded ? 'md:w-52' : 'md:w-24'"
+      >
+        <div class="flex h-14 w-14 items-center justify-center rounded-2xl border border-border-base bg-bg-elevated/40 shadow-md">
+          <img src="/favicon.svg" alt="Sing Sub Logo" class="h-8 w-8" />
+        </div>
+      </div>
+      <div
+        class="mx-auto max-w-7xl px-6 py-5 transition-[margin] duration-200 md:max-w-none md:px-12 md:py-0"
+        :class="sidebarExpanded ? 'md:ml-52' : 'md:ml-24'"
+      >
+        <AppHeader
+          :user="user"
+          :appVersion="APP_VERSION"
+          :settings="settings"
+          :loading="loadingData"
+          class="md:h-36"
+          @open-settings="activeTab = 'settings'"
+        />
+      </div>
+    </header>
+
+    <main class="transition-[margin] duration-200" :class="sidebarExpanded ? 'md:ml-52' : 'md:ml-24'">
+      <div class="mx-auto max-w-7xl space-y-10 p-6 pb-28 md:p-12">
 
     <div v-if="isInitializing" class="flex justify-center items-center py-32">
-      <Loader2 :size="32" class="animate-spin text-[#F596AA]" />
+      <Loader2 :size="32" class="animate-spin text-brand-pink" />
     </div>
 
     <ConnectForm
@@ -22,6 +43,7 @@
 
     <template v-else-if="stateData">
       <TopToolbar
+        v-if="activeTab !== 'settings'"
         :saveStatus="saveStatus"
         :statusMessage="statusMessage"
         :refreshing="refreshing"
@@ -32,7 +54,6 @@
         @refresh="handleGlobalRefresh"
         @add="handleGlobalAdd"
         @save="handleGlobalSave"
-        @reset="handleGlobalReset"
       />
 
       <transition name="fade-scale" mode="out-in">
@@ -42,7 +63,7 @@
             item-key="name"
             :delay="200"
             :animation="200"
-            class="grid grid-cols-1 lg:grid-cols-2 gap-6"
+            class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,34rem),1fr))] gap-6"
             @end="recomputeOrders"
           >
             <template #item="{ element: profile, index: pIndex }">
@@ -54,10 +75,15 @@
                 :availablePatches="availableAssets.patches"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
+                :isDraft="draftProfile === profile"
+                :globalBusy="globalBusy"
+                :isSaving="savingProfileName === profile.name"
+                :saveFailed="savingProfileName !== profile.name && profileSaveError !== null && lastSaveAttemptName === profile.name"
                 @update:expanded="(val) => toggleExpand(pIndex, val)"
                 @copyLink="handleCopyLink"
                 @remove="removeProfile"
                 @duplicate="duplicateProfile"
+                @discard="discardDraftProfile"
                 @save="handleSaveProfile"
                 @status="(t, m) => showStatus(t, m, 5000)"
               />
@@ -69,9 +95,11 @@
               ref="assetManagerRef"
               :type="assetType"
               :files="filteredAssets"
+              :globalBusy="globalBusy"
               @refresh="refreshAssets"
               @status="(t, m) => showStatus(t, m, 5000)"
               @delete="markAssetForDeletion"
+              @conflict="handleAssetConflict"
             />
           </div>
           <div v-else-if="activeTab === 'settings'" key="settings" class="space-y-6">
@@ -86,7 +114,7 @@
           </div>
         </transition>
 
-      <AppDock v-model:activeTab="activeTab" />
+      <AppDock v-model:activeTab="activeTab" v-model:expanded="sidebarExpanded" :can-expand="isWideDesktop" />
     </template>
 
 
@@ -99,17 +127,27 @@
       @cancel="showDisconnectConfirm = false"
     />
 
+    <ConflictModal
+      :visible="conflictVisible"
+      @reload="handleConflictAction('reload')"
+      @overwrite="handleConflictAction('overwrite')"
+      @cancel="handleConflictAction('cancel')"
+    />
 
+      </div>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick, computed } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import { Loader2 } from 'lucide-vue-next';
 import AppHeader from './components/layout/AppHeader.vue';
 import ConnectForm from './components/ConnectForm.vue';
 import ProfileEditor from './components/ProfileEditor.vue';
 import ConfirmModal from './components/ui/ConfirmModal.vue';
+import ConflictModal from './components/ui/ConflictModal.vue';
+import GlobalToast from './components/ui/GlobalToast.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
 import AppDock from './components/layout/AppDock.vue';
 import AssetManager from './components/AssetManager.vue';
@@ -118,11 +156,10 @@ import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 import draggable from 'vuedraggable';
 
-const APP_VERSION = 'v3.0.0';
+const APP_VERSION = 'v3.1.0';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
-const originalStateData = ref<StateData | null>(null);
 const loadingData = ref(false);
 const saveStatus = ref<'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error'>('idle');
 const statusMessage = ref('');
@@ -131,11 +168,19 @@ const isInitializing = ref(true);
 const copyStatus = ref<Record<number, boolean>>({});
 const showDisconnectConfirm = ref(false);
 const expandedIndex = ref<number | null>(null);
-const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[] }>({ nodes: [], templates: [], patches: [] });
+const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }>({ nodes: [], templates: [], patches: [], rulesets: [] });
 
 const activeTab = ref<'config' | 'assets' | 'settings'>('config');
-const assetType = ref<'node' | 'template' | 'patch'>('node');
+const assetType = ref<'node' | 'template' | 'patch' | 'ruleset'>('node');
 const assetManagerRef = ref<any>(null);
+const draftProfile = ref<Profile | null>(null);
+const draftProfileWasDirty = ref<boolean | null>(null);
+const sidebarPreference = ref(true);
+const isWideDesktop = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches);
+const sidebarExpanded = computed({
+  get: () => isWideDesktop.value && sidebarPreference.value,
+  set: (value: boolean) => { sidebarPreference.value = value; },
+});
 
 const isDirty = ref(false);
 let suppressDirty = false;
@@ -143,11 +188,35 @@ let statusTimer: any = null;
 
 const deletedAssets = ref<string[]>([]);
 
+const savingProfileName = ref<string | null>(null);
+const lastSaveAttemptName = ref<string | null>(null);
+const profileSaveError = ref<string | null>(null);
+const globalBusy = computed(() => saveStatus.value !== 'idle' || refreshing.value);
+
+const conflictVisible = ref(false);
+let conflictResolver: ((action: 'reload' | 'overwrite' | 'cancel') => void) | null = null;
+
+function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
+  conflictVisible.value = true;
+  return new Promise(resolve => { conflictResolver = resolve; });
+}
+
+function handleConflictAction(action: 'reload' | 'overwrite' | 'cancel') {
+  conflictVisible.value = false;
+  conflictResolver?.(action);
+  conflictResolver = null;
+}
+
+async function handleAssetConflict(resolver: (action: 'reload' | 'overwrite' | 'cancel') => void) {
+  resolver(await resolveConflict());
+}
+
 const filteredAssets = computed(() => {
   const type = assetType.value;
   const arr = type === 'node' ? availableAssets.value.nodes 
             : type === 'template' ? availableAssets.value.templates 
-            : availableAssets.value.patches;
+            : type === 'patch' ? availableAssets.value.patches
+            : availableAssets.value.rulesets;
   return arr.filter((n: any) => !deletedAssets.value.includes(n.path || n));
 });
 
@@ -174,7 +243,7 @@ async function refreshAssets() {
     const data = await getAssets();
     availableAssets.value = data;
   } catch {
-    availableAssets.value = { nodes: [], templates: [], patches: [] };
+    availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
   }
   pruneStaleReferences();
 }
@@ -200,7 +269,6 @@ function pruneStaleReferences() {
 
 function setStateData(state: StateData) {
   suppressDirty = true;
-  originalStateData.value = JSON.parse(JSON.stringify(state));
   stateData.value = state;
   nextTick(() => {
     suppressDirty = false;
@@ -216,7 +284,13 @@ watch(() => stateData.value?.profiles.map(p => p.name).join(','), () => {
 
 
 
+function updateViewportLayout() {
+  isWideDesktop.value = window.matchMedia('(min-width: 1280px)').matches;
+}
+
 onMounted(async () => {
+  updateViewportLayout();
+  window.addEventListener('resize', updateViewportLayout, { passive: true });
   try {
     const s = await getSettings();
     if (s) {
@@ -225,6 +299,10 @@ onMounted(async () => {
     }
   } catch { /* not logged in */ }
   isInitializing.value = false;
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateViewportLayout);
 });
 
 async function handleSetup() {
@@ -279,22 +357,22 @@ async function confirmDisconnect() {
   stateData.value = null;
 }
 
-async function handleSave() {
+async function handleSave(): Promise<void> {
   if (!stateData.value) return;
   saveStatus.value = 'saving';
   statusMessage.value = '';
   try {
     const data = await saveState(stateData.value, null);
-    
+
     if (deletedAssets.value.length > 0) {
-      for (const path of deletedAssets.value) {
-        try {
-          await deleteFile(path);
-        } catch (err) {
-          console.error('Failed to delete asset', path, err);
-          showStatus('error', `删除文件失败: ${path}`, 3000);
+      const paths = deletedAssets.value;
+      const results = await Promise.allSettled(paths.map(path => deleteFile(path)));
+      results.forEach((res, i) => {
+        if (res.status === 'rejected') {
+          console.error('Failed to delete asset', paths[i], res.reason);
+          showStatus('error', `删除文件失败: ${paths[i]}`, 3000);
         }
-      }
+      });
       deletedAssets.value = [];
       await refreshAssets();
     }
@@ -306,30 +384,67 @@ async function handleSave() {
       showStatus('success', '保存成功，配置已更新', 3000);
     }
   } catch (e: any) {
+    if (e.status === 409) {
+      const action = await resolveConflict();
+      if (action === 'reload') {
+        const data = await getState();
+        setStateData(data.state);
+        showStatus('warning', '已重新加载最新版本，请检查改动是否需要重新应用', 5000);
+      } else if (action === 'overwrite') {
+        return handleSave();
+      }
+      return;
+    }
     showStatus('error', e.message || '保存失败', 5000);
   }
 }
 
-async function handleSaveProfile(profileName: string) {
+async function handleSaveProfile(profileName: string): Promise<void> {
   if (!stateData.value) return;
   const p = stateData.value.profiles.find(x => x.name === profileName);
   if (p) p.updated_at = Date.now();
   saveStatus.value = 'saving';
   statusMessage.value = '';
   suppressDirty = true;
+  savingProfileName.value = profileName;
+  lastSaveAttemptName.value = profileName;
   try {
     const data = await saveState(stateData.value, null, profileName);
+    profileSaveError.value = null;
+    if (p === draftProfile.value) {
+      draftProfile.value = null;
+      draftProfileWasDirty.value = null;
+    }
+    isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '配置已保存，但构建失败: ' + data.warning, 5000);
     } else {
       showStatus('success', '保存成功，配置已更新', 3000);
     }
   } catch (e: any) {
-    showStatus('error', e.message || '保存失败', 5000);
+    if (e.status === 409) {
+      const action = await resolveConflict();
+      if (action === 'reload') {
+        const data = await getState();
+        setStateData(data.state);
+        profileSaveError.value = null;
+        showStatus('warning', '已重新加载最新版本，请检查改动是否需要重新应用', 5000);
+      } else if (action === 'overwrite') {
+        savingProfileName.value = null;
+        nextTick(() => { suppressDirty = false; });
+        return handleSaveProfile(profileName);
+      } else {
+        profileSaveError.value = '已取消';
+      }
+    } else {
+      const msg = e.message || '保存失败';
+      profileSaveError.value = msg;
+      showStatus('error', msg, 5000);
+    }
   } finally {
+    savingProfileName.value = null;
     nextTick(() => {
       suppressDirty = false;
-      isDirty.value = false;
     });
   }
 }
@@ -375,23 +490,48 @@ async function handleCopyLink(name: string) {
 
 function addProfile() {
   if (!stateData.value) return;
-  stateData.value.profiles.push({
-    name: '', note: '', templateUrl: '', nodesPath: 'sing-sub/nodes.json',
+  const profile: Profile = {
+    name: '', note: '', templateUrl: '', nodesPath: '',
     rules: [], inboundRules: [],
     created_at: Date.now(),
     updated_at: Date.now(),
     order: stateData.value.profiles.length
-  });
+  };
+  draftProfileWasDirty.value = isDirty.value;
+  draftProfile.value = profile;
+  stateData.value.profiles.push(profile);
   recomputeOrders();
   expandedIndex.value = stateData.value.profiles.length - 1;
 }
 
 function removeProfile(index: number) {
   if (!stateData.value) return;
+  const removedProfile = stateData.value.profiles[index];
+  if (removedProfile === draftProfile.value) {
+    draftProfile.value = null;
+    draftProfileWasDirty.value = null;
+  }
   if (expandedIndex.value === index) expandedIndex.value = null;
   else if (expandedIndex.value !== null && expandedIndex.value > index) expandedIndex.value--;
   stateData.value.profiles.splice(index, 1);
   recomputeOrders();
+}
+
+function discardDraftProfile(profile: Profile) {
+  if (!stateData.value || draftProfile.value !== profile) return;
+
+  const index = stateData.value.profiles.indexOf(profile);
+  const wasDirty = draftProfileWasDirty.value ?? isDirty.value;
+  if (index >= 0) {
+    stateData.value.profiles.splice(index, 1);
+    stateData.value.profiles.forEach((item, itemIndex) => { item.order = itemIndex; });
+  }
+  if (expandedIndex.value === index) expandedIndex.value = null;
+  else if (expandedIndex.value !== null && expandedIndex.value > index) expandedIndex.value--;
+
+  draftProfile.value = null;
+  draftProfileWasDirty.value = null;
+  nextTick(() => { isDirty.value = wasDirty; });
 }
 
 function duplicateProfile(source: Profile) {
@@ -439,24 +579,7 @@ function handleGlobalSave() {
 }
 
 function handleGlobalRefresh() {
-  handleRefresh();
-  refreshAssets();
-}
-
-function handleReset() {
-  suppressDirty = true;
-  if (originalStateData.value) {
-    stateData.value = JSON.parse(JSON.stringify(originalStateData.value));
-  }
-  deletedAssets.value = [];
-  nextTick(() => {
-    isDirty.value = false;
-    suppressDirty = false;
-  });
-}
-
-function handleGlobalReset() {
-  handleReset();
+  handleRefresh(); // handleRefresh内部已经await refreshAssets()
 }
 </script>
 

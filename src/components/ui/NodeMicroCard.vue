@@ -33,6 +33,6 @@ const colorInfo = computed(() => {
   if (type === 'anytls') return { bg: 'bg-purple-500', bgLight: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' };
   if (type === 'hysteria' || type === 'hysteria2') return { bg: 'bg-orange-500', bgLight: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' };
   if (type === 'wireguard' || type === 'wg') return { bg: 'bg-red-500', bgLight: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' };
-  return { bg: 'bg-[#38383a]', bgLight: 'bg-[#F596AA]/10', text: 'text-[#F596AA]', border: 'border-[#F596AA]/20' };
+  return { bg: 'bg-border-base', bgLight: 'bg-brand-pink/10', text: 'text-brand-pink', border: 'border-brand-pink/20' };
 });
 </script>

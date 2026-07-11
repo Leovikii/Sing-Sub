@@ -6,7 +6,7 @@
     :placeholder="placeholder"
     :name="name"
     :autocomplete="autocomplete"
-    class="rounded-xl border border-[#38383a] bg-[#1c1c1e]/80 text-[#f5f5f7] placeholder-[#86868b] transition-all duration-200 outline-none py-3 px-4 w-full text-[14px] focus:border-[#F596AA] focus:ring-4 focus:ring-[#F596AA]/20"
+    class="rounded-lg border border-border-base bg-bg-surface/80 text-text-primary placeholder-text-muted transition-[border-color,box-shadow] duration-200 outline-none py-3 px-4 w-full text-[14px] focus:border-brand-pink focus:ring-4 focus:ring-brand-pink/20"
   />
 </template>
 
