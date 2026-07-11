@@ -18,6 +18,16 @@
         </div>
       </div>
     </div>
+    <div class="flex items-start gap-4">
+      <label class="w-32 shrink-0 pt-2 font-medium text-text-primary">远程规则集 <span class="text-text-muted font-normal text-xs">(可选)</span></label>
+      <div class="flex min-w-0 flex-1 flex-wrap gap-2">
+        <label v-for="option in rulesetOptions" :key="option.value" class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border-base bg-bg-elevated px-3 text-sm text-text-muted hover:text-text-primary">
+          <input type="checkbox" class="accent-brand-pink" :checked="profile.rulesetPaths?.includes(option.value)" @change="toggleRuleset(option.value)" />
+          <span>{{ option.label }}</span>
+        </label>
+        <span v-if="rulesetOptions.length === 0" class="py-2 text-sm text-text-muted">无可用规则集</span>
+      </div>
+    </div>
     
     <div class="flex items-center gap-4">
       <label class="w-32 shrink-0 font-medium text-text-primary">配置补丁 <span class="text-text-muted font-normal text-xs">(可选)</span></label>
@@ -56,7 +66,20 @@ const props = defineProps<{
   availableNodes?: string[];
   availableTemplates?: string[];
   availablePatches?: string[];
+  availableRulesets?: string[];
 }>();
+
+const rulesetOptions = computed(() => (props.availableRulesets || []).map(item => {
+  const path = typeof item === 'string' ? item : (item as any).path || '';
+  return { label: path.replace('sing-sub/rulesets/', '').replace(/\.json$/, ''), value: path };
+}));
+
+function toggleRuleset(path: string) {
+  const selected = new Set(props.profile.rulesetPaths || []);
+  if (selected.has(path)) selected.delete(path);
+  else selected.add(path);
+  props.profile.rulesetPaths = Array.from(selected);
+}
 
 const nodeOptions = computed(() => {
   return (props.availableNodes || []).map(n => {

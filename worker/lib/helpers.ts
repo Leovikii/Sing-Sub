@@ -71,6 +71,7 @@ export function toRepoSession(settings: UserSettings): RepoSession {
     pat: settings.pat,
     userLogin: settings.userLogin,
     defaultBranch: settings.defaultBranch || 'main',
+    publicBaseUrl: settings.publicBaseUrl,
   };
 }
 
@@ -99,7 +100,7 @@ export async function rebuildSingleWithWarning(
   try {
     const profile = await fetchProfile(session, profileName);
     if (profile) {
-      const config = await buildProfile(profile, session);
+      const config = await buildProfile(profile, session, subToken);
       await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
     }
   } catch (e) {

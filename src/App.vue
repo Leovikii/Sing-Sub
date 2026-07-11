@@ -73,6 +73,7 @@
                 :availableNodes="availableAssets.nodes"
                 :availableTemplates="availableAssets.templates"
                 :availablePatches="availableAssets.patches"
+                :availableRulesets="availableAssets.rulesets"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
                 :isDraft="draftProfile === profile"
@@ -96,6 +97,7 @@
               :type="assetType"
               :files="filteredAssets"
               :globalBusy="globalBusy"
+              :subToken="settings?.subToken"
               @refresh="refreshAssets"
               @status="(t, m) => showStatus(t, m, 5000)"
               @delete="markAssetForDeletion"
@@ -253,6 +255,7 @@ function pruneStaleReferences() {
   const nodePaths = new Set(availableAssets.value.nodes.map((n: any) => n.path || n));
   const templatePaths = new Set(availableAssets.value.templates.map((t: any) => t.path || t));
   const patchPaths = new Set(availableAssets.value.patches.map((p: any) => p.path || p));
+  const rulesetPaths = new Set(availableAssets.value.rulesets.map((p: any) => p.path || p));
 
   for (const profile of stateData.value.profiles) {
     if (profile.nodesPath && !nodePaths.has(profile.nodesPath)) {
@@ -264,6 +267,7 @@ function pruneStaleReferences() {
     if (profile.patchUrl && !patchPaths.has(profile.patchUrl)) {
       profile.patchUrl = '';
     }
+    profile.rulesetPaths = (profile.rulesetPaths || []).filter(path => rulesetPaths.has(path));
   }
 }
 
@@ -492,7 +496,7 @@ function addProfile() {
   if (!stateData.value) return;
   const profile: Profile = {
     name: '', note: '', templateUrl: '', nodesPath: '',
-    rules: [], inboundRules: [],
+    rules: [], inboundRules: [], rulesetPaths: [],
     created_at: Date.now(),
     updated_at: Date.now(),
     order: stateData.value.profiles.length

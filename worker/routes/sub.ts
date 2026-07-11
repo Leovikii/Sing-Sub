@@ -40,7 +40,7 @@ export async function handleSubscription(
   
   if (!profile) return errorResponse('Profile not found', 404);
 
-  const config = await buildProfile(profile, session);
+  const config = await buildProfile(profile, session, token);
   await env.SESSIONS.put(`config:${token}:${name}`, config);
 
   return subscriptionResponse(config);

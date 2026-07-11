@@ -154,7 +154,7 @@ export async function loadTemplate(templateUrl: string, session: RepoSession): P
   return isExternalTemplate ? fetchJson(templateUrl) : fetchRepoJson(templateUrl, session);
 }
 
-export async function buildProfile(profile: Profile, session: RepoSession): Promise<string> {
+export async function buildProfile(profile: Profile, session: RepoSession, subToken?: string): Promise<string> {
   const templateUrl = profile.templateUrl;
   let [template, nodesData] = await Promise.all([
     loadTemplate(templateUrl, session) as Promise<Record<string, unknown>>,
@@ -196,6 +196,22 @@ export async function buildProfile(profile: Profile, session: RepoSession): Prom
       });
       template.inbounds = Array.from(new Set(templateInbounds));
     }
+  }
+
+  if (profile.rulesetPaths?.length && session.publicBaseUrl && subToken) {
+    const route = isObject(template.route) ? template.route as Record<string, unknown> : {};
+    const existing = Array.isArray(route.rule_set) ? route.rule_set as Array<Record<string, unknown>> : [];
+    const selectedTags = new Set(profile.rulesetPaths.map(path => path.split('/').pop()!.replace(/\.json$/, '')));
+    route.rule_set = [
+      ...existing.filter(item => typeof item.tag !== 'string' || !selectedTags.has(item.tag)),
+      ...Array.from(selectedTags).map(tag => ({
+        tag,
+        type: 'remote',
+        format: 'binary',
+        url: `${session.publicBaseUrl}/rules/${subToken}/${encodeURIComponent(tag)}.srs`,
+      })),
+    ];
+    template.route = route;
   }
 
   // Step 4: Insert outbound nodes
@@ -246,7 +262,7 @@ export async function buildAllProfiles(
       }
     }),
     ...profiles.map(profile => limit(async () => {
-      const config = await buildProfile(profile, session);
+      const config = await buildProfile(profile, session, subToken);
       await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
     }))
   ]);
