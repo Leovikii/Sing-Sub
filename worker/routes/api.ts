@@ -12,9 +12,152 @@ import { generateHex, toRepoSession, rebuildWithWarning, rebuildSingleWithWarnin
 const SAFE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const MANAGED_ASSET_PATH = /^sing-sub\/(nodes|templates|patches|rulesets)\/([a-zA-Z0-9][a-zA-Z0-9._-]*)\.json$/;
 const TEMPLATE_PATH = /^sing-sub\/templates\/([a-zA-Z0-9][a-zA-Z0-9._-]*)\.json$/;
+const RULESET_METADATA_KEY = '_sing_sub';
+const RULESET_ALLOWED_KEYS = new Set(['version', 'rules', RULESET_METADATA_KEY]);
+const MAX_RULESET_IMPORT_URLS = 20;
+const MAX_RULESET_IMPORT_BYTES = 5 * 1024 * 1024;
 
 function isManagedAssetPath(path: string): boolean {
   return MANAGED_ASSET_PATH.test(path);
+}
+
+function isPrivateHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  // Reject IPv6 literals outright: safely classifying all IPv6 private and
+  // link-local ranges is unnecessary for an import feature that accepts DNS
+  // hosts and public IPv4 addresses.
+  if (normalized === 'localhost' || normalized.includes(':')) return true;
+  const parts = normalized.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(Number.isNaN)) return false;
+  const [a, b] = parts;
+  return a === 0 || a === 10 || a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168);
+}
+
+function parseRulesetImportUrl(raw: string): URL {
+  const url = new URL(raw);
+  if (url.protocol !== 'https:' || url.username || url.password || isPrivateHostname(url.hostname)) {
+    throw new Error('Only public HTTPS rule-set URLs are allowed');
+  }
+  return url;
+}
+
+async function fetchPublicRuleset(url: URL): Promise<Response> {
+  let current = url;
+  for (let redirects = 0; redirects <= 3; redirects++) {
+    const response = await fetch(current, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10_000),
+      headers: { Accept: 'application/json' },
+    });
+    if (response.status < 300 || response.status >= 400) return response;
+    const location = response.headers.get('location');
+    if (!location) throw new Error('Import redirect has no location');
+    current = parseRulesetImportUrl(new URL(location, current).toString());
+  }
+  throw new Error('Import exceeded the redirect limit');
+}
+
+function validateRulesetSource(content: string): string | null {
+  let source: unknown;
+  try {
+    source = JSON.parse(content);
+  } catch (error: any) {
+    return `Invalid rule-set JSON: ${error.message}`;
+  }
+
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return 'Rule-set source must be a JSON object';
+  }
+
+  const data = source as Record<string, unknown>;
+  if (!Array.isArray(data.rules)) return 'Rule-set source must contain a rules array';
+  for (const key of Object.keys(data)) {
+    if (!RULESET_ALLOWED_KEYS.has(key)) {
+      return `Unsupported rule-set top-level field: ${key}`;
+    }
+  }
+
+  if (data[RULESET_METADATA_KEY] !== undefined &&
+      (!data[RULESET_METADATA_KEY] || typeof data[RULESET_METADATA_KEY] !== 'object' || Array.isArray(data[RULESET_METADATA_KEY]))) {
+    return `${RULESET_METADATA_KEY} must be an object`;
+  }
+
+  return null;
+}
+
+function normalizeImportedRuleValues(value: unknown, field: 'domain' | 'domain_suffix'): string[] {
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item.trim())) {
+    throw new Error(`Imported ${field} rule must contain non-empty strings`);
+  }
+  return value.map(item => item.trim());
+}
+
+export async function handleImportRuleset(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  let urls: unknown;
+  try {
+    ({ urls } = await request.json() as { urls?: unknown });
+  } catch {
+    return errorResponse('Invalid request JSON', 400);
+  }
+
+  if (!Array.isArray(urls) || urls.length === 0 || urls.length > MAX_RULESET_IMPORT_URLS ||
+      urls.some(url => typeof url !== 'string' || !url.trim())) {
+    return errorResponse(`Provide between 1 and ${MAX_RULESET_IMPORT_URLS} rule-set URLs`, 400);
+  }
+
+  const domains: string[] = [];
+  const domainSuffixes: string[] = [];
+  const seenDomains = new Set<string>();
+  const seenDomainSuffixes = new Set<string>();
+
+  try {
+    for (const rawUrl of urls) {
+      const sourceUrl = parseRulesetImportUrl(rawUrl.trim());
+      const response = await fetchPublicRuleset(sourceUrl);
+      if (!response.ok) throw new Error(`Import request failed with HTTP ${response.status}`);
+
+      const contentLength = Number(response.headers.get('content-length') || '0');
+      if (contentLength > MAX_RULESET_IMPORT_BYTES) throw new Error('Imported rule-set exceeds 5 MiB');
+      const body = await response.text();
+      if (new TextEncoder().encode(body).byteLength > MAX_RULESET_IMPORT_BYTES) {
+        throw new Error('Imported rule-set exceeds 5 MiB');
+      }
+
+      const source = JSON.parse(body) as unknown;
+      if (!source || typeof source !== 'object' || Array.isArray(source) || !Array.isArray((source as Record<string, unknown>).rules)) {
+        throw new Error('Imported rule-set must be a JSON object with a rules array');
+      }
+
+      for (const rule of (source as { rules: unknown[] }).rules) {
+        if (!rule || typeof rule !== 'object' || Array.isArray(rule)) {
+          throw new Error('Imported rules must be objects');
+        }
+        const entries = Object.entries(rule as Record<string, unknown>);
+        if (entries.length !== 1 || (entries[0][0] !== 'domain' && entries[0][0] !== 'domain_suffix')) {
+          throw new Error('Imported rules may only contain a domain or domain_suffix field');
+        }
+        const [field, value] = entries as [['domain' | 'domain_suffix', unknown]];
+        const target = field === 'domain' ? domains : domainSuffixes;
+        const seen = field === 'domain' ? seenDomains : seenDomainSuffixes;
+        for (const item of normalizeImportedRuleValues(value, field)) {
+          if (!seen.has(item)) {
+            seen.add(item);
+            target.push(item);
+          }
+        }
+      }
+    }
+  } catch (error: any) {
+    return errorResponse(`Rule-set import failed: ${error.message || 'invalid source'}`, 400);
+  }
+
+  return jsonResponse({ domain: domains, domain_suffix: domainSuffixes });
 }
 
 function validateProfiles(profiles: Profile[]): string | null {
@@ -363,11 +506,16 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
           path,
           inboundsCount: Array.isArray(data.inbounds) ? data.inbounds.length : 0,
           outboundsCount: Array.isArray(data.outbounds) ? data.outbounds.length : 0,
-          tags: Array.isArray(data.outbounds) ? data.outbounds.map((o: any) => o.tag).filter(Boolean).slice(0, 5) : []
+          tags: Array.isArray(data.outbounds) ? data.outbounds.map((o: any) => o.tag).filter(Boolean).slice(0, 5) : [],
+          note: typeof data[RULESET_METADATA_KEY]?.note === 'string'
+            ? data[RULESET_METADATA_KEY].note
+            : typeof data.note === 'string'
+              ? data.note
+              : '',
         };
       }
     } catch { /* ignore parse errors */ }
-    return { path, inboundsCount: 0, outboundsCount: 0, tags: [] };
+    return { path, inboundsCount: 0, outboundsCount: 0, tags: [], note: '' };
   });
 
   const [nodesWithMeta, templatesWithMeta, patchesWithMeta, rulesetsWithMeta] = await Promise.all([
@@ -421,9 +569,6 @@ on:
   push:
     paths:
       - 'sing-sub/rulesets/*.json'
-    branches:
-      - main
-      - master
   workflow_dispatch:
 
 jobs:
@@ -432,15 +577,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
-      - name: Fetch and compile rulesets
+      - name: Normalize and compile rulesets
         run: |
-          mkdir -p sing-sub/rulesets/compiled
-
           set -euo pipefail
           SING_BOX_VERSION="v1.9.3"
           curl --fail --location --retry 3 --connect-timeout 10 \\
@@ -450,61 +593,44 @@ jobs:
           mv sing-box-*/sing-box ./sing-box
           chmod +x ./sing-box
 
-          cat << 'EOF' > process.js
+          rm -rf .ruleset-staging
+          mkdir -p .ruleset-staging/sources .ruleset-staging/compiled
+
+          cat << 'EOF' > .ruleset-staging/normalize.js
           const fs = require('fs');
-          async function main() {
+          const allowedKeys = new Set(['version', 'rules', '_sing_sub']);
+          function main() {
             const files = fs.readdirSync('sing-sub/rulesets').filter(f => f.endsWith('.json'));
             for (const file of files) {
               const path = 'sing-sub/rulesets/' + file;
               const data = JSON.parse(fs.readFileSync(path, 'utf8'));
-              let mergedRules = [];
-
-              if (data._urls && Array.isArray(data._urls)) {
-                for (const url of data._urls) {
-                  try {
-                    const parsedUrl = new URL(url);
-                    if (parsedUrl.protocol !== 'https:') throw new Error('only HTTPS URLs are allowed');
-                    const res = await fetch(parsedUrl, { signal: AbortSignal.timeout(10000) });
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    const length = Number(res.headers.get('content-length') || '0');
-                    if (length > 5 * 1024 * 1024) throw new Error('response exceeds 5 MiB');
-                    const body = await res.text();
-                    if (body.length > 5 * 1024 * 1024) throw new Error('response exceeds 5 MiB');
-                    const upstream = JSON.parse(body);
-                    if (upstream.rules && Array.isArray(upstream.rules)) {
-                      mergedRules = mergedRules.concat(upstream.rules);
-                    }
-                  } catch (e) {
-                    console.log('::warning::Failed to fetch ruleset URL ' + url + ': ' + (e && e.message ? e.message : e));
-                  }
-                }
-                delete data._urls;
+              if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.rules)) {
+                throw new Error(file + ' must be a JSON object with a rules array');
               }
-
-              delete data.note;
-              delete data._note;
-
-              if (data.rules) {
-                mergedRules = mergedRules.concat(data.rules);
+              for (const key of Object.keys(data)) {
+                if (!allowedKeys.has(key)) throw new Error(file + ' has unsupported top-level field: ' + key);
               }
-              data.rules = mergedRules;
-
-              const tmpPath = 'sing-sub/rulesets/compiled/tmp_' + file;
-              fs.writeFileSync(tmpPath, JSON.stringify(data));
+              if (data._sing_sub !== undefined && (!data._sing_sub || typeof data._sing_sub !== 'object' || Array.isArray(data._sing_sub))) {
+                throw new Error(file + ' has invalid _sing_sub metadata');
+              }
+              delete data._sing_sub;
+              fs.writeFileSync('.ruleset-staging/sources/' + file, JSON.stringify(data));
             }
           }
-          main().catch(error => { console.error(error); process.exit(1); });
+          main();
           EOF
 
-          node process.js
+          node .ruleset-staging/normalize.js
 
-          for tmp in sing-sub/rulesets/compiled/tmp_*.json; do
-            [ -e "$tmp" ] || continue
-            base=$(basename "$tmp" | sed 's/^tmp_//')
-            name="\${base%.json}"
-            ./sing-box rule-set compile "$tmp" -o "sing-sub/rulesets/compiled/$name.srs" || { echo "::warning::compile failed for $name"; rm -f "$tmp"; continue; }
-            rm "$tmp"
+          for source in .ruleset-staging/sources/*.json; do
+            [ -e "$source" ] || continue
+            name=$(basename "$source" .json)
+            ./sing-box rule-set compile "$source" -o ".ruleset-staging/compiled/$name.srs"
           done
+
+          rm -rf sing-sub/rulesets/compiled
+          mv .ruleset-staging/compiled sing-sub/rulesets/compiled
+          rm -rf .ruleset-staging sing-box sing-box.tar.gz
       - name: Commit and Push
         run: |
           git config user.name "Sing-Sub Bot"
@@ -525,12 +651,72 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
 
   const session = toRepoSession(auth.settings);
   const isRuleset = path.startsWith('sing-sub/rulesets/');
+  if (isRuleset) {
+    const validationError = validateRulesetSource(content);
+    if (validationError) return errorResponse(validationError, 400);
+  }
   const isRename = !!oldPath && oldPath !== path;
   let warning: string | undefined;
   const fileName = path.split('/').pop()!;
   const actionMessage = isRename
     ? `🤖 Sing-Sub: asset: rename ${oldPath!.split('/').pop()} to ${fileName}`
     : `🤖 Sing-Sub: asset: update ${fileName}`;
+
+  if (isRuleset) {
+    const basename = fileName.replace(/\.json$/, '');
+    const compiledPath = `sing-sub/rulesets/compiled/${basename}.srs`;
+    const oldCompiledPath = isRename && oldPath!.startsWith('sing-sub/rulesets/')
+      ? `sing-sub/rulesets/compiled/${oldPath!.split('/').pop()!.replace(/\.json$/, '')}.srs`
+      : null;
+
+    try {
+      const [workflowFile, currentFile, compiledFile, oldCompiledFile] = await Promise.all([
+        fetchFileContent(COMPILE_SRS_WORKFLOW_PATH, session),
+        sha ? fetchFileContent(path, session) : Promise.resolve(null),
+        fetchFileContent(compiledPath, session),
+        oldCompiledPath && oldCompiledPath !== compiledPath ? fetchFileContent(oldCompiledPath, session) : Promise.resolve(null),
+      ]);
+
+      if (sha && (!currentFile || currentFile.sha !== sha)) {
+        return errorResponse('File was modified; reload it before saving', 409);
+      }
+
+      const workflowNeedsSync = !workflowFile || workflowFile.content !== COMPILE_SRS_WORKFLOW_CONTENT;
+      const treeItems: GitTreeItem[] = [{ path, mode: '100644', type: 'blob', content }];
+      const deletedPaths = new Set<string>();
+      const addDeletion = (candidate: string, exists: boolean) => {
+        if (exists && !deletedPaths.has(candidate)) {
+          deletedPaths.add(candidate);
+          treeItems.push({ path: candidate, mode: '100644', type: 'blob', sha: null });
+        }
+      };
+
+      if (isRename) addDeletion(oldPath!, true);
+      if (workflowNeedsSync) {
+        treeItems.push({
+          path: COMPILE_SRS_WORKFLOW_PATH,
+          mode: '100644',
+          type: 'blob',
+          content: COMPILE_SRS_WORKFLOW_CONTENT,
+        });
+      }
+      addDeletion(compiledPath, !!compiledFile);
+      if (oldCompiledPath) addDeletion(oldCompiledPath, !!oldCompiledFile);
+
+      await commitMultiFiles(
+        session,
+        treeItems,
+        workflowNeedsSync ? 'Sing-Sub: ruleset: synchronize compiler and update source' : actionMessage,
+      );
+    } catch (e) {
+      if (e instanceof GithubApiError && e.status === 409) {
+        return errorResponse('File was modified; reload it before saving', 409);
+      }
+      throw e;
+    }
+
+    return jsonResponse({ success: true });
+  }
 
   try {
     const workflowFile = isRuleset ? await fetchFileContent(COMPILE_SRS_WORKFLOW_PATH, session) : null;

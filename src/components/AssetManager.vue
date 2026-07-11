@@ -8,6 +8,7 @@
         :title="getBasename(file.path).replace(/\.json$/, '')"
         :inboundCount="file.inboundsCount"
         :outboundCount="file.outboundsCount"
+        :note="file.note"
         :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'patch' ? Puzzle : Shield)"
         :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'patch' ? 'PATCH' : 'RULESET')"
         :tagStyle="type === 'node' ? 'bg-brand-pink/10 text-brand-pink border border-brand-pink/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : type === 'patch' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20')"
@@ -209,7 +210,9 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
     // Parse note if possible
     try {
       const parsed = JSON.parse(data.content);
-      originalFileNote.value = parsed.note || parsed._note || '';
+      originalFileNote.value = props.type === 'ruleset'
+        ? (parsed._sing_sub?.note || '')
+        : (parsed.note || '');
       localFileNote.value = originalFileNote.value;
     } catch {
       originalFileNote.value = '';
@@ -252,12 +255,24 @@ async function saveFileCode() {
     return;
   }
 
-  // Inject note
-  if (localFileNote.value) {
+  // Rule-set metadata is stripped before compilation. Other asset formats keep
+  // their established root-level note field.
+  if (props.type === 'ruleset') {
+    const metadata = parsed._sing_sub && typeof parsed._sing_sub === 'object' && !Array.isArray(parsed._sing_sub)
+      ? parsed._sing_sub
+      : {};
+    if (localFileNote.value) {
+      metadata.note = localFileNote.value;
+      parsed._sing_sub = metadata;
+    } else {
+      delete metadata.note;
+      if (Object.keys(metadata).length === 0) delete parsed._sing_sub;
+      else parsed._sing_sub = metadata;
+    }
+  } else if (localFileNote.value) {
     parsed.note = localFileNote.value;
   } else {
     delete parsed.note;
-    delete parsed._note;
   }
   editorContent.value = JSON.stringify(parsed, null, 2);
 

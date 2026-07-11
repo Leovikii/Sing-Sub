@@ -2,7 +2,7 @@ import type { Env } from './types';
 import {
   handleLogin, handleLogout, handleGetSettings, handlePutSettings,
   handleDeleteSettings, handleGetState, handlePutState, handleRebuild, handlePreview, handleGetAssets,
-  handleGetFile, handleGetTemplate, handlePutFile, handleDeleteFile
+  handleGetFile, handleGetTemplate, handlePutFile, handleDeleteFile, handleImportRuleset
 } from './routes/api';
 import { handleSubscription, handleRuleset } from './routes/sub';
 import { addSecurityHeaders, errorResponse } from './lib/security';
@@ -43,6 +43,8 @@ export default {
         response = await handleGetFile(request, env);
       } else if (path === '/api/template' && method === 'GET') {
         response = await handleGetTemplate(request, env);
+      } else if (path === '/api/ruleset/import' && method === 'POST') {
+        response = await handleImportRuleset(request, env);
       } else if (path === '/api/file' && method === 'PUT') {
         response = await handlePutFile(request, env);
       } else if (path === '/api/file' && method === 'DELETE') {
