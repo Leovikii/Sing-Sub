@@ -74,8 +74,8 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
 
   if (treeItems.length > 0) {
     const commitMessage = profileName
-      ? `Update config ${profileName}`
-      : `Sync configurations (${profilesToUpdate.length} updated, ${filesToDelete.length} deleted)`;
+      ? `config: update ${profileName}.json`
+      : 'config: sync profiles';
     try {
       await commitMultiFiles(session, treeItems, commitMessage);
     } catch (error) {

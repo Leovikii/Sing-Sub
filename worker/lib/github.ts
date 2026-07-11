@@ -30,11 +30,12 @@ export async function fetchRepository(owner: string, repo: string, pat: string):
   return res.json() as Promise<{ default_branch: string }>;
 }
 
-function commitIdentity(session: RepoSession): { name: string; email: string } {
-  if (session.userLogin) {
-    return { name: session.userLogin, email: `${session.userLogin}@users.noreply.github.com` };
-  }
-  return { name: 'Sing-Sub Bot', email: 'bot@sing-sub.local' };
+function commitIdentity(): { name: string; email: string } {
+  return { name: 'Sing-Sub Bot', email: 'sing-sub@users.noreply.github.com' };
+}
+
+function formatCommitMessage(message: string): string {
+  return message.trim().replace(/\s+/g, ' ');
 }
 
 export async function githubFetch(
@@ -135,8 +136,8 @@ export async function putFileContent(
     }
   }
 
-  const identity = commitIdentity(session);
-  const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
+  const identity = commitIdentity();
+  const formattedMessage = formatCommitMessage(message);
 
   const body: Record<string, unknown> = {
     message: formattedMessage,
@@ -167,8 +168,8 @@ export async function deleteFileContent(
   sha: string,
   message: string
 ): Promise<void> {
-  const identity = commitIdentity(session);
-  const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
+  const identity = commitIdentity();
+  const formattedMessage = formatCommitMessage(message);
 
   const body = {
     message: formattedMessage,
@@ -202,22 +203,26 @@ export async function commitMultiFiles(
   message: string,
   branch: string = session.defaultBranch || 'main'
 ): Promise<string> {
-  const botIdentity = commitIdentity(session);
-  const formattedMessage = message.startsWith('🤖') ? message : `🤖 Sing-Sub: ${message}`;
+  const botIdentity = commitIdentity();
+  const formattedMessage = formatCommitMessage(message);
 
-  // 1. Get the latest commit SHA of the branch
-  let refRes = await repoFetch(`git/refs/heads/${branch}`, session);
+  const refRes = await repoFetch(`git/refs/heads/${branch}`, session);
   if (refRes.status === 404) {
-    // Empty repository: no commits/branch exist yet. Bootstrap with an initial file
-    // so the branch ref is created, then retry.
-    await putFileContent(
-      'README.md',
-      session,
-      '# Sing Sub\n\n由 Sing-Sub 管理的配置仓库。\n',
-      null,
-      'Initialize repository'
-    );
-    refRes = await repoFetch(`git/refs/heads/${branch}`, session);
+    const treeRes = await repoFetch('git/trees', session, { method: 'POST', body: { tree: treeItems } });
+    if (!treeRes.ok) throw new GithubApiError(`Failed to create initial git tree: ${await treeRes.text()}`, treeRes.status);
+    const tree = await treeRes.json() as { sha: string };
+    const commitRes = await repoFetch('git/commits', session, {
+      method: 'POST',
+      body: { message: formattedMessage, tree: tree.sha, parents: [], author: botIdentity, committer: botIdentity },
+    });
+    if (!commitRes.ok) throw new GithubApiError(`Failed to create initial commit: ${await commitRes.text()}`, commitRes.status);
+    const commit = await commitRes.json() as { sha: string };
+    const createRefRes = await repoFetch('git/refs', session, {
+      method: 'POST',
+      body: { ref: `refs/heads/${branch}`, sha: commit.sha },
+    });
+    if (!createRefRes.ok) throw new GithubApiError(`Failed to create branch ref: ${await createRefRes.text()}`, createRefRes.status);
+    return commit.sha;
   }
   if (!refRes.ok) throw new GithubApiError(`Failed to fetch branch ref: ${await refRes.text()}`, refRes.status);
   const refData = await refRes.json() as { object: { sha: string } };
@@ -240,6 +245,7 @@ export async function commitMultiFiles(
   if (!treeRes.ok) throw new GithubApiError(`Failed to create git tree: ${await treeRes.text()}`, treeRes.status);
   const treeData = await treeRes.json() as { sha: string };
   const newTreeSha = treeData.sha;
+  if (newTreeSha === baseTreeSha) return latestCommitSha;
 
   // 4. Create a new Commit
   const newCommitRes = await repoFetch(`git/commits`, session, {
