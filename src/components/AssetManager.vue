@@ -331,7 +331,7 @@ function createFile() {
   localFileNote.value = '';
   originalFileNote.value = '';
   editorContent.value = props.type === 'ruleset' 
-    ? '{\n  "version": 2,\n  "rules": [],\n  "_sing_sub": {\n    "manual": { "domain": [], "domain_suffix": [] },\n    "sources": []\n  }\n}'
+    ? '{\n  "version": 2,\n  "rules": [],\n  "_sing_sub": {\n    "sources": []\n  }\n}'
     : '{\n  "inbounds": [],\n  "outbounds": []\n}';
   originalContent.value = editorContent.value;
   fileSha.value = null;

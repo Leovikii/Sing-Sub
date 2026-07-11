@@ -5,7 +5,12 @@ export const MAX_RULESET_IMPORT_BYTES = MAX_REMOTE_JSON_BYTES;
 export interface RuleBucket {
   domain: string[];
   domain_suffix: string[];
+  domain_keyword: string[];
+  domain_regex: string[];
 }
+
+const RULE_FIELDS = ['domain', 'domain_suffix', 'domain_keyword', 'domain_regex'] as const;
+type RuleField = typeof RULE_FIELDS[number];
 
 export interface RulesetSource {
   url: string;
@@ -20,7 +25,7 @@ export interface RulesetMetadata {
 }
 
 function emptyBucket(): RuleBucket {
-  return { domain: [], domain_suffix: [] };
+  return { domain: [], domain_suffix: [], domain_keyword: [], domain_regex: [] };
 }
 
 function isPrivateHostname(hostname: string): boolean {
@@ -106,9 +111,12 @@ export async function readResponseTextLimited(response: Response): Promise<strin
 export const parseRulesetImportUrl = parsePublicJsonUrl;
 export const fetchPublicRuleset = fetchPublicJson;
 
-function normalizeDomain(value: unknown, field: keyof RuleBucket): string {
+function normalizeRuleValue(value: unknown, field: RuleField): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} values must be non-empty strings`);
+  if (field === 'domain_regex') return value.trim();
+
   let normalized = value.trim().toLowerCase();
+  if (field === 'domain_keyword') return normalized;
   if (field === 'domain_suffix') normalized = normalized.replace(/^\.+/, '');
   if (!normalized || /[\s/:@]/.test(normalized)) throw new Error(`Invalid ${field} value: ${value}`);
   try {
@@ -123,10 +131,10 @@ function normalizeDomain(value: unknown, field: keyof RuleBucket): string {
   return normalized;
 }
 
-function values(value: unknown, field: keyof RuleBucket): string[] {
+function values(value: unknown, field: RuleField): string[] {
   const list = typeof value === 'string' ? [value] : value;
   if (!Array.isArray(list)) throw new Error(`${field} must be a string or string array`);
-  return list.map(item => normalizeDomain(item, field));
+  return list.map(item => normalizeRuleValue(item, field));
 }
 
 export function parseImportedRules(content: string): RuleBucket {
@@ -137,22 +145,27 @@ export function parseImportedRules(content: string): RuleBucket {
   const result = emptyBucket();
   for (const rule of (source as { rules: unknown[] }).rules) {
     if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('Rules must be objects');
-    const entries = Object.entries(rule as Record<string, unknown>);
-    if (entries.length === 0 || entries.some(([field]) => field !== 'domain' && field !== 'domain_suffix')) {
-      throw new Error('Rules may only contain domain or domain_suffix fields');
+    const entries = Object.entries(rule as Record<string, unknown>) as Array<[RuleField, unknown]>;
+    if (entries.length === 0 || entries.some(([field]) => !RULE_FIELDS.includes(field))) {
+      throw new Error('Rules may only contain domain, domain_suffix, domain_keyword, or domain_regex fields');
     }
-    for (const [field, value] of entries as Array<[keyof RuleBucket, unknown]>) result[field].push(...values(value, field));
+    for (const [field, value] of entries) result[field].push(...values(value, field));
   }
   return mergeRuleBuckets([result]);
 }
 
 export function mergeRuleBuckets(buckets: RuleBucket[]): RuleBucket {
   const merged = emptyBucket();
-  const seen = { domain: new Set<string>(), domain_suffix: new Set<string>() };
+  const seen = {
+    domain: new Set<string>(),
+    domain_suffix: new Set<string>(),
+    domain_keyword: new Set<string>(),
+    domain_regex: new Set<string>(),
+  };
   for (const bucket of buckets) {
-    for (const field of ['domain', 'domain_suffix'] as const) {
+    for (const field of RULE_FIELDS) {
       for (const value of bucket[field]) {
-        const normalized = normalizeDomain(value, field);
+        const normalized = normalizeRuleValue(value, field);
         if (!seen[field].has(normalized)) {
           seen[field].add(normalized);
           merged[field].push(normalized);
@@ -174,7 +187,7 @@ export function readRulesetMetadata(content: string): RulesetMetadata {
   const record = metadata as Record<string, unknown>;
   if (Object.keys(record).some(key => !['note', 'manual', 'sources'].includes(key))) throw new Error('Unsupported _sing_sub field');
   if (record.note !== undefined && typeof record.note !== 'string') throw new Error('_sing_sub.note must be a string');
-  const manual = parseBucket(record.manual, 'manual');
+  const manual = record.manual === undefined ? emptyBucket() : parseBucket(record.manual, 'manual');
   if (!Array.isArray(record.sources)) throw new Error('_sing_sub.sources must be an array');
   const sources = record.sources.map((source, index) => parseSource(source, index));
   if (new Set(sources.map(source => source.url)).size !== sources.length) throw new Error('Source URLs must be unique');
@@ -184,10 +197,12 @@ export function readRulesetMetadata(content: string): RulesetMetadata {
 function parseBucket(value: unknown, label: string): RuleBucket {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).some(key => key !== 'domain' && key !== 'domain_suffix')) throw new Error(`${label} has unsupported fields`);
+  if (Object.keys(record).some(key => !RULE_FIELDS.includes(key as RuleField))) throw new Error(`${label} has unsupported fields`);
   return mergeRuleBuckets([{
     domain: values(record.domain ?? [], 'domain'),
     domain_suffix: values(record.domain_suffix ?? [], 'domain_suffix'),
+    domain_keyword: values(record.domain_keyword ?? [], 'domain_keyword'),
+    domain_regex: values(record.domain_regex ?? [], 'domain_regex'),
   }]);
 }
 
@@ -206,13 +221,17 @@ function parseSource(value: unknown, index: number): RulesetSource {
 
 export function createRulesetDocument(metadata: RulesetMetadata, imported: RuleBucket[]): string {
   const merged = mergeRuleBuckets([metadata.manual, ...imported]);
-  const rule: Record<string, string[]> = {};
-  if (merged.domain.length) rule.domain = merged.domain;
-  if (merged.domain_suffix.length) rule.domain_suffix = merged.domain_suffix;
+  const rule: Partial<RuleBucket> = {};
+  for (const field of RULE_FIELDS) if (merged[field].length) rule[field] = merged[field];
+  const manual: Partial<RuleBucket> = {};
+  for (const field of RULE_FIELDS) if (metadata.manual[field].length) manual[field] = metadata.manual[field];
+  const serializedMetadata: Record<string, unknown> = { ...metadata };
+  if (Object.keys(manual).length) serializedMetadata.manual = manual;
+  else delete serializedMetadata.manual;
   return JSON.stringify({
     version: 2,
     rules: Object.keys(rule).length ? [rule] : [],
-    [RULESET_METADATA_KEY]: metadata,
+    [RULESET_METADATA_KEY]: serializedMetadata,
   }, null, 2);
 }
 

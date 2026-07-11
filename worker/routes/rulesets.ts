@@ -16,7 +16,7 @@ async function refreshRulesetSources(content: string): Promise<string> {
       const response = await fetchPublicRuleset(parseRulesetImportUrl(source.url));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const bucket = parseImportedRules(await readResponseTextLimited(response));
-      if (!bucket.domain.length && !bucket.domain_suffix.length) throw new Error('source contains no domain rules');
+      if (!Object.values(bucket).some(values => values.length)) throw new Error('source contains no supported rules');
       return { source: { ...source, last_updated: new Date().toISOString() }, bucket };
     } catch (error: any) {
       throw new Error(`Source ${index + 1} (${source.url}) failed: ${error.message}`);

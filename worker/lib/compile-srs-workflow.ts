@@ -90,6 +90,7 @@ jobs:
           const allowedKeys = new Set(['version', 'rules', '_sing_sub']);
           const metadataKeys = new Set(['note', 'manual', 'sources']);
           const sourceKeys = new Set(['url', 'interval_hours', 'last_updated']);
+          const ruleFields = ['domain', 'domain_suffix', 'domain_keyword', 'domain_regex'];
           const maxBytes = 5 * 1024 * 1024;
           const compileFiles = new Set(fs.readFileSync('.ruleset-staging/compile-list', 'utf8').split(/\\r?\\n/).filter(Boolean));
           const repairMissing = process.env.EVENT_NAME !== 'push' || compileFiles.size > 0;
@@ -140,24 +141,28 @@ jobs:
             throw new Error('source request retry failed');
           }
 
-          function normalizeImportedRules(data) {
+          function normalizeImportedRules(data, allowEmptyRules = false) {
             if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.rules)) {
               throw new Error('source must be a JSON object with a rules array');
             }
-            const normalized = { domain: [], domain_suffix: [] };
-            const seen = { domain: new Set(), domain_suffix: new Set() };
+            const normalized = { domain: [], domain_suffix: [], domain_keyword: [], domain_regex: [] };
+            const seen = { domain: new Set(), domain_suffix: new Set(), domain_keyword: new Set(), domain_regex: new Set() };
             for (const rule of data.rules) {
               if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('source rules must be objects');
               const entries = Object.entries(rule);
-              if (entries.length === 0 || entries.some(([field]) => field !== 'domain' && field !== 'domain_suffix')) {
-                throw new Error('source rules may only contain domain or domain_suffix fields');
+              if (entries.length === 0 && allowEmptyRules) continue;
+              if (entries.length === 0 || entries.some(([field]) => !ruleFields.includes(field))) {
+                throw new Error('source rules may only contain domain, domain_suffix, domain_keyword, or domain_regex fields');
               }
               for (const [field, rawValues] of entries) {
                 const values = typeof rawValues === 'string' ? [rawValues] : rawValues;
                 if (!Array.isArray(values) || values.some(value => typeof value !== 'string' || !value.trim())) {
                   throw new Error('source rule values must be non-empty strings');
                 }
-                for (const value of values.map(value => value.trim().toLowerCase().replace(field === 'domain_suffix' ? /^\\.+/ : /^$/, ''))) {
+                for (const value of values.map(value => {
+                  const normalized = field === 'domain_regex' ? value.trim() : value.trim().toLowerCase();
+                  return field === 'domain_suffix' ? normalized.replace(/^\\.+/, '') : normalized;
+                })) {
                   if (!seen[field].has(value)) { seen[field].add(value); normalized[field].push(value); }
                 }
               }
@@ -174,14 +179,16 @@ jobs:
             }
           }
 
-          function materialize(data, metadata, imported) {
-            const buckets = [metadata.manual, ...imported];
+          function materialize(data, manual, imported) {
+            const buckets = [manual, ...imported];
             const merged = normalizeImportedRules({ rules: buckets.map(bucket => ({
-              domain: bucket.domain || [], domain_suffix: bucket.domain_suffix || []
-            })) });
+              domain: bucket.domain || [],
+              domain_suffix: bucket.domain_suffix || [],
+              domain_keyword: bucket.domain_keyword || [],
+              domain_regex: bucket.domain_regex || []
+            })) }, true);
             const rule = {};
-            if (merged.domain.length) rule.domain = merged.domain;
-            if (merged.domain_suffix.length) rule.domain_suffix = merged.domain_suffix;
+            for (const field of ruleFields) if (merged[field].length) rule[field] = merged[field];
             data.version = 2;
             data.rules = Object.keys(rule).length ? [rule] : [];
           }
@@ -195,12 +202,13 @@ jobs:
             normalizeImportedRules(data);
             for (const key of Object.keys(data)) if (!allowedKeys.has(key)) throw new Error(file + ' has unsupported top-level field: ' + key);
             const metadata = data._sing_sub;
-            if (metadata !== undefined && (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))) throw new Error(file + ' has invalid _sing_sub metadata');
-            const sources = metadata && metadata.sources !== undefined ? metadata.sources : [];
+            if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error(file + ' has invalid _sing_sub metadata');
+            const sources = metadata.sources !== undefined ? metadata.sources : [];
             if (!Array.isArray(sources)) throw new Error(file + ' sources must be an array');
-            if (metadata) for (const key of Object.keys(metadata)) if (!metadataKeys.has(key)) throw new Error(file + ' has unsupported metadata field: ' + key);
-            if (!metadata || !metadata.manual || typeof metadata.manual !== 'object' || Array.isArray(metadata.manual)) throw new Error(file + ' has invalid manual rules');
-            normalizeImportedRules({ rules: [metadata.manual] });
+            for (const key of Object.keys(metadata)) if (!metadataKeys.has(key)) throw new Error(file + ' has unsupported metadata field: ' + key);
+            const manual = metadata.manual === undefined ? {} : metadata.manual;
+            if (!manual || typeof manual !== 'object' || Array.isArray(manual)) throw new Error(file + ' has invalid manual rules');
+            normalizeImportedRules({ rules: [manual] }, true);
             for (const source of sources) {
               validateSource(source, file);
             }
@@ -223,11 +231,11 @@ jobs:
                 const body = await response.text();
                 if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error(file + ' source exceeds 5 MiB');
                 const bucket = normalizeImportedRules(JSON.parse(body));
-                if (!bucket.domain.length && !bucket.domain_suffix.length) throw new Error(file + ' source contains no domain rules');
+                if (!ruleFields.some(field => bucket[field].length)) throw new Error(file + ' source contains no supported rules');
                 imported.push(bucket);
                 source.last_updated = new Date().toISOString();
               }
-              materialize(data, metadata, imported);
+              materialize(data, manual, imported);
               changed = true;
             }
             const normalized = JSON.stringify(data) !== originalData;
