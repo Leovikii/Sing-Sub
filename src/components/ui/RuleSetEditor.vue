@@ -3,7 +3,7 @@
     <div v-if="loading" class="flex flex-1 items-center justify-center">
       <Loader2 class="h-8 w-8 animate-spin text-brand-pink" />
     </div>
-    <div v-else class="grid min-h-0 flex-1 grid-rows-[minmax(11rem,0.8fr)_minmax(13rem,1fr)_minmax(13rem,1fr)] gap-4 overflow-y-auto p-4">
+    <div v-else class="grid min-h-0 flex-1 grid-rows-[minmax(11rem,0.8fr)_repeat(4,minmax(13rem,1fr))] gap-4 overflow-y-auto p-4">
       <section class="glass flex min-h-0 flex-col rounded-xl border border-border-base p-4">
         <div class="mb-3 flex items-center justify-between gap-4">
           <div class="flex min-w-0 items-center gap-2">
@@ -57,6 +57,34 @@
           @input="emitChange"
         ></textarea>
       </section>
+
+      <section class="glass flex min-h-0 flex-col rounded-xl border border-border-base p-4">
+        <div class="mb-3 flex items-center gap-2">
+          <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">DOMAIN_KEYWORD</span>
+          <span class="text-xs text-text-muted">每行一个域名关键字。</span>
+        </div>
+        <textarea
+          v-model="domainKeywordContent"
+          :readonly="readonly"
+          placeholder="google&#10;youtube"
+          class="min-h-0 flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
+          @input="emitChange"
+        ></textarea>
+      </section>
+
+      <section class="glass flex min-h-0 flex-col rounded-xl border border-border-base p-4">
+        <div class="mb-3 flex items-center gap-2">
+          <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">DOMAIN_REGEX</span>
+          <span class="text-xs text-text-muted">每行一个 RE2 域名正则表达式。</span>
+        </div>
+        <textarea
+          v-model="domainRegexContent"
+          :readonly="readonly"
+          placeholder="^www\\.example\\.com$"
+          class="min-h-0 flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
+          @input="emitChange"
+        ></textarea>
+      </section>
     </div>
   </div>
 </template>
@@ -77,7 +105,12 @@ const emit = defineEmits<{
   'validity-change': [value: boolean];
 }>();
 
-interface RuleBucket { domain: string[]; domain_suffix: string[] }
+interface RuleBucket {
+  domain: string[];
+  domain_suffix: string[];
+  domain_keyword: string[];
+  domain_regex: string[];
+}
 
 interface SourceConfig {
   url: string;
@@ -90,6 +123,8 @@ const sourceIntervalHours = ref(0);
 const sourceLastUpdated = ref<string | undefined>();
 const domainContent = ref('');
 const domainSuffixContent = ref('');
+const domainKeywordContent = ref('');
+const domainRegexContent = ref('');
 const sourceError = ref('');
 const sourceDocument = ref<Record<string, unknown>>({});
 let lastEmitted: string | null = null;
@@ -134,6 +169,8 @@ function readManual(document: Record<string, unknown>): RuleBucket {
   return {
     domain: Array.isArray(manual?.domain) ? manual.domain.filter((value): value is string => typeof value === 'string') : [],
     domain_suffix: Array.isArray(manual?.domain_suffix) ? manual.domain_suffix.filter((value): value is string => typeof value === 'string') : [],
+    domain_keyword: Array.isArray(manual?.domain_keyword) ? manual.domain_keyword.filter((value): value is string => typeof value === 'string') : [],
+    domain_regex: Array.isArray(manual?.domain_regex) ? manual.domain_regex.filter((value): value is string => typeof value === 'string') : [],
   };
 }
 
@@ -152,6 +189,8 @@ watch(() => props.modelValue, (newValue) => {
     sourceLastUpdated.value = sources.map(source => source.last_updated).filter((value): value is string => !!value).sort().at(-1);
     domainContent.value = manual.domain.join('\n');
     domainSuffixContent.value = manual.domain_suffix.join('\n');
+    domainKeywordContent.value = manual.domain_keyword.join('\n');
+    domainRegexContent.value = manual.domain_regex.join('\n');
     sourceError.value = '';
     emit('validity-change', true);
   } catch {
@@ -224,12 +263,23 @@ function emitChange() {
       : previous;
   });
   sourceLastUpdated.value = nextSources.map(source => source.last_updated).filter((value): value is string => !!value).sort().at(-1);
-  const manual: RuleBucket = { domain: lines(domainContent.value), domain_suffix: lines(domainSuffixContent.value) };
+  const manual: Partial<RuleBucket> = {};
+  const manualFields: Array<[keyof RuleBucket, string]> = [
+    ['domain', domainContent.value],
+    ['domain_suffix', domainSuffixContent.value],
+    ['domain_keyword', domainKeywordContent.value],
+    ['domain_regex', domainRegexContent.value],
+  ];
+  for (const [field, content] of manualFields) {
+    const entries = lines(content);
+    if (entries.length) manual[field] = entries;
+  }
 
   const metadata = output._sing_sub && typeof output._sing_sub === 'object' && !Array.isArray(output._sing_sub)
     ? clone(output._sing_sub as Record<string, unknown>)
     : {};
-  metadata.manual = manual;
+  if (Object.keys(manual).length) metadata.manual = manual;
+  else delete metadata.manual;
   metadata.sources = nextSources;
   if (Object.keys(metadata).length > 0) output._sing_sub = metadata;
   else delete output._sing_sub;
