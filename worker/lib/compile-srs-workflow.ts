@@ -61,13 +61,29 @@ jobs:
           async function fetchPublicRuleset(raw) {
             let current = parsePublicUrl(raw);
             for (let redirects = 0; redirects <= 3; redirects++) {
-              const response = await fetch(current, { redirect: 'manual', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+              const response = await fetchWithRetry(current);
               if (response.status < 300 || response.status >= 400) return response;
               const location = response.headers.get('location');
               if (!location) throw new Error('redirect has no location');
               current = parsePublicUrl(new URL(location, current).toString());
             }
             throw new Error('redirect limit exceeded');
+          }
+
+          async function fetchWithRetry(url) {
+            for (let attempt = 0; attempt < 3; attempt++) {
+              const response = await fetch(url, { redirect: 'manual', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+              const retryable = response.status === 429 || [502, 503, 504].includes(response.status);
+              if (!retryable || attempt === 2) return response;
+              await response.body?.cancel();
+              const retryAfter = response.headers.get('retry-after');
+              const retryAfterSeconds = retryAfter ? Number(retryAfter) : NaN;
+              const delay = Number.isFinite(retryAfterSeconds)
+                ? Math.min(retryAfterSeconds * 1000, 2000)
+                : 350 * (2 ** attempt) + Math.floor(Math.random() * 150);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+            throw new Error('source request retry failed');
           }
 
           function normalizeImportedRules(data) {
@@ -173,13 +189,26 @@ jobs:
 
           node .ruleset-staging/process.js
 
-          SING_BOX_VERSION="v1.9.3"
           curl --fail --location --retry 3 --connect-timeout 10 \\
-            "https://github.com/SagerNet/sing-box/releases/download/v1.9.3/sing-box-1.9.3-linux-amd64.tar.gz" \\
+            --header "Accept: application/vnd.github+json" \\
+            --header "Authorization: Bearer \${{ github.token }}" \\
+            --header "X-GitHub-Api-Version: 2022-11-28" \\
+            "https://api.github.com/repos/SagerNet/sing-box/releases/latest" \\
+            --output sing-box-release.json
+          DOWNLOAD_URL=$(node -e '
+            const release = require("./sing-box-release.json");
+            if (release.draft || release.prerelease) throw new Error("latest release is not stable");
+            const asset = release.assets.find(item => /^sing-box-[0-9.]+-linux-amd64\\.tar\\.gz$/.test(item.name));
+            if (!asset) throw new Error("linux-amd64 archive not found in latest stable release");
+            process.stdout.write(asset.browser_download_url);
+          ')
+          curl --fail --location --retry 3 --connect-timeout 10 \\
+            "$DOWNLOAD_URL" \\
             --output sing-box.tar.gz
           tar -xzf sing-box.tar.gz
           mv sing-box-*/sing-box ./sing-box
           chmod +x ./sing-box
+          ./sing-box version
 
           for source in .ruleset-staging/sources/*.json; do
             [ -e "$source" ] || continue
@@ -189,7 +218,7 @@ jobs:
 
           rm -rf sing-sub/rulesets/compiled
           mv .ruleset-staging/compiled sing-sub/rulesets/compiled
-          rm -rf .ruleset-staging sing-box sing-box.tar.gz
+          rm -rf .ruleset-staging sing-box sing-box.tar.gz sing-box-release.json
       - name: Commit and push updated sources and SRS files
         run: |
           git config user.name "Sing-Sub Bot"

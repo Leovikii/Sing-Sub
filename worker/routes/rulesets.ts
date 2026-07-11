@@ -40,8 +40,9 @@ export async function handleImportRuleset(request: Request, env: Env): Promise<R
 
 async function refreshRulesetSources(content: string): Promise<string> {
   const metadata = readRulesetMetadata(content);
-  const limit = pLimit(4);
+  const limit = pLimit(2);
   const sources = await Promise.all(metadata.sources.map((source, index) => limit(async (): Promise<RulesetSource> => {
+    if (source.last_updated && (source.domain.length || source.domain_suffix.length)) return source;
     try {
       const response = await fetchPublicRuleset(parseRulesetImportUrl(source.url));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

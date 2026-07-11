@@ -101,6 +101,7 @@
               @refresh="refreshAssets"
               @status="(t, m) => showStatus(t, m, 5000)"
               @delete="markAssetForDeletion"
+              @saved="handleAssetSaved"
               @conflict="handleAssetConflict"
             />
           </div>
@@ -290,6 +291,16 @@ watch(() => stateData.value?.profiles.map(p => p.name).join(','), () => {
 
 function updateViewportLayout() {
   isWideDesktop.value = window.matchMedia('(min-width: 1280px)').matches;
+}
+
+function handleAssetSaved(file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'patch' | 'ruleset' }) {
+  const list = availableAssets.value[file.type === 'node' ? 'nodes' : file.type === 'template' ? 'templates' : file.type === 'patch' ? 'patches' : 'rulesets'];
+  const oldIndex = file.oldPath ? list.findIndex((item: any) => (item.path || item) === file.oldPath) : -1;
+  if (oldIndex >= 0) list.splice(oldIndex, 1);
+  const existing = list.find((item: any) => (item.path || item) === file.path);
+  const next = { path: file.path, note: file.note, inboundsCount: 0, outboundsCount: 0, tags: [] };
+  if (existing && typeof existing === 'object') Object.assign(existing, next);
+  else if (!existing) list.unshift(next);
 }
 
 onMounted(async () => {

@@ -45,17 +45,34 @@ export function parseRulesetImportUrl(raw: string): URL {
 export async function fetchPublicRuleset(url: URL): Promise<Response> {
   let current = url;
   for (let redirects = 0; redirects <= 3; redirects++) {
-    const response = await fetch(current, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10_000),
-      headers: { Accept: 'application/json' },
-    });
+    const response = await fetchRulesetWithRetry(current);
     if (response.status < 300 || response.status >= 400) return response;
     const location = response.headers.get('location');
     if (!location) throw new Error('Import redirect has no location');
     current = parseRulesetImportUrl(new URL(location, current).toString());
   }
   throw new Error('Import exceeded the redirect limit');
+}
+
+async function fetchRulesetWithRetry(url: URL): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10_000),
+      headers: { Accept: 'application/json' },
+    });
+    const retryable = response.status === 429 || [502, 503, 504].includes(response.status);
+    if (!retryable || attempt === 2) return response;
+
+    await response.body?.cancel();
+    const retryAfter = response.headers.get('retry-after');
+    const retryAfterSeconds = retryAfter ? Number(retryAfter) : NaN;
+    const delay = Number.isFinite(retryAfterSeconds)
+      ? Math.min(retryAfterSeconds * 1000, 2_000)
+      : 350 * (2 ** attempt) + Math.floor(Math.random() * 150);
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+  throw new Error('Source request retry failed');
 }
 
 export async function readResponseTextLimited(response: Response): Promise<string> {
