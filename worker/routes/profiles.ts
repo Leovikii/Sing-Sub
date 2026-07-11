@@ -4,6 +4,7 @@ import { buildAllProfiles, buildProfile } from '../lib/builder';
 import { commitMultiFiles, fetchDirectoryContents, GithubApiError, type GitTreeItem } from '../lib/github';
 import { errorResponse, jsonResponse } from '../lib/security';
 import { fetchAllProfiles, rebuildSingleWithWarning, rebuildWithWarning, toRepoSession } from '../lib/helpers';
+import { getProfileSnapshot, putProfileSnapshot } from '../lib/dashboard';
 
 const SAFE_PROFILE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
@@ -30,7 +31,13 @@ export async function handleGetState(request: Request, env: Env): Promise<Respon
   const auth = await requireAuth(request, env);
   if (auth instanceof Response) return auth;
 
-  return jsonResponse({ state: { profiles: await fetchAllProfiles(toRepoSession(auth.settings)) } });
+  const session = toRepoSession(auth.settings);
+  let profiles = await getProfileSnapshot(env, session);
+  if (!profiles) {
+    profiles = await fetchAllProfiles(session);
+    await putProfileSnapshot(env, session, profiles);
+  }
+  return jsonResponse({ state: { profiles } });
 }
 
 export async function handleRebuild(request: Request, env: Env): Promise<Response> {
@@ -39,6 +46,7 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
 
   const session = toRepoSession(auth.settings);
   const profiles = await fetchAllProfiles(session);
+  await putProfileSnapshot(env, session, profiles);
   try {
     await buildAllProfiles(profiles, session, auth.settings.subToken, env);
   } catch (error) {
@@ -106,6 +114,8 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
       throw error;
     }
   }
+
+  await putProfileSnapshot(env, session, profiles);
 
   if (renamedPath) await env.SESSIONS.delete(`config:${auth.settings.subToken}:${oldProfileName}`);
 

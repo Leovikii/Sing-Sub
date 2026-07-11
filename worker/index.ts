@@ -1,6 +1,6 @@
 import type { Env } from './types';
 import {
-  handleLogin, handleLogout, handleGetSettings, handlePutSettings, handleDeleteSettings,
+  handleLogin, handleLogout, handleBootstrap, handleGetSettings, handlePutSettings, handleDeleteSettings,
 } from './routes/auth';
 import {
   handleGetState, handlePutState, handleRebuild, handlePreview,
@@ -19,7 +19,9 @@ export default {
     let response: Response;
 
     try {
-      if (path === '/api/login' && method === 'POST') {
+      if (path === '/api/bootstrap' && method === 'GET') {
+        response = await handleBootstrap(request, env);
+      } else if (path === '/api/login' && method === 'POST') {
         response = await handleLogin(request, env);
       } else if (path === '/api/logout' && method === 'POST') {
         response = await handleLogout(request, env);

@@ -56,6 +56,15 @@ export function useApi() {
     return data;
   }
 
+  async function bootstrap(): Promise<{ settings: UserSettings | null; state?: StateData }> {
+    const data = await apiCall('/api/bootstrap') as { settings: UserSettings | null; state?: StateData };
+    if (data.settings) {
+      settings.value = data.settings;
+      user.value = { login: data.settings.userLogin, avatar_url: data.settings.userAvatar };
+    }
+    return data;
+  }
+
   async function saveSettings(data: SetupData & { subToken: string }): Promise<UserSettings & { warning?: string }> {
     const result = await apiCall('/api/settings', {
       method: 'PUT',
@@ -98,8 +107,8 @@ export function useApi() {
     });
   }
 
-  async function getAssets(): Promise<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }> {
-    return apiCall('/api/assets');
+  async function getAssets(force = false): Promise<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }> {
+    return apiCall(`/api/assets${force ? '?refresh=1' : ''}`);
   }
 
   async function getFile(path: string): Promise<{ content: string; sha: string }> {
@@ -116,7 +125,7 @@ export function useApi() {
 
   return {
     user, settings,
-    login, logout, getSettings, saveSettings, deleteSettings,
+    login, logout, bootstrap, getSettings, saveSettings, deleteSettings,
     getState, saveState, rebuild, getPreview, postPreview, getAssets, getFile, getTemplate, deleteFile,
   };
 }

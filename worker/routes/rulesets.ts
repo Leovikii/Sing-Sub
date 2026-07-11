@@ -6,6 +6,7 @@ import { createRulesetDocument, fetchPublicRuleset, parseImportedRules, parseRul
 import { commitMultiFiles, deleteFileContent, fetchFileContent, GithubApiError, putFileContent, type GitTreeItem } from '../lib/github';
 import { pLimit, toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
+import { invalidateAssetSnapshot } from '../lib/dashboard';
 
 async function refreshRulesetSources(content: string): Promise<string> {
   const metadata = readRulesetMetadata(content);
@@ -38,7 +39,7 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
   }
 
   const session = toRepoSession(auth.settings);
-  if (!isRulesetPath(path)) return putAssetFile(path, content, sha, oldPath, session);
+  if (!isRulesetPath(path)) return putAssetFile(path, content, sha, oldPath, session, env);
 
   const validationError = validateRulesetSource(content);
   if (validationError) return errorResponse(validationError, 400);
@@ -82,6 +83,7 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
       ? `ruleset: rename ${oldPath!.split('/').pop()} to ${fileName}`
       : `ruleset: ${sha ? 'update' : 'create'} ${fileName}`;
     await commitMultiFiles(session, treeItems, actionMessage);
+    await invalidateAssetSnapshot(env, session);
   } catch (error) {
     if (error instanceof GithubApiError && error.status === 409) return errorResponse('File was modified; reload it before saving', 409);
     throw error;
@@ -89,7 +91,14 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
   return jsonResponse({ success: true, content: preparedContent });
 }
 
-async function putAssetFile(path: string, content: string, sha: string | undefined, oldPath: string | undefined, session: ReturnType<typeof toRepoSession>): Promise<Response> {
+async function putAssetFile(
+  path: string,
+  content: string,
+  sha: string | undefined,
+  oldPath: string | undefined,
+  session: ReturnType<typeof toRepoSession>,
+  env: Env,
+): Promise<Response> {
   const isRename = !!oldPath && oldPath !== path;
   const fileName = path.split('/').pop()!;
   const scope = path.startsWith('sing-sub/nodes/') ? 'node'
@@ -115,6 +124,7 @@ async function putAssetFile(path: string, content: string, sha: string | undefin
     } else {
       await putFileContent(path, session, content, sha || null, actionMessage);
     }
+    await invalidateAssetSnapshot(env, session);
   } catch (error) {
     if (error instanceof GithubApiError && error.status === 409) return errorResponse('文件已被修改，请重新加载后再试', 409);
     throw error;
@@ -148,6 +158,7 @@ export async function handleDeleteFile(request: Request, env: Env): Promise<Resp
       if (compiledFile) treeItems.push({ path: compiledPath, mode: '100644', type: 'blob', sha: null });
       await commitMultiFiles(session, treeItems, `ruleset: delete ${basename}.json`);
     }
+    await invalidateAssetSnapshot(env, session);
   } catch (error) {
     if (error instanceof GithubApiError && error.status === 409) return errorResponse('文件已被修改，请重新加载后再试', 409);
     throw error;
