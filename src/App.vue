@@ -116,7 +116,6 @@
           </div>
         </transition>
 
-      <AppDock v-model:activeTab="activeTab" v-model:expanded="sidebarExpanded" :can-expand="isWideDesktop" />
     </template>
 
 
@@ -138,6 +137,13 @@
 
       </div>
     </main>
+
+    <AppNavigation
+      v-if="stateData"
+      v-model:activeTab="activeTab"
+      v-model:expanded="sidebarExpanded"
+      :can-expand="isWideDesktop"
+    />
   </div>
 </template>
 
@@ -151,7 +157,7 @@ import ConfirmModal from './components/ui/ConfirmModal.vue';
 import ConflictModal from './components/ui/ConflictModal.vue';
 import GlobalToast from './components/ui/GlobalToast.vue';
 import TopToolbar from './components/layout/TopToolbar.vue';
-import AppDock from './components/layout/AppDock.vue';
+import AppNavigation from './components/layout/AppNavigation.vue';
 import AssetManager from './components/AssetManager.vue';
 import SettingsView from './components/SettingsView.vue';
 import { useApi } from './composables/useApi';
