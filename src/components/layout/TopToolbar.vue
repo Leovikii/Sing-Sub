@@ -15,6 +15,7 @@
     <!-- Right: Action buttons -->
     <div class="flex items-center gap-2">
       <ToolbarButton
+        class="order-2"
         :icon="saveStatusIcon"
         label="保存"
         :variant="saveStatusVariant"
@@ -24,6 +25,8 @@
       />
 
       <ToolbarButton
+        v-if="activeTab === 'config'"
+        class="order-1"
         :icon="RefreshCw"
         label="刷新"
         :disabled="refreshing || saveStatus !== 'idle'"
@@ -35,7 +38,7 @@
         :icon="Plus"
         label="新建"
         variant="primary"
-        :class="{ 'scale-90 opacity-80': addBounce }"
+        :class="['order-3', { 'scale-90 opacity-80': addBounce }]"
         @click="handleAdd"
       />
     </div>

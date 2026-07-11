@@ -91,6 +91,10 @@ const stateClass = computed(() => {
     return 'bg-brand-pink text-text-primary hover:bg-brand-pink/90 cursor-pointer shadow-lg shadow-brand-pink/20';
   }
 
+  if (props.variant === 'danger') {
+    return 'text-danger hover:bg-danger/10 cursor-pointer';
+  }
+
   return 'text-text-muted hover:text-text-primary hover:bg-bg-elevated cursor-pointer';
 });
 </script>

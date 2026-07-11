@@ -6,10 +6,10 @@
     @mouseenter="isHoverExpanded = true"
     @mouseleave="isHoverExpanded = false"
   >
-      <AppNavigationItem label="配置" :icon="Settings2" :active="activeTab === 'config'" :expanded="isPanelExpanded" :show-label="showLabels" @select="$emit('update:activeTab', 'config')" />
-      <AppNavigationItem label="组件" :icon="Box" :active="activeTab === 'assets'" :expanded="isPanelExpanded" :show-label="showLabels" @select="$emit('update:activeTab', 'assets')" />
+      <AppNavigationItem label="配置" :icon="Settings2" :active="activeTab === 'config'" :show-label="showLabels" @select="$emit('update:activeTab', 'config')" />
+      <AppNavigationItem label="组件" :icon="Box" :active="activeTab === 'assets'" :show-label="showLabels" @select="$emit('update:activeTab', 'assets')" />
       <div class="flex flex-1 justify-center md:mt-auto md:w-full md:flex-none">
-        <AppNavigationItem label="设置" :icon="User" :active="activeTab === 'settings'" :expanded="isPanelExpanded" :show-label="showLabels" @select="$emit('update:activeTab', 'settings')" />
+        <AppNavigationItem label="设置" :icon="User" :active="activeTab === 'settings'" :show-label="showLabels" @select="$emit('update:activeTab', 'settings')" />
       </div>
       <button
         v-if="canExpand"
@@ -45,16 +45,11 @@ const isPanelExpanded = ref(props.expanded);
 const showLabels = ref(props.expanded);
 const targetExpanded = computed(() => props.expanded || isHoverExpanded.value);
 let labelTimer: ReturnType<typeof window.setTimeout> | null = null;
-let collapseFrame: number | null = null;
 
 function clearTransitionWork() {
   if (labelTimer !== null) {
     window.clearTimeout(labelTimer);
     labelTimer = null;
-  }
-  if (collapseFrame !== null) {
-    window.cancelAnimationFrame(collapseFrame);
-    collapseFrame = null;
   }
 }
 
@@ -82,10 +77,7 @@ function collapsePanel() {
   clearTransitionWork();
   // Remove text before width changes so the collapsing rail never reflows labels.
   showLabels.value = false;
-  collapseFrame = window.requestAnimationFrame(() => {
-    isPanelExpanded.value = false;
-    collapseFrame = null;
-  });
+  isPanelExpanded.value = false;
 }
 
 watch(targetExpanded, (shouldExpand) => {

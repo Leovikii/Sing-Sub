@@ -28,6 +28,7 @@
     @update:isOpen="isOpen = $event"
     :title="localProfileName"
     @update:title="localProfileName = $event"
+    titlePlaceholder="输入配置名称"
     :note="localProfileNote"
     @update:note="localProfileNote = $event"
     :editableTitle="true"
@@ -36,6 +37,7 @@
     :isDirty="isDirty"
     :isSaving="isSaving || globalBusy"
     :showSave="true"
+    :saveDisabled="!isValidProfileName"
     saveText="保存"
     :showViewToggle="true"
     v-model:viewMode="viewMode"
@@ -153,6 +155,8 @@ const isDirty = computed(() => {
   return JSON.stringify(current) !== initialProfileState;
 });
 
+const isValidProfileName = computed(() => /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(localProfileName.value));
+
 function openModal(mode?: 'preview' | 'edit') {
   viewMode.value = mode || 'edit';
   isOpen.value = true;
@@ -215,7 +219,7 @@ watch(isOpen, (open) => {
     document.body.style.overflow = 'hidden';
     initialProfileState = JSON.stringify(props.profile);
     localProfile.value = JSON.parse(initialProfileState);
-    localProfileName.value = props.profile.name || 'untitled';
+    localProfileName.value = props.profile.name || '';
     localProfileNote.value = props.profile.note || '';
     fetchTemplateData(localProfile.value.templateUrl || '');
     fetchNodesData(localProfile.value.nodesPath || '');
@@ -255,6 +259,11 @@ watch(viewMode, (mode) => {
 });
 
 function handleLocalSave() {
+  if (!isValidProfileName.value) {
+    emit('status', 'error', '请输入有效的配置名称');
+    return;
+  }
+
   // Apply name and note change
   localProfile.value.name = localProfileName.value;
   localProfile.value.note = localProfileNote.value;

@@ -3,7 +3,7 @@
     <!-- Animated slider background -->
     <div
       class="absolute rounded-full bg-border-base shadow-sm pointer-events-none"
-      :class="[!ready && 'opacity-0', sliding ? 'transition-[left,width] duration-[380ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]' : 'transition-none']"
+      :class="[!ready && 'opacity-0', sliding ? 'transition-[left,width] duration-[220ms] ease-[cubic-bezier(0.2,0,0,1)]' : 'transition-none']"
       :style="{
         left: `${sliderLeft}px`,
         width: `${sliderWidth}px`,
@@ -101,7 +101,7 @@ function updateSliderPosition(animate = true) {
   if (animate) {
     setTimeout(() => {
       sliding.value = false;
-    }, 380);
+    }, 220);
   }
 }
 

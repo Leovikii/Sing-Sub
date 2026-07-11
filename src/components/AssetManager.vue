@@ -31,6 +31,7 @@
       @update:isOpen="(val) => { if (!val) closeEditor(); }"
       :title="localFileName"
       @update:title="localFileName = $event"
+      titlePlaceholder="输入文件名称"
       :note="localFileNote"
       @update:note="localFileNote = $event"
       :viewMode="viewMode"
@@ -41,55 +42,14 @@
       :isDirty="isEditorDirty || isNameDirty || isNoteDirty"
       :isSaving="isSaving || globalBusy"
       :showSave="true"
-      :saveDisabled="!isValidJson"
+      :saveDisabled="!isSaveReady"
       saveText="保存"
       :showViewToggle="true"
       @save="saveFileCode"
       @close="closeEditor"
     >
-      <template v-if="type === 'ruleset'" #header-actions>
-        <PopoverMenu
-          v-model:isOpen="addRuleMenuOpen"
-          :class="viewMode === 'preview' ? 'invisible pointer-events-none' : ''"
-          wrapperClass="relative flex"
-          contentClass="right-0 top-full mt-2 w-44 p-1.5 rounded-xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-lg origin-top-right flex flex-col gap-0.5"
-        >
-          <template #trigger="{ toggle, isOpen }">
-            <ToolbarButton
-              :icon="Plus"
-              label="新增"
-              size="compact"
-              :active="isOpen"
-              @click="toggle"
-            />
-          </template>
-
-          <template #content="{ close }">
-            <button
-              @click="ruleSetEditorRef?.addRule('domain'); close()"
-              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              添加完整域名
-            </button>
-            <button
-              @click="ruleSetEditorRef?.addRule('domain_suffix'); close()"
-              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              添加域名后缀
-            </button>
-            <button
-              @click="ruleSetEditorRef?.addRule('external_url'); close()"
-              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              导入外部 JSON
-            </button>
-          </template>
-        </PopoverMenu>
-      </template>
-
       <component
         :is="type === 'ruleset' && viewMode === 'edit' ? RuleSetEditor : CodeEditor"
-        :ref="type === 'ruleset' && viewMode === 'edit' ? (el => ruleSetEditorRef = (el as any)) : undefined"
         v-model="editorContent"
         :readonly="viewMode === 'preview'"
         @validity-change="ruleSetContentValid = $event"
@@ -105,11 +65,9 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
-import { Trash2, Plus, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
+import { Trash2, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
-import PopoverMenu from './ui/PopoverMenu.vue';
-import ToolbarButton from './ui/ToolbarButton.vue';
 
 const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
 const RuleSetEditor = defineAsyncComponent(() => import('./ui/RuleSetEditor.vue'));
@@ -139,15 +97,13 @@ const isEditorDirty = ref(false);
 const localFileName = ref('');
 const localFileNote = ref('');
 const originalFileNote = ref('');
-const addRuleMenuOpen = ref(false);
-const ruleSetEditorRef = ref<InstanceType<typeof RuleSetEditor> | null>(null);
 const ruleSetContentValid = ref(true);
 
 
 
 const isNameDirty = computed(() => {
   if (!editingFile.value) return false;
-  if (editingFile.value.isNew) return true;
+  if (editingFile.value.isNew) return localFileName.value !== '';
   return localFileName.value !== getBasename(editingFile.value.path).replace(/\.json$/, '');
 });
 
@@ -164,6 +120,9 @@ const isValidJson = computed(() => {
     return false;
   }
 });
+
+const hasValidFileName = computed(() => /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(localFileName.value));
+const isSaveReady = computed(() => isValidJson.value && hasValidFileName.value);
 
 
 
@@ -337,13 +296,12 @@ async function saveFileCode() {
 
 function createFile() {
   const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : props.type === 'patch' ? 'patches' : 'rulesets');
-  const newName = props.type === 'node' ? 'new_node' : (props.type === 'template' ? 'new_template' : props.type === 'patch' ? 'new_patch' : 'new_ruleset');
   viewMode.value = 'edit';
   editingFile.value = {
     path: `sing-sub/${dir}/untitled.json`,
     isNew: true
   };
-  localFileName.value = newName;
+  localFileName.value = '';
   localFileNote.value = '';
   originalFileNote.value = '';
   editorContent.value = props.type === 'ruleset' 
@@ -351,7 +309,7 @@ function createFile() {
     : '{\n  "inbounds": [],\n  "outbounds": []\n}';
   originalContent.value = editorContent.value;
   fileSha.value = null;
-  isEditorDirty.value = true;
+  isEditorDirty.value = false;
   isLoading.value = false;
   ruleSetContentValid.value = true;
 }
