@@ -1,17 +1,32 @@
 export const RULESET_METADATA_KEY = '_sing_sub';
-export const RULESET_ALLOWED_KEYS = new Set(['version', 'rules', RULESET_METADATA_KEY]);
-export const RULESET_METADATA_ALLOWED_KEYS = new Set(['note', 'sources']);
-export const RULESET_SOURCE_ALLOWED_KEYS = new Set(['url', 'interval_hours', 'last_updated', 'rules']);
-export const MAX_RULESET_IMPORT_URLS = 20;
 export const MAX_RULESET_IMPORT_BYTES = 5 * 1024 * 1024;
+
+export interface RuleBucket {
+  domain: string[];
+  domain_suffix: string[];
+}
+
+export interface RulesetSource extends RuleBucket {
+  url: string;
+  interval_hours: number;
+  last_updated?: string;
+}
+
+export interface RulesetMetadata {
+  note?: string;
+  manual: RuleBucket;
+  sources: RulesetSource[];
+}
+
+function emptyBucket(): RuleBucket {
+  return { domain: [], domain_suffix: [] };
+}
 
 function isPrivateHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
   if (normalized === 'localhost' || normalized.includes(':')) return true;
-
   const parts = normalized.split('.').map(Number);
   if (parts.length !== 4 || parts.some(Number.isNaN)) return false;
-
   const [a, b] = parts;
   return a === 0 || a === 10 || a === 127 ||
     (a === 169 && b === 254) ||
@@ -21,8 +36,8 @@ function isPrivateHostname(hostname: string): boolean {
 
 export function parseRulesetImportUrl(raw: string): URL {
   const url = new URL(raw);
-  if (url.protocol !== 'https:' || url.username || url.password || isPrivateHostname(url.hostname)) {
-    throw new Error('Only public HTTPS rule-set URLs are allowed');
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash || isPrivateHostname(url.hostname)) {
+    throw new Error('Only public HTTPS rule-set URLs without credentials or fragments are allowed');
   }
   return url;
 }
@@ -36,7 +51,6 @@ export async function fetchPublicRuleset(url: URL): Promise<Response> {
       headers: { Accept: 'application/json' },
     });
     if (response.status < 300 || response.status >= 400) return response;
-
     const location = response.headers.get('location');
     if (!location) throw new Error('Import redirect has no location');
     current = parseRulesetImportUrl(new URL(location, current).toString());
@@ -44,95 +58,149 @@ export async function fetchPublicRuleset(url: URL): Promise<Response> {
   throw new Error('Import exceeded the redirect limit');
 }
 
-export function normalizeImportedRuleValues(value: unknown, field: 'domain' | 'domain_suffix'): string[] {
-  if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item.trim())) {
-    throw new Error(`Imported ${field} rule must contain non-empty strings`);
+export async function readResponseTextLimited(response: Response): Promise<string> {
+  const declaredSize = Number(response.headers.get('content-length') || '0');
+  if (declaredSize > MAX_RULESET_IMPORT_BYTES) throw new Error('source exceeds 5 MiB');
+  if (!response.body) return '';
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_RULESET_IMPORT_BYTES) {
+      await reader.cancel();
+      throw new Error('source exceeds 5 MiB');
+    }
+    chunks.push(value);
   }
-  return value.map(item => item.trim());
+  const merged = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder('utf-8', { fatal: true }).decode(merged);
 }
 
-function validateRuleList(rules: unknown, description: string): string | null {
-  if (!Array.isArray(rules)) return `${description} must be an array`;
+function normalizeDomain(value: unknown, field: keyof RuleBucket): string {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} values must be non-empty strings`);
+  let normalized = value.trim().toLowerCase();
+  if (field === 'domain_suffix') normalized = normalized.replace(/^\.+/, '');
+  if (!normalized || /[\s/:@]/.test(normalized)) throw new Error(`Invalid ${field} value: ${value}`);
+  try {
+    normalized = new URL(`http://${normalized}`).hostname;
+  } catch {
+    throw new Error(`Invalid ${field} value: ${value}`);
+  }
+  if (!normalized || normalized.length > 253 || normalized.split('.').some(label =>
+    !label || label.length > 63 || !/^[a-z0-9-]+$/.test(label) || label.startsWith('-') || label.endsWith('-'))) {
+    throw new Error(`Invalid ${field} value: ${value}`);
+  }
+  return normalized;
+}
 
-  for (const rule of rules) {
-    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return `${description} must contain objects`;
+function values(value: unknown, field: keyof RuleBucket): string[] {
+  const list = typeof value === 'string' ? [value] : value;
+  if (!Array.isArray(list)) throw new Error(`${field} must be a string or string array`);
+  return list.map(item => normalizeDomain(item, field));
+}
+
+export function parseImportedRules(content: string): RuleBucket {
+  const source = JSON.parse(content) as unknown;
+  if (!source || typeof source !== 'object' || Array.isArray(source) || !Array.isArray((source as Record<string, unknown>).rules)) {
+    throw new Error('Rule-set must be a JSON object with a rules array');
+  }
+  const result = emptyBucket();
+  for (const rule of (source as { rules: unknown[] }).rules) {
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('Rules must be objects');
     const entries = Object.entries(rule as Record<string, unknown>);
-    if (entries.length !== 1 || (entries[0][0] !== 'domain' && entries[0][0] !== 'domain_suffix')) {
-      return `${description} may only contain domain or domain_suffix fields`;
+    if (entries.length === 0 || entries.some(([field]) => field !== 'domain' && field !== 'domain_suffix')) {
+      throw new Error('Rules may only contain domain or domain_suffix fields');
     }
-    try {
-      normalizeImportedRuleValues(entries[0][1], entries[0][0] as 'domain' | 'domain_suffix');
-    } catch (error: any) {
-      return error.message;
+    for (const [field, value] of entries as Array<[keyof RuleBucket, unknown]>) result[field].push(...values(value, field));
+  }
+  return mergeRuleBuckets([result]);
+}
+
+export function mergeRuleBuckets(buckets: RuleBucket[]): RuleBucket {
+  const merged = emptyBucket();
+  const seen = { domain: new Set<string>(), domain_suffix: new Set<string>() };
+  for (const bucket of buckets) {
+    for (const field of ['domain', 'domain_suffix'] as const) {
+      for (const value of bucket[field]) {
+        const normalized = normalizeDomain(value, field);
+        if (!seen[field].has(normalized)) {
+          seen[field].add(normalized);
+          merged[field].push(normalized);
+        }
+      }
     }
   }
-  return null;
+  return merged;
+}
+
+export function readRulesetMetadata(content: string): RulesetMetadata {
+  const document = JSON.parse(content) as Record<string, unknown>;
+  if (!document || typeof document !== 'object' || Array.isArray(document)) throw new Error('Rule-set must be a JSON object');
+  if (Object.keys(document).some(key => !['version', 'rules', RULESET_METADATA_KEY].includes(key))) {
+    throw new Error('Rule-set has unsupported top-level fields');
+  }
+  const metadata = document[RULESET_METADATA_KEY];
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error('_sing_sub metadata is required');
+  const record = metadata as Record<string, unknown>;
+  if (Object.keys(record).some(key => !['note', 'manual', 'sources'].includes(key))) throw new Error('Unsupported _sing_sub field');
+  if (record.note !== undefined && typeof record.note !== 'string') throw new Error('_sing_sub.note must be a string');
+  const manual = parseBucket(record.manual, 'manual');
+  if (!Array.isArray(record.sources)) throw new Error('_sing_sub.sources must be an array');
+  const sources = record.sources.map((source, index) => parseSource(source, index));
+  if (new Set(sources.map(source => source.url)).size !== sources.length) throw new Error('Source URLs must be unique');
+  return { note: record.note as string | undefined, manual, sources };
+}
+
+function parseBucket(value: unknown, label: string): RuleBucket {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some(key => key !== 'domain' && key !== 'domain_suffix')) throw new Error(`${label} has unsupported fields`);
+  return mergeRuleBuckets([{
+    domain: values(record.domain ?? [], 'domain'),
+    domain_suffix: values(record.domain_suffix ?? [], 'domain_suffix'),
+  }]);
+}
+
+function parseSource(value: unknown, index: number): RulesetSource {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`source ${index + 1} must be an object`);
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some(key => !['url', 'interval_hours', 'last_updated', 'domain', 'domain_suffix'].includes(key))) {
+    throw new Error(`source ${index + 1} has unsupported fields`);
+  }
+  if (typeof record.url !== 'string') throw new Error(`source ${index + 1} URL is required`);
+  const url = parseRulesetImportUrl(record.url).toString();
+  if (![0, 24, 168, 720, 8760].includes(record.interval_hours as number)) throw new Error(`source ${index + 1} has invalid interval`);
+  if (record.last_updated !== undefined && typeof record.last_updated !== 'string') throw new Error(`source ${index + 1} has invalid timestamp`);
+  const bucket = parseBucket({ domain: record.domain ?? [], domain_suffix: record.domain_suffix ?? [] }, `source ${index + 1}`);
+  return { url, interval_hours: record.interval_hours as number, last_updated: record.last_updated as string | undefined, ...bucket };
+}
+
+export function createRulesetDocument(metadata: RulesetMetadata): string {
+  const merged = mergeRuleBuckets([metadata.manual, ...metadata.sources]);
+  const rule: Record<string, string[]> = {};
+  if (merged.domain.length) rule.domain = merged.domain;
+  if (merged.domain_suffix.length) rule.domain_suffix = merged.domain_suffix;
+  return JSON.stringify({
+    version: 2,
+    rules: Object.keys(rule).length ? [rule] : [],
+    [RULESET_METADATA_KEY]: metadata,
+  }, null, 2);
 }
 
 export function validateRulesetSource(content: string): string | null {
-  let source: unknown;
   try {
-    source = JSON.parse(content);
+    readRulesetMetadata(content);
+    return null;
   } catch (error: any) {
-    return `Invalid rule-set JSON: ${error.message}`;
+    return error.message || 'Invalid rule-set';
   }
-
-  if (!source || typeof source !== 'object' || Array.isArray(source)) {
-    return 'Rule-set source must be a JSON object';
-  }
-
-  const data = source as Record<string, unknown>;
-  if (!Array.isArray(data.rules)) return 'Rule-set source must contain a rules array';
-  const rulesError = validateRuleList(data.rules, 'Rule-set rules');
-  if (rulesError) return rulesError;
-
-  for (const key of Object.keys(data)) {
-    if (!RULESET_ALLOWED_KEYS.has(key)) return `Unsupported rule-set top-level field: ${key}`;
-  }
-
-  const metadata = data[RULESET_METADATA_KEY];
-  if (metadata === undefined) return null;
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-    return `${RULESET_METADATA_KEY} must be an object`;
-  }
-
-  const metadataRecord = metadata as Record<string, unknown>;
-  for (const key of Object.keys(metadataRecord)) {
-    if (!RULESET_METADATA_ALLOWED_KEYS.has(key)) return `Unsupported ${RULESET_METADATA_KEY} field: ${key}`;
-  }
-  if (metadataRecord.note !== undefined && typeof metadataRecord.note !== 'string') {
-    return `${RULESET_METADATA_KEY}.note must be a string`;
-  }
-  if (metadataRecord.sources === undefined) return null;
-  if (!Array.isArray(metadataRecord.sources) || metadataRecord.sources.length > 1) {
-    return `${RULESET_METADATA_KEY}.sources must contain at most one entry`;
-  }
-
-  for (const sourceEntry of metadataRecord.sources) {
-    if (!sourceEntry || typeof sourceEntry !== 'object' || Array.isArray(sourceEntry)) {
-      return 'Rule-set source metadata must be an object';
-    }
-    const entry = sourceEntry as Record<string, unknown>;
-    for (const key of Object.keys(entry)) {
-      if (!RULESET_SOURCE_ALLOWED_KEYS.has(key)) return `Unsupported rule-set source field: ${key}`;
-    }
-    try {
-      if (typeof entry.url !== 'string') throw new Error('url is required');
-      parseRulesetImportUrl(entry.url);
-    } catch (error: any) {
-      return `Invalid rule-set source URL: ${error.message}`;
-    }
-    if (![0, 24, 168, 720, 8760].includes(entry.interval_hours as number)) {
-      return 'Rule-set source interval_hours must be 0, 24, 168, 720, or 8760';
-    }
-    if (entry.last_updated !== undefined && typeof entry.last_updated !== 'string') {
-      return 'Rule-set source last_updated must be a string';
-    }
-    if (entry.rules !== undefined) {
-      const sourceRulesError = validateRuleList(entry.rules, 'Rule-set source rules');
-      if (sourceRulesError) return sourceRulesError;
-    }
-  }
-
-  return null;
 }

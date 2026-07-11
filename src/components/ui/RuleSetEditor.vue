@@ -8,7 +8,7 @@
         <div class="mb-3 flex items-center justify-between gap-4">
           <div class="flex min-w-0 items-center gap-2">
             <span class="rounded border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-purple-400">SOURCE</span>
-            <span class="truncate text-xs text-text-muted">来源地址会按设定间隔自动拉取并重新编译。</span>
+            <span class="truncate text-xs text-text-muted">每行一个 HTTPS URL，保存时会下载校验。</span>
           </div>
           <Select
             v-if="!readonly"
@@ -20,13 +20,13 @@
           />
         </div>
         <textarea
-          v-model="sourceUrl"
+          v-model="sourceUrlsContent"
           :readonly="readonly"
-          placeholder="https://raw.githubusercontent.com/.../ruleset.json"
+          placeholder="https://raw.githubusercontent.com/.../ruleset.json&#10;https://raw.githubusercontent.com/.../another-ruleset.json"
           class="min-h-0 flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
           @input="emitChange"
         ></textarea>
-        <p v-if="sourceLastUpdated" class="mt-2 text-xs text-text-muted">上次 {{ formatUpdatedAt(sourceLastUpdated) }}</p>
+        <p v-if="sourceLastUpdated" class="mt-2 text-xs text-text-muted">最近更新 {{ formatUpdatedAt(sourceLastUpdated) }}</p>
         <p v-if="sourceError" class="mt-2 text-xs text-danger">{{ sourceError }}</p>
       </section>
 
@@ -77,16 +77,15 @@ const emit = defineEmits<{
   'validity-change': [value: boolean];
 }>();
 
-type ImportedRule = { domain: string[] } | { domain_suffix: string[] };
+interface RuleBucket { domain: string[]; domain_suffix: string[] }
 
-interface SourceConfig {
+interface SourceConfig extends RuleBucket {
   url: string;
   interval_hours: number;
   last_updated?: string;
-  rules: ImportedRule[];
 }
 
-const sourceUrl = ref('');
+const sourceUrlsContent = ref('');
 const sourceIntervalHours = ref(0);
 const sourceLastUpdated = ref<string | undefined>();
 const domainContent = ref('');
@@ -107,40 +106,31 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function ruleKey(rule: unknown) {
-  return JSON.stringify(rule);
-}
-
-function isImportedRule(rule: unknown): rule is ImportedRule {
-  if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false;
-  const entries = Object.entries(rule as Record<string, unknown>);
-  return entries.length === 1 &&
-    (entries[0][0] === 'domain' || entries[0][0] === 'domain_suffix') &&
-    Array.isArray(entries[0][1]) && entries[0][1].every(item => typeof item === 'string' && item.trim());
-}
-
-function readSource(document: Record<string, unknown>): SourceConfig | null {
+function readSources(document: Record<string, unknown>): SourceConfig[] {
   const metadata = document._sing_sub;
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return [];
   const sources = (metadata as Record<string, unknown>).sources;
-  if (!Array.isArray(sources) || sources.length === 0) return null;
-  const source = sources[0];
-  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
-  const entry = source as Record<string, unknown>;
-  if (typeof entry.url !== 'string' || !Number.isInteger(entry.interval_hours) || !Array.isArray(entry.rules) || !entry.rules.every(isImportedRule)) {
-    return null;
+  if (!Array.isArray(sources)) return [];
+  const validSources: SourceConfig[] = [];
+  for (const source of sources) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return [];
+    const entry = source as Record<string, unknown>;
+    if (typeof entry.url !== 'string' || !Number.isInteger(entry.interval_hours) ||
+        !Array.isArray(entry.domain) || !Array.isArray(entry.domain_suffix)) {
+      return [];
+    }
+    validSources.push(clone(entry as unknown as SourceConfig));
   }
-  return clone(entry as unknown as SourceConfig);
+  return validSources;
 }
 
-function appendRuleValues(rule: unknown, domainLines: string[], suffixLines: string[]) {
-  if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false;
-  const entries = Object.entries(rule as Record<string, unknown>);
-  if (entries.length !== 1 || !Array.isArray(entries[0][1]) || !entries[0][1].every(value => typeof value === 'string')) return false;
-  if (entries[0][0] === 'domain') domainLines.push(...entries[0][1] as string[]);
-  else if (entries[0][0] === 'domain_suffix') suffixLines.push(...entries[0][1] as string[]);
-  else return false;
-  return true;
+function readManual(document: Record<string, unknown>): RuleBucket {
+  const metadata = document._sing_sub as Record<string, unknown> | undefined;
+  const manual = metadata?.manual as Record<string, unknown> | undefined;
+  return {
+    domain: Array.isArray(manual?.domain) ? manual.domain.filter((value): value is string => typeof value === 'string') : [],
+    domain_suffix: Array.isArray(manual?.domain_suffix) ? manual.domain_suffix.filter((value): value is string => typeof value === 'string') : [],
+  };
 }
 
 watch(() => props.modelValue, (newValue) => {
@@ -149,32 +139,15 @@ watch(() => props.modelValue, (newValue) => {
     const parsed = JSON.parse(newValue) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
     const document = parsed as Record<string, unknown>;
-    const source = readSource(document);
-    const sourceRules = source?.rules || [];
-    const sourceRuleCounts = new Map<string, number>();
-    for (const rule of sourceRules) {
-      const key = ruleKey(rule);
-      sourceRuleCounts.set(key, (sourceRuleCounts.get(key) || 0) + 1);
-    }
-
-    const domains: string[] = [];
-    const suffixes: string[] = [];
-    for (const rule of Array.isArray(document.rules) ? document.rules : []) {
-      const key = ruleKey(rule);
-      const count = sourceRuleCounts.get(key) || 0;
-      if (count > 0) {
-        sourceRuleCounts.set(key, count - 1);
-        continue;
-      }
-      if (!appendRuleValues(rule, domains, suffixes)) throw new Error('Unsupported rule');
-    }
+    const sources = readSources(document);
+    const manual = readManual(document);
 
     sourceDocument.value = document;
-    sourceUrl.value = source?.url || '';
-    sourceIntervalHours.value = source?.interval_hours || 0;
-    sourceLastUpdated.value = source?.last_updated;
-    domainContent.value = domains.join('\n');
-    domainSuffixContent.value = suffixes.join('\n');
+    sourceUrlsContent.value = sources.map(source => source.url).join('\n');
+    sourceIntervalHours.value = sources[0]?.interval_hours || 0;
+    sourceLastUpdated.value = sources.map(source => source.last_updated).filter((value): value is string => !!value).sort().at(-1);
+    domainContent.value = manual.domain.join('\n');
+    domainSuffixContent.value = manual.domain_suffix.join('\n');
     sourceError.value = '';
     emit('validity-change', true);
   } catch {
@@ -184,6 +157,36 @@ watch(() => props.modelValue, (newValue) => {
 
 function lines(content: string) {
   return content.split('\n').map(value => value.trim()).filter(Boolean);
+}
+
+function validateSourceUrls(urls: string): string | null {
+  const values = lines(urls);
+  const seen = new Set<string>();
+  for (const value of values) {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'https:' || url.username || url.password || !url.hostname || isPrivateHostname(url.hostname)) {
+        return '来源仅支持公网 HTTPS URL。';
+      }
+    } catch {
+      return '每行必须是完整的 HTTPS URL。';
+    }
+    if (seen.has(value)) return '来源 URL 不能重复。';
+    seen.add(value);
+  }
+  return null;
+}
+
+function isPrivateHostname(hostname: string) {
+  const normalized = hostname.toLowerCase();
+  if (normalized === 'localhost' || normalized.includes(':')) return true;
+  const parts = normalized.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(Number.isNaN)) return false;
+  const [a, b] = parts;
+  return a === 0 || a === 10 || a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168);
 }
 
 function formatUpdatedAt(value: string) {
@@ -198,40 +201,40 @@ function updateSourceInterval(value: string) {
 
 function emitChange() {
   const output = clone(sourceDocument.value || {}) as Record<string, unknown>;
-  if (output.version === undefined) output.version = 4;
+  output.version = 2;
 
-  const source = readSource(output);
-  const url = sourceUrl.value.trim();
-  if (url && /\s/.test(url)) {
-    sourceError.value = '每个来源只能填写一个 URL。';
+  const sourceUrls = lines(sourceUrlsContent.value);
+  const localValidationError = validateSourceUrls(sourceUrlsContent.value);
+  if (localValidationError) {
+    sourceError.value = localValidationError;
     emit('validity-change', false);
     return;
   }
 
-  const sourceChanged = !source || source.url !== url;
-  if (sourceChanged) sourceLastUpdated.value = undefined;
-  let nextSource: SourceConfig | null = null;
-  if (url) {
-    nextSource = sourceChanged || !source
-      ? { url, interval_hours: sourceIntervalHours.value, rules: [] }
-      : {
-          url,
-          interval_hours: sourceIntervalHours.value,
-          last_updated: source.last_updated,
-          rules: source.rules,
-        };
-  }
-  const manualRules: ImportedRule[] = [
-    ...(lines(domainContent.value).length > 0 ? [{ domain: lines(domainContent.value) }] : []),
-    ...(lines(domainSuffixContent.value).length > 0 ? [{ domain_suffix: lines(domainSuffixContent.value) }] : []),
-  ];
-  output.rules = [...manualRules, ...(nextSource?.rules || [])];
+  const previousSources = new Map(readSources(output).map(source => [source.url, source]));
+  const nextSources = sourceUrls.map(url => {
+    const previous = previousSources.get(url);
+    const changed = !previous || previous.interval_hours !== sourceIntervalHours.value;
+    return changed
+      ? { url, interval_hours: sourceIntervalHours.value, domain: [], domain_suffix: [] }
+      : previous;
+  });
+  sourceLastUpdated.value = nextSources.map(source => source.last_updated).filter((value): value is string => !!value).sort().at(-1);
+  const manual: RuleBucket = { domain: lines(domainContent.value), domain_suffix: lines(domainSuffixContent.value) };
+  const merged = {
+    domain: [...new Set([...manual.domain, ...nextSources.flatMap(source => source.domain)])],
+    domain_suffix: [...new Set([...manual.domain_suffix, ...nextSources.flatMap(source => source.domain_suffix)])],
+  };
+  const rule: Record<string, string[]> = {};
+  if (merged.domain.length) rule.domain = merged.domain;
+  if (merged.domain_suffix.length) rule.domain_suffix = merged.domain_suffix;
+  output.rules = Object.keys(rule).length ? [rule] : [];
 
   const metadata = output._sing_sub && typeof output._sing_sub === 'object' && !Array.isArray(output._sing_sub)
     ? clone(output._sing_sub as Record<string, unknown>)
     : {};
-  if (nextSource) metadata.sources = [nextSource];
-  else delete metadata.sources;
+  metadata.manual = manual;
+  metadata.sources = nextSources;
   if (Object.keys(metadata).length > 0) output._sing_sub = metadata;
   else delete output._sing_sub;
 

@@ -16,7 +16,19 @@
         @click="editFile(file, 'preview')"
         @edit="editFile(file)"
         @action="(act) => handleFileAction(act, file)"
-      />
+      >
+        <template #actions>
+          <ToolbarButton
+            v-if="type === 'ruleset'"
+            @click.stop="copyRulesetLink(file)"
+            :icon="copiedRulesetPath === file.path ? Check : Link2"
+            :label="copiedRulesetPath === file.path ? '已复制' : '订阅'"
+            variant="emphasis"
+            size="card"
+            mobileLabel
+          />
+        </template>
+      </FileCard>
     </div>
 
 
@@ -65,9 +77,10 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
-import { Trash2, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
+import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
+import ToolbarButton from './ui/ToolbarButton.vue';
 
 const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
 const RuleSetEditor = defineAsyncComponent(() => import('./ui/RuleSetEditor.vue'));
@@ -76,6 +89,7 @@ const props = defineProps<{
   files: any[];
   type: 'node' | 'template' | 'patch' | 'ruleset';
   globalBusy?: boolean;
+  subToken?: string;
 }>();
 
 const emit = defineEmits<{
@@ -98,6 +112,7 @@ const localFileName = ref('');
 const localFileNote = ref('');
 const originalFileNote = ref('');
 const ruleSetContentValid = ref(true);
+const copiedRulesetPath = ref('');
 
 
 
@@ -305,13 +320,26 @@ function createFile() {
   localFileNote.value = '';
   originalFileNote.value = '';
   editorContent.value = props.type === 'ruleset' 
-    ? '{\n  "version": 4,\n  "rules": []\n}' 
+    ? '{\n  "version": 2,\n  "rules": [],\n  "_sing_sub": {\n    "manual": { "domain": [], "domain_suffix": [] },\n    "sources": []\n  }\n}'
     : '{\n  "inbounds": [],\n  "outbounds": []\n}';
   originalContent.value = editorContent.value;
   fileSha.value = null;
   isEditorDirty.value = false;
   isLoading.value = false;
   ruleSetContentValid.value = true;
+}
+
+async function copyRulesetLink(file: any) {
+  if (!props.subToken) return;
+  const name = getBasename(file.path).replace(/\.json$/, '');
+  const url = `${window.location.origin}/rules/${props.subToken}/${encodeURIComponent(name)}.srs`;
+  try {
+    await navigator.clipboard.writeText(url);
+    copiedRulesetPath.value = file.path;
+    window.setTimeout(() => { if (copiedRulesetPath.value === file.path) copiedRulesetPath.value = ''; }, 2000);
+  } catch {
+    emit('status', 'error', '复制失败');
+  }
 }
 
 defineExpose({ createFile });

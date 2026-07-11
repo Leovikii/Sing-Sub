@@ -2,9 +2,9 @@ import type { Env } from '../types';
 import { requireAuth } from '../lib/auth';
 import { isManagedAssetPath, isRulesetPath } from '../lib/assets';
 import { COMPILE_SRS_WORKFLOW_CONTENT, COMPILE_SRS_WORKFLOW_PATH } from '../lib/compile-srs-workflow';
-import { fetchPublicRuleset, MAX_RULESET_IMPORT_BYTES, MAX_RULESET_IMPORT_URLS, normalizeImportedRuleValues, parseRulesetImportUrl, validateRulesetSource } from '../lib/rulesets';
+import { createRulesetDocument, fetchPublicRuleset, mergeRuleBuckets, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource, type RulesetSource } from '../lib/rulesets';
 import { commitMultiFiles, deleteFileContent, fetchFileContent, GithubApiError, putFileContent, type GitTreeItem } from '../lib/github';
-import { toRepoSession } from '../lib/helpers';
+import { pLimit, toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
 
 export async function handleImportRuleset(request: Request, env: Env): Promise<Response> {
@@ -17,58 +17,42 @@ export async function handleImportRuleset(request: Request, env: Env): Promise<R
   } catch {
     return errorResponse('Invalid request JSON', 400);
   }
-  if (!Array.isArray(urls) || urls.length === 0 || urls.length > MAX_RULESET_IMPORT_URLS ||
+  if (!Array.isArray(urls) || urls.length === 0 ||
       urls.some(url => typeof url !== 'string' || !url.trim())) {
-    return errorResponse(`Provide between 1 and ${MAX_RULESET_IMPORT_URLS} rule-set URLs`, 400);
+    return errorResponse('Provide one or more rule-set URLs', 400);
   }
 
-  const domains: string[] = [];
-  const domainSuffixes: string[] = [];
-  const seenDomains = new Set<string>();
-  const seenDomainSuffixes = new Set<string>();
+  const buckets = [];
   try {
     for (const rawUrl of urls) {
       const response = await fetchPublicRuleset(parseRulesetImportUrl(rawUrl.trim()));
       if (!response.ok) throw new Error(`Import request failed with HTTP ${response.status}`);
 
-      const contentLength = Number(response.headers.get('content-length') || '0');
-      if (contentLength > MAX_RULESET_IMPORT_BYTES) throw new Error('Imported rule-set exceeds 5 MiB');
-      const body = await response.text();
-      if (new TextEncoder().encode(body).byteLength > MAX_RULESET_IMPORT_BYTES) {
-        throw new Error('Imported rule-set exceeds 5 MiB');
-      }
-      const source = JSON.parse(body) as unknown;
-      if (!source || typeof source !== 'object' || Array.isArray(source) || !Array.isArray((source as Record<string, unknown>).rules)) {
-        throw new Error('Imported rule-set must be a JSON object with a rules array');
-      }
-
-      for (const rule of (source as { rules: unknown[] }).rules) {
-        if (!rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('Imported rules must be objects');
-        const entries = Object.entries(rule as Record<string, unknown>);
-        if (entries.length !== 1 || (entries[0][0] !== 'domain' && entries[0][0] !== 'domain_suffix')) {
-          throw new Error('Imported rules may only contain a domain or domain_suffix field');
-        }
-        const [[field, value]] = entries as [['domain' | 'domain_suffix', unknown]];
-        const [target, seen] = field === 'domain'
-          ? [domains, seenDomains]
-          : [domainSuffixes, seenDomainSuffixes];
-        for (const item of normalizeImportedRuleValues(value, field)) {
-          if (!seen.has(item)) {
-            seen.add(item);
-            target.push(item);
-          }
-        }
-      }
+      buckets.push(parseImportedRules(await readResponseTextLimited(response)));
     }
   } catch (error: any) {
     return errorResponse(`Rule-set import failed: ${error.message || 'invalid source'}`, 400);
   }
 
-  const rules = [
-    ...(domains.length > 0 ? [{ domain: domains }] : []),
-    ...(domainSuffixes.length > 0 ? [{ domain_suffix: domainSuffixes }] : []),
-  ];
-  return jsonResponse({ rules, domain: domains, domain_suffix: domainSuffixes, updated_at: new Date().toISOString() });
+  const merged = mergeRuleBuckets(buckets);
+  return jsonResponse({ rules: [merged], ...merged, updated_at: new Date().toISOString() });
+}
+
+async function refreshRulesetSources(content: string): Promise<string> {
+  const metadata = readRulesetMetadata(content);
+  const limit = pLimit(4);
+  const sources = await Promise.all(metadata.sources.map((source, index) => limit(async (): Promise<RulesetSource> => {
+    try {
+      const response = await fetchPublicRuleset(parseRulesetImportUrl(source.url));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const bucket = parseImportedRules(await readResponseTextLimited(response));
+      if (!bucket.domain.length && !bucket.domain_suffix.length) throw new Error('source contains no domain rules');
+      return { ...source, ...bucket, last_updated: new Date().toISOString() };
+    } catch (error: any) {
+      throw new Error(`Source ${index + 1} (${source.url}) failed: ${error.message}`);
+    }
+  })));
+  return createRulesetDocument({ ...metadata, sources });
 }
 
 export async function handlePutFile(request: Request, env: Env): Promise<Response> {
@@ -86,6 +70,12 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
 
   const validationError = validateRulesetSource(content);
   if (validationError) return errorResponse(validationError, 400);
+  let preparedContent: string;
+  try {
+    preparedContent = await refreshRulesetSources(content);
+  } catch (error: any) {
+    return errorResponse(error.message || 'Rule-set source validation failed', 400);
+  }
   const isRename = !!oldPath && oldPath !== path;
   const fileName = path.split('/').pop()!;
   const compiledPath = `sing-sub/rulesets/compiled/${fileName.replace(/\.json$/, '')}.srs`;
@@ -103,7 +93,7 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
     if (sha && (!currentFile || currentFile.sha !== sha)) return errorResponse('File was modified; reload it before saving', 409);
 
     const workflowNeedsSync = !workflowFile || workflowFile.content !== COMPILE_SRS_WORKFLOW_CONTENT;
-    const treeItems: GitTreeItem[] = [{ path, mode: '100644', type: 'blob', content }];
+    const treeItems: GitTreeItem[] = [{ path, mode: '100644', type: 'blob', content: preparedContent }];
     const deletedPaths = new Set<string>();
     const addDeletion = (candidate: string, exists: boolean) => {
       if (exists && !deletedPaths.has(candidate)) {
@@ -124,7 +114,7 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
     if (error instanceof GithubApiError && error.status === 409) return errorResponse('File was modified; reload it before saving', 409);
     throw error;
   }
-  return jsonResponse({ success: true });
+  return jsonResponse({ success: true, content: preparedContent });
 }
 
 async function putAssetFile(path: string, content: string, sha: string | undefined, oldPath: string | undefined, session: ReturnType<typeof toRepoSession>): Promise<Response> {
