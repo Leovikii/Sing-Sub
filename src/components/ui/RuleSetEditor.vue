@@ -1,5 +1,5 @@
 <template>
-  <div class="ruleset-editor flex h-full min-h-[60vh] flex-col overflow-hidden rounded-xl border border-bg-elevated bg-[#0a0a0a]">
+  <div class="ruleset-editor flex h-full min-h-0 flex-col bg-transparent">
     <div v-if="loading" class="flex flex-1 items-center justify-center">
       <Loader2 class="h-8 w-8 animate-spin text-brand-pink" />
     </div>

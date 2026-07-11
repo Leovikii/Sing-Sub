@@ -497,11 +497,16 @@ function addProfile() {
     updated_at: Date.now(),
     order: stateData.value.profiles.length
   };
-  draftProfileWasDirty.value = isDirty.value;
+  const wasDirty = isDirty.value;
+  draftProfileWasDirty.value = wasDirty;
   draftProfile.value = profile;
+  suppressDirty = true;
   stateData.value.profiles.push(profile);
-  recomputeOrders();
   expandedIndex.value = stateData.value.profiles.length - 1;
+  nextTick(() => {
+    suppressDirty = false;
+    isDirty.value = wasDirty;
+  });
 }
 
 function removeProfile(index: number) {

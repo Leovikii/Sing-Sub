@@ -31,6 +31,7 @@
       @update:isOpen="(val) => { if (!val) closeEditor(); }"
       :title="localFileName"
       @update:title="localFileName = $event"
+      titlePlaceholder="输入文件名称"
       :note="localFileNote"
       @update:note="localFileNote = $event"
       :viewMode="viewMode"
@@ -41,7 +42,7 @@
       :isDirty="isEditorDirty || isNameDirty || isNoteDirty"
       :isSaving="isSaving || globalBusy"
       :showSave="true"
-      :saveDisabled="!isValidJson"
+      :saveDisabled="!isSaveReady"
       saveText="保存"
       :showViewToggle="true"
       @save="saveFileCode"
@@ -102,7 +103,7 @@ const ruleSetContentValid = ref(true);
 
 const isNameDirty = computed(() => {
   if (!editingFile.value) return false;
-  if (editingFile.value.isNew) return true;
+  if (editingFile.value.isNew) return localFileName.value !== '';
   return localFileName.value !== getBasename(editingFile.value.path).replace(/\.json$/, '');
 });
 
@@ -119,6 +120,9 @@ const isValidJson = computed(() => {
     return false;
   }
 });
+
+const hasValidFileName = computed(() => /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(localFileName.value));
+const isSaveReady = computed(() => isValidJson.value && hasValidFileName.value);
 
 
 
@@ -292,13 +296,12 @@ async function saveFileCode() {
 
 function createFile() {
   const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : props.type === 'patch' ? 'patches' : 'rulesets');
-  const newName = props.type === 'node' ? 'new_node' : (props.type === 'template' ? 'new_template' : props.type === 'patch' ? 'new_patch' : 'new_ruleset');
   viewMode.value = 'edit';
   editingFile.value = {
     path: `sing-sub/${dir}/untitled.json`,
     isNew: true
   };
-  localFileName.value = newName;
+  localFileName.value = '';
   localFileNote.value = '';
   originalFileNote.value = '';
   editorContent.value = props.type === 'ruleset' 
@@ -306,7 +309,7 @@ function createFile() {
     : '{\n  "inbounds": [],\n  "outbounds": []\n}';
   originalContent.value = editorContent.value;
   fileSha.value = null;
-  isEditorDirty.value = true;
+  isEditorDirty.value = false;
   isLoading.value = false;
   ruleSetContentValid.value = true;
 }

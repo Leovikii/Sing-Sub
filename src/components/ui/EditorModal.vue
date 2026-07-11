@@ -20,14 +20,14 @@
               <slot name="title">
                 <!-- Filename area -->
                 <div class="flex items-baseline min-w-0">
-                  <div class="relative inline-flex min-w-[30px] max-w-[calc(100%-40px)]">
+                  <div class="relative inline-flex min-w-[9rem] max-w-[calc(100%-40px)]">
                     <span class="invisible whitespace-pre overflow-hidden font-bold text-[15px] md:text-[16px] pr-0.5">{{ title || 'untitled' }}</span>
                     <input
                       v-if="editableTitle && viewMode !== 'preview'"
                       :value="title"
                       @input="$emit('update:title', ($event.target as HTMLInputElement).value)"
                       class="absolute inset-0 bg-transparent text-text-primary font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder-[#555]"
-                      placeholder="untitled"
+                      :placeholder="titlePlaceholder || '输入名称'"
                     />
                     <span v-else class="absolute inset-0 text-text-primary font-bold text-[15px] md:text-[16px] truncate">{{ title || 'untitled' }}</span>
                   </div>
@@ -128,6 +128,7 @@ const viewModeOptions = [
 const props = defineProps<{
   isOpen: boolean;
   title?: string;
+  titlePlaceholder?: string;
   note?: string;
   editableTitle?: boolean;
   editableNote?: boolean;

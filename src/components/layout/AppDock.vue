@@ -45,16 +45,11 @@ const isPanelExpanded = ref(props.expanded);
 const showLabels = ref(props.expanded);
 const targetExpanded = computed(() => props.expanded || isHoverExpanded.value);
 let labelTimer: ReturnType<typeof window.setTimeout> | null = null;
-let collapseFrame: number | null = null;
 
 function clearTransitionWork() {
   if (labelTimer !== null) {
     window.clearTimeout(labelTimer);
     labelTimer = null;
-  }
-  if (collapseFrame !== null) {
-    window.cancelAnimationFrame(collapseFrame);
-    collapseFrame = null;
   }
 }
 
@@ -82,10 +77,7 @@ function collapsePanel() {
   clearTransitionWork();
   // Remove text before width changes so the collapsing rail never reflows labels.
   showLabels.value = false;
-  collapseFrame = window.requestAnimationFrame(() => {
-    isPanelExpanded.value = false;
-    collapseFrame = null;
-  });
+  isPanelExpanded.value = false;
 }
 
 watch(targetExpanded, (shouldExpand) => {
