@@ -57,7 +57,7 @@
                 :icon="Save"
                 :label="saveText"
                 variant="primary"
-                :disabled="viewMode === 'preview' || !isDirty || isSaving"
+                :disabled="viewMode === 'preview' || !isDirty || isSaving || saveDisabled"
                 :loading="isSaving"
                 :class="viewMode === 'preview' ? 'invisible pointer-events-none' : ''"
                 @click="$emit('save')"
@@ -135,6 +135,7 @@ const props = defineProps<{
   isDirty?: boolean;
   isSaving?: boolean;
   showSave?: boolean;
+  saveDisabled?: boolean;
   saveText?: string;
   showViewToggle?: boolean;
   viewMode?: 'preview' | 'edit';

@@ -40,7 +40,7 @@
     :showViewToggle="true"
     v-model:viewMode="viewMode"
     @save="handleLocalSave"
-    @close="isOpen = false"
+    @close="handleClose"
   >
     <template #default>
       <!-- Visual Editor -->
@@ -90,6 +90,7 @@ const props = defineProps<{
   availablePatches?: string[];
   copyStatus: boolean;
   expanded?: boolean;
+  isDraft?: boolean;
   globalBusy?: boolean;
   isSaving?: boolean;
   saveFailed?: boolean;
@@ -100,6 +101,7 @@ const emit = defineEmits<{
   copyLink: [name: string, index: number];
   remove: [index: number];
   duplicate: [profile: Profile];
+  discard: [profile: Profile];
   save: [name: string];
   'update:expanded': [value: boolean];
   status: [type: 'success' | 'warning' | 'error', message: string, duration?: number];
@@ -121,6 +123,11 @@ const cardMenuItems = [
 function handleCardAction(action: string) {
   if (action === 'duplicate') emit('duplicate', props.profile);
   if (action === 'remove') emit('remove', props.index);
+}
+
+function handleClose() {
+  if (props.isDraft) emit('discard', props.profile);
+  isOpen.value = false;
 }
 
 const { getFile, getTemplate, postPreview } = useApi();

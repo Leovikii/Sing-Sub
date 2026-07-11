@@ -55,6 +55,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
+  'validity-change': [value: boolean];
 }>();
 
 type RuleType = 'domain' | 'domain_suffix' | 'external_url' | 'raw';
@@ -110,8 +111,9 @@ watch(() => props.modelValue, (newVal) => {
     }
 
     rules.value = parsedRules;
+    emit('validity-change', true);
   } catch (e) {
-    // If invalid JSON, do nothing and let the user switch to CodeEditor to fix it, or initialize empty
+    emit('validity-change', false);
   }
 }, { immediate: true });
 
@@ -161,6 +163,7 @@ function emitChange() {
         output.rules.push(block.raw);
       } catch {
         block.rawError = '请输入有效的 JSON 对象后再保存';
+        emit('validity-change', false);
         return;
       }
       continue;
@@ -187,6 +190,7 @@ function emitChange() {
   const json = JSON.stringify(output, null, 2);
   sourceDocument.value = output;
   lastEmitted = json;
+  emit('validity-change', true);
   emit('update:modelValue', json);
 }
 

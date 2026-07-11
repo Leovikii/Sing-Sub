@@ -43,6 +43,7 @@
 
     <template v-else-if="stateData">
       <TopToolbar
+        v-if="activeTab !== 'settings'"
         :saveStatus="saveStatus"
         :statusMessage="statusMessage"
         :refreshing="refreshing"
@@ -74,6 +75,7 @@
                 :availablePatches="availableAssets.patches"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
+                :isDraft="draftProfile === profile"
                 :globalBusy="globalBusy"
                 :isSaving="savingProfileName === profile.name"
                 :saveFailed="savingProfileName !== profile.name && profileSaveError !== null && lastSaveAttemptName === profile.name"
@@ -81,6 +83,7 @@
                 @copyLink="handleCopyLink"
                 @remove="removeProfile"
                 @duplicate="duplicateProfile"
+                @discard="discardDraftProfile"
                 @save="handleSaveProfile"
                 @status="(t, m) => showStatus(t, m, 5000)"
               />
@@ -153,7 +156,7 @@ import { useApi } from './composables/useApi';
 import type { SetupData, UserSettings, StateData, Profile } from './types';
 import draggable from 'vuedraggable';
 
-const APP_VERSION = 'v3.0.0';
+const APP_VERSION = 'v3.1.0';
 
 const setupData = reactive<SetupData>({ owner: '', repo: '', pat: '' });
 const stateData = ref<StateData | null>(null);
@@ -170,6 +173,8 @@ const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[], ru
 const activeTab = ref<'config' | 'assets' | 'settings'>('config');
 const assetType = ref<'node' | 'template' | 'patch' | 'ruleset'>('node');
 const assetManagerRef = ref<any>(null);
+const draftProfile = ref<Profile | null>(null);
+const draftProfileWasDirty = ref<boolean | null>(null);
 const sidebarPreference = ref(true);
 const isWideDesktop = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches);
 const sidebarExpanded = computed({
@@ -406,6 +411,10 @@ async function handleSaveProfile(profileName: string): Promise<void> {
   try {
     const data = await saveState(stateData.value, null, profileName);
     profileSaveError.value = null;
+    if (p === draftProfile.value) {
+      draftProfile.value = null;
+      draftProfileWasDirty.value = null;
+    }
     isDirty.value = false;
     if (data.warning) {
       showStatus('warning', '配置已保存，但构建失败: ' + data.warning, 5000);
@@ -481,23 +490,48 @@ async function handleCopyLink(name: string) {
 
 function addProfile() {
   if (!stateData.value) return;
-  stateData.value.profiles.push({
+  const profile: Profile = {
     name: '', note: '', templateUrl: '', nodesPath: '',
     rules: [], inboundRules: [],
     created_at: Date.now(),
     updated_at: Date.now(),
     order: stateData.value.profiles.length
-  });
+  };
+  draftProfileWasDirty.value = isDirty.value;
+  draftProfile.value = profile;
+  stateData.value.profiles.push(profile);
   recomputeOrders();
   expandedIndex.value = stateData.value.profiles.length - 1;
 }
 
 function removeProfile(index: number) {
   if (!stateData.value) return;
+  const removedProfile = stateData.value.profiles[index];
+  if (removedProfile === draftProfile.value) {
+    draftProfile.value = null;
+    draftProfileWasDirty.value = null;
+  }
   if (expandedIndex.value === index) expandedIndex.value = null;
   else if (expandedIndex.value !== null && expandedIndex.value > index) expandedIndex.value--;
   stateData.value.profiles.splice(index, 1);
   recomputeOrders();
+}
+
+function discardDraftProfile(profile: Profile) {
+  if (!stateData.value || draftProfile.value !== profile) return;
+
+  const index = stateData.value.profiles.indexOf(profile);
+  const wasDirty = draftProfileWasDirty.value ?? isDirty.value;
+  if (index >= 0) {
+    stateData.value.profiles.splice(index, 1);
+    stateData.value.profiles.forEach((item, itemIndex) => { item.order = itemIndex; });
+  }
+  if (expandedIndex.value === index) expandedIndex.value = null;
+  else if (expandedIndex.value !== null && expandedIndex.value > index) expandedIndex.value--;
+
+  draftProfile.value = null;
+  draftProfileWasDirty.value = null;
+  nextTick(() => { isDirty.value = wasDirty; });
 }
 
 function duplicateProfile(source: Profile) {

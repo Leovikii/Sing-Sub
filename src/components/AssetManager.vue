@@ -40,6 +40,7 @@
       :isDirty="isEditorDirty || isNameDirty || isNoteDirty"
       :isSaving="isSaving || globalBusy"
       :showSave="true"
+      :saveDisabled="!isValidJson"
       saveText="保存"
       :showViewToggle="true"
       @save="saveFileCode"
@@ -50,13 +51,14 @@
           v-model:isOpen="addRuleMenuOpen"
           :class="viewMode === 'preview' ? 'invisible pointer-events-none' : ''"
           wrapperClass="relative flex"
-          contentClass="right-0 top-full mt-2 w-52 p-1.5 rounded-xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-lg origin-top-right flex flex-col gap-0.5"
+          contentClass="right-0 top-full mt-2 w-44 p-1.5 rounded-xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-lg origin-top-right flex flex-col gap-0.5"
         >
           <template #trigger="{ toggle, isOpen }">
             <ToolbarButton
               :icon="Plus"
+              label="新增"
+              size="compact"
               :active="isOpen"
-              title="添加规则"
               @click="toggle"
             />
           </template>
@@ -64,24 +66,21 @@
           <template #content="{ close }">
             <button
               @click="ruleSetEditorRef?.addRule('domain'); close()"
-              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
             >
-              <Globe :size="14" />
-              添加完整域名 (domain)
+              添加完整域名
             </button>
             <button
               @click="ruleSetEditorRef?.addRule('domain_suffix'); close()"
-              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
             >
-              <Link2 :size="14" />
-              添加域名后缀 (domain_suffix)
+              添加域名后缀
             </button>
             <button
               @click="ruleSetEditorRef?.addRule('external_url'); close()"
-              class="w-full text-left px-3 py-2 rounded-xl text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+              class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium text-text-primary hover:bg-white/10 transition-colors cursor-pointer"
             >
-              <CloudDownload :size="14" />
-              引入外部 JSON (URL)
+              导入外部 JSON
             </button>
           </template>
         </PopoverMenu>
@@ -92,6 +91,7 @@
         :ref="type === 'ruleset' && viewMode === 'edit' ? (el => ruleSetEditorRef = (el as any)) : undefined"
         v-model="editorContent"
         :readonly="viewMode === 'preview'"
+        @validity-change="ruleSetContentValid = $event"
         :loading="isLoading"
         loadingText="读取中..."
         class="min-h-[60vh]"
@@ -104,7 +104,7 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
-import { Trash2, Plus, Globe, Link2, CloudDownload, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
+import { Trash2, Plus, Network, LayoutTemplate, Puzzle, Shield } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
 import PopoverMenu from './ui/PopoverMenu.vue';
@@ -140,6 +140,7 @@ const localFileNote = ref('');
 const originalFileNote = ref('');
 const addRuleMenuOpen = ref(false);
 const ruleSetEditorRef = ref<InstanceType<typeof RuleSetEditor> | null>(null);
+const ruleSetContentValid = ref(true);
 
 
 
@@ -152,6 +153,15 @@ const isNameDirty = computed(() => {
 const isNoteDirty = computed(() => {
   if (!editingFile.value) return false;
   return localFileNote.value !== originalFileNote.value;
+});
+
+const isValidJson = computed(() => {
+  try {
+    JSON.parse(editorContent.value);
+    return props.type !== 'ruleset' || ruleSetContentValid.value;
+  } catch {
+    return false;
+  }
 });
 
 
@@ -216,6 +226,7 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
 
 function closeEditor() {
   isEditorDirty.value = false;
+  ruleSetContentValid.value = true;
   editingFile.value = null;
 }
 
@@ -224,6 +235,10 @@ function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
 }
 
 async function saveFileCode() {
+  if (!isValidJson.value) {
+    emit('status', 'error', '请修复 JSON 语法错误后再保存');
+    return;
+  }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(localFileName.value)) {
     emit('status', 'error', '文件名只能包含字母、数字、点、下划线和连字符，且不能为空');
     return;
@@ -323,6 +338,7 @@ function createFile() {
   fileSha.value = null;
   isEditorDirty.value = true;
   isLoading.value = false;
+  ruleSetContentValid.value = true;
 }
 
 defineExpose({ createFile });
