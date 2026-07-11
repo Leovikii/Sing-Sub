@@ -40,7 +40,7 @@ The compiled directory is maintained by the rule-set compilation workflow. Do no
 
 ## Prerequisites
 
-- Node.js 20
+- Node.js 22
 - A Cloudflare account and KV namespace
 - A GitHub repository for configuration data
 - A GitHub PAT with repo and workflow permissions

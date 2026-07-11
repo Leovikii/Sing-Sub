@@ -40,7 +40,7 @@ compiled 目录由规则集编译工作流维护，请勿手动编辑其中的 .
 
 ## 前置条件
 
-- Node.js 20
+- Node.js 22
 - Cloudflare 账户与 KV 命名空间
 - 用于存放配置数据的 GitHub 仓库
 - 具有 repo 与 workflow 权限的 GitHub PAT
