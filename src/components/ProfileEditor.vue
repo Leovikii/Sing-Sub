@@ -44,7 +44,7 @@
   >
     <template #default>
       <!-- Visual Editor -->
-      <div v-show="viewMode === 'edit'" class="flex-1 overflow-auto flex flex-col min-h-0">
+      <div v-if="viewMode === 'edit'" class="flex-1 overflow-auto flex flex-col min-h-0">
         <div class="p-5 sm:p-6 space-y-6 flex-1 min-h-0">
           <ProfileTemplateConfig :profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" :availablePatches="availablePatches" />
           <ProfileInbounds :profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
@@ -54,9 +54,8 @@
 
       <!-- Preview Mode: Raw JSON from KV -->
       <div v-if="viewMode === 'preview'" class="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
-        <CodeEditor
-          :modelValue="previewContent"
-          readonly
+        <CodePreview
+          :content="previewContent"
           :loading="previewLoading"
           loadingText="读取中..."
           class="flex-1 min-h-0"
@@ -73,14 +72,13 @@ import { Trash2, Copy, Link2, Check } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import ToolbarButton from './ui/ToolbarButton.vue';
 import EditorModal from './ui/EditorModal.vue';
-import ProfileTemplateConfig from './profile/ProfileTemplateConfig.vue';
-import ProfileInbounds from './profile/ProfileInbounds.vue';
-import ProfileOutbounds from './profile/ProfileOutbounds.vue';
+import CodePreview from './ui/CodePreview.vue';
 import type { Profile } from '../types';
 import { useApi } from '../composables/useApi';
 
-const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
-
+const ProfileTemplateConfig = defineAsyncComponent(() => import('./profile/ProfileTemplateConfig.vue'));
+const ProfileInbounds = defineAsyncComponent(() => import('./profile/ProfileInbounds.vue'));
+const ProfileOutbounds = defineAsyncComponent(() => import('./profile/ProfileOutbounds.vue'));
 
 const props = defineProps<{
   profile: Profile;
@@ -218,18 +216,23 @@ watch(isOpen, (open) => {
     localProfile.value = JSON.parse(initialProfileState);
     localProfileName.value = props.profile.name || '';
     localProfileNote.value = props.profile.note || '';
-    fetchTemplateData(localProfile.value.templateUrl || '');
-    fetchNodesData(localProfile.value.nodesPath || '');
     if (viewMode.value === 'preview') {
-      fetchPreview();
+      void fetchPreview();
+    } else {
+      void fetchTemplateData(localProfile.value.templateUrl || '');
+      void fetchNodesData(localProfile.value.nodesPath || '');
     }
   } else {
     document.body.style.overflow = '';
   }
 }, { immediate: true });
 
-watch(() => localProfile.value.templateUrl, (url) => { if (isOpen.value) fetchTemplateData(url || ''); });
-watch(() => localProfile.value.nodesPath, (path) => { if (isOpen.value) fetchNodesData(path || ''); });
+watch(() => localProfile.value.templateUrl, (url) => {
+  if (isOpen.value && viewMode.value === 'edit') void fetchTemplateData(url || '');
+});
+watch(() => localProfile.value.nodesPath, (path) => {
+  if (isOpen.value && viewMode.value === 'edit') void fetchNodesData(path || '');
+});
 
 // Watch for save completion
 watch(() => props.isSaving, (saving, wasSaving) => {
@@ -250,8 +253,11 @@ onUnmounted(() => {
 });
 
 watch(viewMode, (mode) => {
-  if (mode === 'preview') {
-    fetchPreview();
+  if (!isOpen.value) return;
+  if (mode === 'preview') void fetchPreview();
+  else {
+    void fetchTemplateData(localProfile.value.templateUrl || '');
+    void fetchNodesData(localProfile.value.nodesPath || '');
   }
 });
 

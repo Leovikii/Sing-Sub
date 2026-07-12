@@ -223,7 +223,7 @@ function recomputeOrders() {
 
 const { user, settings, login, bootstrap, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets, deleteFile } = useApi();
 
-async function refreshAssets(excludedPaths: Iterable<string> = [], force = false): Promise<boolean> {
+async function refreshAssets(excludedPaths: Iterable<string> = [], force = false): Promise<number | false> {
   const excluded = new Set(excludedPaths);
   const showInitialLoading = !assetsLoaded.value;
   if (showInitialLoading) assetsLoading.value = true;
@@ -237,8 +237,7 @@ async function refreshAssets(excludedPaths: Iterable<string> = [], force = false
     };
     assetsLoaded.value = true;
     assetsLastCheckedAt.value = Date.now();
-    pruneStaleReferences();
-    return true;
+    return pruneStaleReferences();
   } catch {
     if (!assetsLoaded.value) {
       availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
@@ -260,22 +259,32 @@ function handleAssetRefreshRequest(force = false) {
 }
 
 function pruneStaleReferences() {
-  if (!stateData.value?.profiles) return;
+  if (!stateData.value?.profiles) return 0;
   const nodePaths = new Set(availableAssets.value.nodes.map((n: any) => n.path || n));
   const templatePaths = new Set(availableAssets.value.templates.map((t: any) => t.path || t));
   const patchPaths = new Set(availableAssets.value.patches.map((p: any) => p.path || p));
+  let removedCount = 0;
 
   for (const profile of stateData.value.profiles) {
     if (profile.nodesPath && !nodePaths.has(profile.nodesPath)) {
       profile.nodesPath = '';
+      removedCount++;
     }
     if (profile.templateUrl && !profile.templateUrl.startsWith('http') && !templatePaths.has(profile.templateUrl)) {
       profile.templateUrl = '';
+      removedCount++;
     }
     if (profile.patchUrl && !patchPaths.has(profile.patchUrl)) {
       profile.patchUrl = '';
+      removedCount++;
     }
   }
+
+  if (removedCount > 0) {
+    isDirty.value = true;
+    showStatus('warning', `已清理 ${removedCount} 个失效的组件引用，请检查并保存配置`, 5000);
+  }
+  return removedCount;
 }
 
 function setStateData(state: StateData) {
@@ -627,10 +636,14 @@ async function handleGlobalRefresh() {
   saveStatus.value = 'refreshing';
   statusMessage.value = '';
   try {
-    const refreshed = await refreshAssets([], true);
-    if (!refreshed) throw new Error('无法从 GitHub 同步组件');
+    const prunedCount = await refreshAssets([], true);
+    if (prunedCount === false) throw new Error('无法从 GitHub 同步组件');
     deletedAssets.value = [];
-    showStatus('success', '组件同步成功', 3000);
+    if (prunedCount > 0) {
+      showStatus('warning', `组件同步成功，已清理 ${prunedCount} 个失效引用，请检查并保存配置`, 5000);
+    } else {
+      showStatus('success', '组件同步成功', 3000);
+    }
   } catch (e: any) {
     showStatus('error', '组件同步失败: ' + e.message, 5000);
   } finally {

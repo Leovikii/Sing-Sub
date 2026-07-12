@@ -62,13 +62,18 @@
       @save="saveFileCode"
       @close="closeEditor"
     >
-      <component
-        :is="type === 'ruleset' && viewMode === 'edit' ? RuleSetEditor : CodeEditor"
-        v-model="editorContent"
-        :readonly="viewMode === 'preview'"
-        @validity-change="ruleSetContentValid = $event"
+      <CodePreview
+        v-if="viewMode === 'preview'"
+        :content="editorContent"
         :loading="isLoading"
         loadingText="读取中..."
+        class="min-h-[60vh]"
+      />
+      <component
+        v-else
+        :is="type === 'ruleset' ? RuleSetEditor : CodeEditor"
+        v-model="editorContent"
+        @validity-change="ruleSetContentValid = $event"
         class="min-h-[60vh]"
       />
     </EditorModal>
@@ -83,6 +88,7 @@ import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check, Loader2 
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
 import ToolbarButton from './ui/ToolbarButton.vue';
+import CodePreview from './ui/CodePreview.vue';
 
 const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
 const RuleSetEditor = defineAsyncComponent(() => import('./ui/RuleSetEditor.vue'));
