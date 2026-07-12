@@ -19,10 +19,10 @@
 
         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span v-if="note" class="min-w-0 truncate text-[11px] text-text-muted md:text-xs">{{ note }}</span>
-          <span v-else class="text-[11px] italic text-[#48484a] md:text-xs">无备注</span>
+          <span v-else class="text-[11px] italic text-text-subtle md:text-xs">无备注</span>
 
           <span v-if="updatedAt" class="card-updated inline-flex shrink-0 items-center gap-2">
-            <span class="card-updated-separator text-[#48484a] text-[11px] md:text-xs">·</span>
+            <span class="card-updated-separator text-text-subtle text-[11px] md:text-xs">·</span>
             <span class="card-updated-time text-[11px] leading-tight text-text-muted md:text-xs md:whitespace-nowrap">{{ formatDynamicTime(updatedAt) }}</span>
           </span>
         </div>

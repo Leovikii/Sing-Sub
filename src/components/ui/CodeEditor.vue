@@ -1,5 +1,5 @@
 <template>
-  <div class="absolute inset-0 flex flex-col bg-[#0d0d0d] overflow-hidden">
+  <div class="absolute inset-0 flex flex-col bg-bg-code overflow-hidden">
     <EditorToolbar 
       @format="formatCode" 
       @undo="doUndo" 
@@ -94,12 +94,12 @@ const themeExtensions = EditorView.theme({
   },
   ".cm-gutters": {
     backgroundColor: "transparent !important",
-    color: "#4b5563 !important",
+    color: "var(--color-text-subtle) !important",
     borderRight: "1px solid rgba(255,255,255,0.05) !important"
   },
   ".cm-activeLineGutter": {
     backgroundColor: "rgba(255,255,255,0.05) !important",
-    color: "#F596AA !important"
+    color: "var(--color-brand-pink) !important"
   },
   ".cm-activeLine": {
     backgroundColor: "rgba(255,255,255,0.03) !important"
@@ -120,9 +120,7 @@ const themeExtensions = EditorView.theme({
     border: "none !important"
   },
   ".cm-search": {
-    backgroundColor: "rgba(30, 30, 32, 0.95) !important",
-    backdropFilter: "blur(16px)",
-    WebkitBackdropFilter: "blur(16px)",
+    backgroundColor: "var(--color-bg-elevated) !important",
     border: "1px solid rgba(255, 255, 255, 0.1) !important",
     borderTop: "none !important",
     borderTopLeftRadius: "0px !important",
@@ -130,7 +128,7 @@ const themeExtensions = EditorView.theme({
     borderBottomLeftRadius: "var(--radius-md) !important",
     borderBottomRightRadius: "var(--radius-md) !important",
     boxShadow: "var(--shadow-lg) !important",
-    color: "#f5f5f7",
+    color: "var(--color-text-primary)",
     padding: "6px 8px !important",
     width: "320px",
     display: "flex",
@@ -142,31 +140,31 @@ const themeExtensions = EditorView.theme({
   },
   ".cm-search input": {
     width: "140px",
-    backgroundColor: "#0a0a0a !important",
-    border: "1px solid #38383a !important",
+    backgroundColor: "var(--color-bg-code-toolbar) !important",
+    border: "1px solid var(--color-border-base) !important",
     borderRadius: "var(--radius-xs) !important",
     padding: "4px 8px !important",
-    color: "#f5f5f7 !important",
+    color: "var(--color-text-primary) !important",
     outline: "none !important",
     fontSize: "12px !important",
     transition: "border-color 0.2s"
   },
   ".cm-search input:focus": {
-    borderColor: "#F596AA !important"
+    borderColor: "var(--color-brand-pink) !important"
   },
   ".cm-search button": {
     backgroundColor: "transparent !important",
     border: "1px solid transparent !important",
     borderRadius: "var(--radius-xs) !important",
     padding: "4px 8px !important",
-    color: "#86868b !important",
+    color: "var(--color-text-muted) !important",
     cursor: "pointer !important",
     fontSize: "12px !important",
     transition: "all 0.2s !important"
   },
   ".cm-search button:hover": {
-    backgroundColor: "#2c2c2e !important",
-    color: "#f5f5f7 !important"
+    backgroundColor: "var(--color-bg-hover) !important",
+    color: "var(--color-text-primary) !important"
   },
   ".cm-search label": {
     display: "none !important" /* Hide match options completely */
@@ -189,7 +187,7 @@ const themeExtensions = EditorView.theme({
     backgroundColor: "transparent !important",
     border: "none !important",
     padding: "0 !important",
-    color: "#86868b !important",
+    color: "var(--color-text-muted) !important",
     fontSize: "16px !important",
     lineHeight: "1",
     display: "flex",
@@ -198,7 +196,7 @@ const themeExtensions = EditorView.theme({
     zIndex: "20"
   },
   ".cm-search button[name=close]:hover": {
-    color: "#F596AA !important",
+    color: "var(--color-brand-pink) !important",
     backgroundColor: "transparent !important"
   },
   /* --- Lint panel --- */
@@ -208,8 +206,8 @@ const themeExtensions = EditorView.theme({
     borderRadius: "50%"
   },
   ".cm-diagnostic": {
-    borderLeft: "3px solid #ff6961 !important",
-    backgroundColor: "#ff69611a !important"
+    borderLeft: "3px solid var(--color-danger) !important",
+    backgroundColor: "color-mix(in srgb, var(--color-danger) 10%, transparent) !important"
   }
 });
 

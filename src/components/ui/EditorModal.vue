@@ -3,7 +3,7 @@
     <Transition name="modal">
       <div
         v-if="isOpen"
-        class="fixed inset-0 z-[60] flex items-end justify-center bg-bg-page/80 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:items-center md:p-6"
+        class="fixed inset-0 z-[60] flex items-end justify-center bg-bg-page/85 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:items-center md:p-6"
         @click.self="handleBackdropClick"
         @keydown.esc="handleEscapeKey"
       >
@@ -13,11 +13,11 @@
           :aria-label="title || '编辑窗口'"
           tabindex="-1"
           ref="dialogRef"
-          class="modal-panel relative flex h-full max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border-base bg-bg-surface shadow-xl md:h-[88dvh] md:max-h-[56rem] md:max-w-4xl md:rounded-2xl"
+          class="modal-panel relative flex h-full max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border-base bg-bg-surface shadow-xl outline-none md:h-[88dvh] md:max-h-[56rem] md:max-w-4xl md:rounded-2xl"
           @keydown.tab="handleTabKey"
         >
           <!-- Header -->
-          <div class="flex items-center justify-between gap-2 p-3 md:p-4 border-b border-border-base bg-[#0a0a0a]/60 backdrop-blur-xl shrink-0 z-10">
+          <div class="flex items-center justify-between gap-2 p-3 md:p-4 border-b border-border-base bg-bg-code-toolbar shrink-0 z-10">
             <div class="flex flex-col min-w-0 flex-1">
               <slot name="title">
                 <!-- Filename area -->
@@ -31,7 +31,7 @@
                       v-if="editableTitle && viewMode !== 'preview'"
                       :value="title"
                       @input="$emit('update:title', ($event.target as HTMLInputElement).value)"
-                      class="absolute inset-0 bg-transparent text-text-primary font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder-[#555]"
+                      class="absolute inset-0 bg-transparent text-text-primary font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder:text-text-subtle"
                       :placeholder="titlePlaceholder || '输入名称'"
                     />
                     <span v-else class="absolute inset-0 text-text-primary font-bold text-[15px] md:text-[16px] truncate">{{ title || 'untitled' }}</span>
@@ -49,7 +49,7 @@
                     v-if="editableNote !== false && viewMode !== 'preview'"
                     :value="note"
                     @input="$emit('update:note', ($event.target as HTMLInputElement).value)"
-                    class="bg-transparent text-text-muted hover:text-text-primary focus:text-text-primary font-medium outline-none text-[12px] min-w-[60px] flex-1 truncate transition-colors placeholder-[#444]"
+                    class="bg-transparent text-text-muted hover:text-text-primary focus:text-text-primary font-medium outline-none text-[12px] min-w-[60px] flex-1 truncate transition-colors placeholder:text-text-subtle"
                     placeholder="未添加..."
                   />
                   <span v-else class="text-text-muted font-medium text-[12px] min-w-[60px] flex-1 truncate">{{ note || '未添加' }}</span>

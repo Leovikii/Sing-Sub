@@ -13,9 +13,16 @@
         />
         <div v-else class="flex gap-2 items-center">
           <Input v-model="profile.templateUrl" placeholder="https://..." class="flex-1" />
-          <button @click="cancelCustomTemplate" title="删除自定义模板并返回选择" class="w-10 h-10 flex items-center justify-center rounded-lg bg-danger/10 text-danger hover:bg-danger/20 transition shrink-0 cursor-pointer">
-            <Trash2 class="w-4 h-4" />
-          </button>
+          <ToolbarButton
+            :icon="Trash2"
+            label="删除自定义模板并返回选择"
+            variant="danger"
+            size="touch"
+            iconOnly
+            showTooltip
+            class="shrink-0"
+            @click="cancelCustomTemplate"
+          />
         </div>
       </div>
     </div>
@@ -52,6 +59,7 @@ import { computed } from 'vue';
 import { Trash2 } from 'lucide-vue-next';
 import Input from '../ui/Input.vue';
 import Select from '../ui/Select.vue';
+import ToolbarButton from '../ui/ToolbarButton.vue';
 import type { Profile } from '../../types';
 
 const props = defineProps<{

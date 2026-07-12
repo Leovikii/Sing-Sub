@@ -27,7 +27,7 @@ const props = withDefaults(defineProps<{
   label?: string;
   tooltip?: string;
   variant?: 'secondary' | 'primary' | 'danger' | 'success' | 'emphasis';
-  size?: 'compact' | 'card';
+  size?: 'compact' | 'card' | 'touch';
   iconOnly?: boolean;
   mobileLabel?: boolean;
   showTooltip?: boolean;
@@ -46,6 +46,11 @@ const props = withDefaults(defineProps<{
 });
 
 const sizeClass = computed(() => {
+  if (props.size === 'touch') {
+    return props.iconOnly
+      ? 'h-11 w-11 inline-flex items-center justify-center rounded-lg text-sm'
+      : 'h-11 min-w-11 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 text-sm';
+  }
   if (props.size === 'card') {
     return props.iconOnly
       ? 'h-11 w-11 md:h-9 md:w-9 inline-flex items-center justify-center rounded-lg text-sm'
@@ -56,7 +61,7 @@ const sizeClass = computed(() => {
     : 'h-11 w-11 md:h-8 md:w-8 inline-flex items-center justify-center rounded-full';
 });
 
-const iconSize = computed(() => props.size === 'card' ? 18 : (props.label && !props.iconOnly ? 14 : 16));
+const iconSize = computed(() => props.size === 'card' || props.size === 'touch' ? 18 : (props.label && !props.iconOnly ? 14 : 16));
 
 const stateClass = computed(() => {
   if (props.variant === 'success') {

@@ -53,7 +53,7 @@
       </div>
 
       <!-- Preview Mode: Raw JSON from KV -->
-      <div v-if="viewMode === 'preview'" class="flex-1 flex flex-col min-h-0 bg-[#0a0a0a]">
+      <div v-if="viewMode === 'preview'" class="flex-1 flex flex-col min-h-0 bg-bg-code-toolbar">
         <CodePreview
           :content="previewContent"
           :loading="previewLoading"

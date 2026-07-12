@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div
-      class="fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-[9999] flex min-h-12 w-[calc(100vw-2rem)] sm:w-auto max-w-2xl items-center justify-center gap-3 px-4 sm:px-5 py-3 rounded-xl border transition-[opacity,transform,background-color,border-color] duration-300 backdrop-blur-md pointer-events-none"
+      class="fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-[9999] flex min-h-12 w-[calc(100vw-2rem)] sm:w-auto max-w-2xl items-center justify-center gap-3 px-4 sm:px-5 py-3 rounded-xl border transition-[opacity,transform,background-color,border-color] duration-300 pointer-events-none"
       :class="status !== 'idle'
         ? 'opacity-100 bg-bg-surface/90 border-border-base shadow-xl translate-y-0'
         : 'opacity-0 border-transparent -translate-y-4'"

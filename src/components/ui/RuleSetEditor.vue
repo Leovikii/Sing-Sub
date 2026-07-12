@@ -41,7 +41,7 @@
             v-model="sourceUrlsContent"
             :readonly="readonly"
             placeholder="https://raw.githubusercontent.com/.../ruleset.json&#10;https://raw.githubusercontent.com/.../another-ruleset.json"
-            class="min-h-[9rem] shrink-0 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
+            class="min-h-[9rem] shrink-0 resize-none rounded-md border border-bg-elevated bg-bg-code-toolbar p-3 font-mono text-sm text-text-primary placeholder:text-text-subtle focus:border-brand-pink focus:outline-none"
             @input="scheduleEmitChange"
           ></textarea>
           <p v-if="sourceError" class="mt-2 text-xs text-danger">{{ sourceError }}</p>
@@ -75,7 +75,7 @@
           :value="getSectionContent(section.key)"
           :readonly="readonly"
           :placeholder="section.placeholder"
-          class="min-h-[9rem] flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
+          class="min-h-[9rem] flex-1 resize-none rounded-md border border-bg-elevated bg-bg-code-toolbar p-3 font-mono text-sm text-text-primary placeholder:text-text-subtle focus:border-brand-pink focus:outline-none"
           @input="updateSectionContent(section.key, $event)"
         ></textarea>
       </section>

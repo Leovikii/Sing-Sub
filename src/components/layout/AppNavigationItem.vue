@@ -6,8 +6,8 @@
     class="nav-item group relative flex h-14 flex-1 flex-col items-center justify-center gap-1 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink md:grid md:h-16 md:w-full md:max-w-none md:flex-none md:grid-cols-[72px_minmax(0,1fr)] md:items-center md:gap-0 md:overflow-hidden md:px-0 md:rounded-lg"
     :class="[
       active
-        ? 'text-[#ffc4d0]'
-        : 'text-[#b5b5bc]',
+        ? 'text-text-nav-active'
+        : 'text-text-nav',
     ]"
     @click="$emit('select')"
   >
