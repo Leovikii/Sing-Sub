@@ -26,11 +26,12 @@ interface CachedAssetDirectory {
 }
 
 interface AssetCacheEnvelope {
-  version: 2;
+  version: 3;
+  revision: string;
   directories: Record<AssetKind, CachedAssetDirectory>;
 }
 
-const ASSET_CACHE_VERSION = 2;
+const ASSET_CACHE_VERSION = 3;
 const ASSET_CACHE_TTL_MS = 60_000;
 const ASSET_DIRECTORIES: Record<AssetKind, string> = {
   nodes: 'sing-sub/nodes',
@@ -51,6 +52,10 @@ function assetSnapshotKey(session: RepoSession): string {
   return `dashboard:${scope(session)}:assets`;
 }
 
+function assetRevisionKey(session: RepoSession): string {
+  return `dashboard:${scope(session)}:assets-revision`;
+}
+
 function parseSnapshot<T>(raw: string | null): T | null {
   if (!raw) return null;
   try {
@@ -62,7 +67,7 @@ function parseSnapshot<T>(raw: string | null): T | null {
 
 function parseAssetCache(raw: string | null): AssetCacheEnvelope | null {
   const value = parseSnapshot<Partial<AssetCacheEnvelope>>(raw);
-  if (!value || value.version !== ASSET_CACHE_VERSION || !value.directories) return null;
+  if (!value || value.version !== ASSET_CACHE_VERSION || typeof value.revision !== 'string' || !value.directories) return null;
   const valid = (Object.keys(ASSET_DIRECTORIES) as AssetKind[]).every(kind => {
     const directory = value.directories?.[kind];
     return !!directory && typeof directory.checkedAt === 'number' && Array.isArray(directory.files);
@@ -146,24 +151,42 @@ export function invalidateProfileSnapshot(env: Env, session: RepoSession): Promi
 }
 
 export async function getAssetSnapshot(env: Env, session: RepoSession, force = false): Promise<AssetSnapshot> {
-  const cached = parseAssetCache(await env.SESSIONS.get(assetSnapshotKey(session)));
-  const now = Date.now();
   const kinds = Object.keys(ASSET_DIRECTORIES) as AssetKind[];
-  if (!force && cached && kinds.every(kind => isFresh(cached.directories[kind], now))) {
-    return toAssetSnapshot(cached);
+  let refreshRequired = force;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const [rawCache, revision] = await Promise.all([
+      env.SESSIONS.get(assetSnapshotKey(session)),
+      env.SESSIONS.get(assetRevisionKey(session)).then(value => value || '0'),
+    ]);
+    const parsedCache = parseAssetCache(rawCache);
+    const cached = parsedCache?.revision === revision ? parsedCache : null;
+    const now = Date.now();
+    if (!refreshRequired && cached && kinds.every(kind => isFresh(cached.directories[kind], now))) {
+      return toAssetSnapshot(cached);
+    }
+
+    const limit = pLimit(5);
+    const refreshed = await Promise.all(kinds.map(async kind => [
+      kind,
+      await refreshAssetDirectory(kind, session, cached?.directories[kind], refreshRequired, now, limit),
+    ] as const));
+    const latestRevision = await env.SESSIONS.get(assetRevisionKey(session)).then(value => value || '0');
+    if (latestRevision !== revision) {
+      refreshRequired = true;
+      continue;
+    }
+
+    const directories = Object.fromEntries(refreshed) as Record<AssetKind, CachedAssetDirectory>;
+    const next: AssetCacheEnvelope = { version: ASSET_CACHE_VERSION, revision, directories };
+    await env.SESSIONS.put(assetSnapshotKey(session), JSON.stringify(next));
+    return toAssetSnapshot(next);
   }
 
-  const limit = pLimit(5);
-  const refreshed = await Promise.all(kinds.map(async kind => [
-    kind,
-    await refreshAssetDirectory(kind, session, cached?.directories[kind], force, now, limit),
-  ] as const));
-  const directories = Object.fromEntries(refreshed) as Record<AssetKind, CachedAssetDirectory>;
-  const next: AssetCacheEnvelope = { version: ASSET_CACHE_VERSION, directories };
-  await env.SESSIONS.put(assetSnapshotKey(session), JSON.stringify(next));
-  return toAssetSnapshot(next);
+  throw new Error('Assets changed during refresh; retry the request');
 }
 
-export function invalidateAssetSnapshot(env: Env, session: RepoSession): Promise<void> {
-  return env.SESSIONS.delete(assetSnapshotKey(session));
+export async function invalidateAssetSnapshot(env: Env, session: RepoSession): Promise<void> {
+  await env.SESSIONS.put(assetRevisionKey(session), crypto.randomUUID());
+  await env.SESSIONS.delete(assetSnapshotKey(session));
 }

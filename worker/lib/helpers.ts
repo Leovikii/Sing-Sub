@@ -2,7 +2,7 @@ import type { Env, UserSettings, Profile } from '../types';
 import type { RepoSession } from './github';
 import { fetchFileContent, fetchDirectoryContents, GithubApiError } from './github';
 import { buildAllProfiles, buildProfile } from './builder';
-import { configCacheKey, listAllKvKeys } from './kv';
+import { configCacheKey, configCachePrefix, listAllKvKeys } from './kv';
 
 export function pLimit(concurrency: number) {
   let activeCount = 0;
@@ -86,6 +86,7 @@ export async function rebuildWithWarning(
       await buildAllProfiles(profiles, session, subToken, env);
     }
   } catch (e) {
+    await cleanupScopedConfigCache(subToken, session, env);
     return { warning: e instanceof Error ? e.message : 'Build failed' };
   }
   return {};
@@ -104,6 +105,7 @@ export async function rebuildSingleWithWarning(
       await env.SESSIONS.put(configCacheKey(subToken, session, profile.name), config);
     }
   } catch (e) {
+    await env.SESSIONS.delete(configCacheKey(subToken, session, profileName));
     return { warning: e instanceof Error ? e.message : 'Build failed' };
   }
   return {};
@@ -111,6 +113,15 @@ export async function rebuildSingleWithWarning(
 
 export async function cleanupConfigCache(token: string, env: Env): Promise<void> {
   const keys = await listAllKvKeys(env, `config:${token}:`);
+  await Promise.all(keys.map(key => env.SESSIONS.delete(key)));
+}
+
+export async function cleanupScopedConfigCache(
+  token: string,
+  session: RepoSession,
+  env: Env,
+): Promise<void> {
+  const keys = await listAllKvKeys(env, configCachePrefix(token, session));
   await Promise.all(keys.map(key => env.SESSIONS.delete(key)));
 }
 

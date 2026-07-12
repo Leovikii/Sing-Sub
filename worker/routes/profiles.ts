@@ -3,7 +3,7 @@ import { requireAuth } from '../lib/auth';
 import { buildAllProfiles, buildProfile } from '../lib/builder';
 import { commitMultiFiles, fetchDirectoryContents, GithubApiError, type GitTreeItem } from '../lib/github';
 import { errorResponse, jsonResponse } from '../lib/security';
-import { fetchAllProfiles, rebuildSingleWithWarning, rebuildWithWarning, toRepoSession } from '../lib/helpers';
+import { cleanupScopedConfigCache, fetchAllProfiles, rebuildSingleWithWarning, rebuildWithWarning, toRepoSession } from '../lib/helpers';
 import { getProfileSnapshot, putProfileSnapshot } from '../lib/dashboard';
 import { configCacheKey } from '../lib/kv';
 
@@ -51,6 +51,7 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
   try {
     await buildAllProfiles(profiles, session, auth.settings.subToken, env);
   } catch (error) {
+    await cleanupScopedConfigCache(auth.settings.subToken, session, env);
     const warning = error instanceof Error ? error.message : 'Build failed';
     return jsonResponse({ state: { profiles }, warning });
   }
