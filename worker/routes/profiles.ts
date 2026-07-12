@@ -3,8 +3,9 @@ import { requireAuth } from '../lib/auth';
 import { buildAllProfiles, buildProfile } from '../lib/builder';
 import { commitMultiFiles, fetchDirectoryContents, GithubApiError, type GitTreeItem } from '../lib/github';
 import { errorResponse, jsonResponse } from '../lib/security';
-import { fetchAllProfiles, rebuildSingleWithWarning, rebuildWithWarning, toRepoSession } from '../lib/helpers';
+import { cleanupScopedConfigCache, fetchAllProfiles, rebuildSingleWithWarning, rebuildWithWarning, toRepoSession } from '../lib/helpers';
 import { getProfileSnapshot, putProfileSnapshot } from '../lib/dashboard';
+import { configCacheKey } from '../lib/kv';
 
 const SAFE_PROFILE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
@@ -50,6 +51,7 @@ export async function handleRebuild(request: Request, env: Env): Promise<Respons
   try {
     await buildAllProfiles(profiles, session, auth.settings.subToken, env);
   } catch (error) {
+    await cleanupScopedConfigCache(auth.settings.subToken, session, env);
     const warning = error instanceof Error ? error.message : 'Build failed';
     return jsonResponse({ state: { profiles }, warning });
   }
@@ -117,7 +119,9 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
 
   await putProfileSnapshot(env, session, profiles);
 
-  if (renamedPath) await env.SESSIONS.delete(`config:${auth.settings.subToken}:${oldProfileName}`);
+  if (renamedPath) {
+    await env.SESSIONS.delete(configCacheKey(auth.settings.subToken, auth.settings, oldProfileName!));
+  }
 
   const { warning } = profileName
     ? await rebuildSingleWithWarning(session, auth.settings.subToken, env, profileName)
@@ -139,7 +143,7 @@ export async function handlePreview(request: Request, env: Env, name: string): P
   }
 
   if (!/^[a-zA-Z0-9_-]+$/.test(name)) return errorResponse('Invalid profile name', 400);
-  const cached = await env.SESSIONS.get(`config:${auth.settings.subToken}:${name}`);
+  const cached = await env.SESSIONS.get(configCacheKey(auth.settings.subToken, auth.settings, name));
   if (!cached) return errorResponse('该配置尚未构建，请先保存或刷新', 404);
   return jsonResponse({ content: cached });
 }

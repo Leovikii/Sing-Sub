@@ -8,6 +8,20 @@ import { toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
 import { invalidateAssetSnapshot } from '../lib/dashboard';
 
+function validateAssetJson(path: string, content: string): string | null {
+  let document: unknown;
+  try {
+    document = JSON.parse(content);
+  } catch (error) {
+    return `JSON 语法错误: ${error instanceof Error ? error.message : '无法解析内容'}`;
+  }
+  if (!document || typeof document !== 'object') return 'JSON 根节点必须是对象或数组';
+  if ((path.startsWith('sing-sub/templates/') || path.startsWith('sing-sub/patches/')) && Array.isArray(document)) {
+    return '模板和补丁的 JSON 根节点必须是对象';
+  }
+  return null;
+}
+
 async function refreshRulesetSources(content: string): Promise<string> {
   const metadata = readRulesetMetadata(content);
   const refreshed = [];
@@ -39,7 +53,11 @@ export async function handlePutFile(request: Request, env: Env): Promise<Respons
   }
 
   const session = toRepoSession(auth.settings);
-  if (!isRulesetPath(path)) return putAssetFile(path, content, sha, oldPath, session, env);
+  if (!isRulesetPath(path)) {
+    const validationError = validateAssetJson(path, content);
+    if (validationError) return errorResponse(validationError, 400);
+    return putAssetFile(path, content, sha, oldPath, session, env);
+  }
 
   const validationError = validateRulesetSource(content);
   if (validationError) return errorResponse(validationError, 400);

@@ -6,7 +6,7 @@ import {
 } from '../lib/auth';
 import { fetchRepository, fetchUser, type RepoSession } from '../lib/github';
 import { errorResponse, jsonResponse } from '../lib/security';
-import { cleanupSubToken, generateHex, rebuildWithWarning } from '../lib/helpers';
+import { cleanupConfigCache, cleanupSubToken, generateHex, rebuildWithWarning } from '../lib/helpers';
 import { getProfileSnapshot, putProfileSnapshot } from '../lib/dashboard';
 import { fetchAllProfiles, toRepoSession } from '../lib/helpers';
 
@@ -113,6 +113,7 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
     return errorResponse('Repository not found or not accessible', 404);
   }
 
+  const isRepoChange = owner !== auth.session.owner || repo !== auth.session.repo;
   if (auth.settings.subToken !== subToken) {
     const taken = await env.SESSIONS.get(`sub:${subToken}`);
     if (taken) {
@@ -124,7 +125,8 @@ export async function handlePutSettings(request: Request, env: Env): Promise<Res
     await cleanupSubToken(auth.settings.subToken, env);
   }
 
-  const isRepoChange = owner !== auth.session.owner || repo !== auth.session.repo;
+  if (isRepoChange) await cleanupConfigCache(subToken, env);
+
   const settings: UserSettings = {
     pat: effectivePat, owner, repo, subToken,
     userLogin: userData.login,

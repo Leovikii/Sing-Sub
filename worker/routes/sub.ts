@@ -4,6 +4,7 @@ import { buildProfile } from '../lib/builder';
 import { errorResponse } from '../lib/security';
 import { toRepoSession, subscriptionResponse, fetchProfile } from '../lib/helpers';
 import { fetchRawFile } from '../lib/github';
+import { configCacheKey } from '../lib/kv';
 
 const ALLOWED_UA_PATTERNS = ['sing-box', 'SFI', 'SFA', 'SFM', 'SFT'];
 const SAFE_TOKEN = /^[a-zA-Z0-9_-]+$/;
@@ -30,7 +31,8 @@ export async function handleSubscription(
   const settings = await getUserSettings(owner, repo, env);
   if (!settings) return errorResponse('User not configured', 404);
 
-  const cached = await env.SESSIONS.get(`config:${token}:${name}`);
+  const cacheKey = configCacheKey(token, settings, name);
+  const cached = await env.SESSIONS.get(cacheKey);
   if (cached) {
     return subscriptionResponse(cached);
   }
@@ -41,7 +43,7 @@ export async function handleSubscription(
   if (!profile) return errorResponse('Profile not found', 404);
 
   const config = await buildProfile(profile, session);
-  await env.SESSIONS.put(`config:${token}:${name}`, config);
+  await env.SESSIONS.put(cacheKey, config);
 
   return subscriptionResponse(config);
 }
