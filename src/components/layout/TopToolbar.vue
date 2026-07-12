@@ -25,7 +25,6 @@
       />
 
       <ToolbarButton
-        v-if="activeTab === 'config'"
         class="order-1"
         :icon="RefreshCw"
         label="刷新"

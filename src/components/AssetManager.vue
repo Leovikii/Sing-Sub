@@ -96,7 +96,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  'refresh': [];
+  'refresh': [force?: boolean];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
   'delete': [file: any];
   'saved': [file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'patch' | 'ruleset' }];
@@ -177,7 +177,16 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
 
   try {
     const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
-    if (!res.ok) throw new Error('Failed to load file');
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({})) as { error?: string; code?: string };
+      if (res.status === 404 && error.code === 'ASSET_NOT_FOUND') {
+        closeEditor();
+        emit('status', 'warning', '文件已在仓库中删除，组件列表已刷新', 5000);
+        emit('refresh', true);
+        return;
+      }
+      throw new Error(error.error || 'Failed to load file');
+    }
     const data = await res.json();
     if (seq !== editFileSeq) return; // A newer editFile() call superseded this one
 

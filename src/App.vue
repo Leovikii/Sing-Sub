@@ -78,7 +78,7 @@
               :loading="assetsLoading"
               :globalBusy="globalBusy"
               :subToken="settings?.subToken"
-              @refresh="refreshAssets"
+              @refresh="handleAssetRefreshRequest"
               @status="(t, m) => showStatus(t, m, 5000)"
               @delete="markAssetForDeletion"
               @saved="handleAssetSaved"
@@ -152,6 +152,8 @@ const expandedIndex = ref<number | null>(null);
 const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }>({ nodes: [], templates: [], patches: [], rulesets: [] });
 const assetsLoaded = ref(false);
 const assetsLoading = ref(false);
+const assetsLastCheckedAt = ref(0);
+const ASSET_CHECK_INTERVAL_MS = 60_000;
 
 const activeTab = ref<'config' | 'assets' | 'settings'>('config');
 const assetType = ref<'node' | 'template' | 'patch' | 'ruleset'>('node');
@@ -223,7 +225,8 @@ const { user, settings, login, bootstrap, saveSettings, deleteSettings, getState
 
 async function refreshAssets(excludedPaths: Iterable<string> = [], force = false): Promise<boolean> {
   const excluded = new Set(excludedPaths);
-  assetsLoading.value = true;
+  const showInitialLoading = !assetsLoaded.value;
+  if (showInitialLoading) assetsLoading.value = true;
   try {
     const data = await getAssets(force);
     availableAssets.value = {
@@ -233,18 +236,27 @@ async function refreshAssets(excludedPaths: Iterable<string> = [], force = false
       rulesets: data.rulesets.filter((item: any) => !excluded.has(item.path || item)),
     };
     assetsLoaded.value = true;
+    assetsLastCheckedAt.value = Date.now();
     pruneStaleReferences();
     return true;
   } catch {
-    availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    if (!assetsLoaded.value) {
+      availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    }
     return false;
   } finally {
-    assetsLoading.value = false;
+    if (showInitialLoading) assetsLoading.value = false;
   }
 }
 
 async function ensureAssetsLoaded() {
-  if (!assetsLoaded.value) await refreshAssets();
+  if (!assetsLoaded.value || Date.now() - assetsLastCheckedAt.value >= ASSET_CHECK_INTERVAL_MS) {
+    await refreshAssets();
+  }
+}
+
+function handleAssetRefreshRequest(force = false) {
+  void refreshAssets([], force);
 }
 
 function pruneStaleReferences() {
@@ -300,6 +312,7 @@ function handleAssetSaved(file: { path: string; oldPath?: string; note: string; 
   if (existing && typeof existing === 'object') Object.assign(existing, next);
   else if (!existing) list.unshift(next);
   assetsLoaded.value = true;
+  assetsLastCheckedAt.value = Date.now();
 }
 
 onMounted(async () => {
@@ -323,6 +336,7 @@ async function handleSetup() {
     const result = await login(setupData);
     const data = await bootstrap();
     assetsLoaded.value = false;
+    assetsLastCheckedAt.value = 0;
     availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
     if (data.state) setStateData(data.state);
     setupData.pat = '';
@@ -341,6 +355,7 @@ async function handleSaveSettings(newSettings: { owner: string; repo: string; pa
   try {
     const result = await saveSettings(newSettings);
     assetsLoaded.value = false;
+    assetsLastCheckedAt.value = 0;
     availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
     const data = await bootstrap();
     if (data.state) setStateData(data.state);
@@ -371,6 +386,7 @@ async function confirmDisconnect() {
   await deleteSettings();
   stateData.value = null;
   assetsLoaded.value = false;
+  assetsLastCheckedAt.value = 0;
   availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
 }
 
@@ -601,8 +617,25 @@ function handleGlobalSave() {
   handleSave();
 }
 
-function handleGlobalRefresh() {
-  handleRefresh();
+async function handleGlobalRefresh() {
+  if (activeTab.value !== 'assets') {
+    await handleRefresh();
+    return;
+  }
+  if (refreshing.value) return;
+  refreshing.value = true;
+  saveStatus.value = 'refreshing';
+  statusMessage.value = '';
+  try {
+    const refreshed = await refreshAssets([], true);
+    if (!refreshed) throw new Error('无法从 GitHub 同步组件');
+    deletedAssets.value = [];
+    showStatus('success', '组件同步成功', 3000);
+  } catch (e: any) {
+    showStatus('error', '组件同步失败: ' + e.message, 5000);
+  } finally {
+    refreshing.value = false;
+  }
 }
 </script>
 

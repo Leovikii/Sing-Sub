@@ -12,6 +12,7 @@ export class GithubApiError extends Error {
 interface GithubRequestOptions {
   method?: string;
   body?: unknown;
+  headers?: Record<string, string>;
 }
 
 export interface RepoSession {
@@ -43,12 +44,13 @@ export async function githubFetch(
   pat: string,
   options: GithubRequestOptions = {}
 ): Promise<Response> {
-  const { method = 'GET', body } = options;
+  const { method = 'GET', body, headers: extraHeaders } = options;
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${pat}`,
     'Accept': 'application/vnd.github.v3+json',
     'Content-Type': 'application/json',
     'User-Agent': 'sing-sub-worker',
+    ...extraHeaders,
   };
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -141,6 +143,36 @@ export async function fetchDirectoryContents(
   if (!Array.isArray(data)) return [];
   // Return only file paths, ignore subdirectories
   return data.filter(item => item.type === 'file').map(item => item.path);
+}
+
+export interface GithubDirectoryFile {
+  path: string;
+  sha: string;
+}
+
+export type GithubDirectoryListing =
+  | { notModified: true; etag: string | null }
+  | { notModified: false; etag: string | null; files: GithubDirectoryFile[] };
+
+export async function fetchDirectoryListing(
+  dirPath: string,
+  session: RepoSession,
+  etag?: string | null,
+): Promise<GithubDirectoryListing> {
+  const res = await repoFetch(`contents/${dirPath}?ref=${encodeURIComponent(session.defaultBranch || 'main')}`, session, {
+    headers: etag ? { 'If-None-Match': etag } : undefined,
+  });
+  if (res.status === 304) return { notModified: true, etag: res.headers.get('etag') || etag || null };
+  if (res.status === 404) return { notModified: false, etag: null, files: [] };
+  if (!res.ok) throw new GithubApiError(`GitHub directory lookup failed (${res.status}): ${await res.text()}`, res.status);
+  const data = await res.json() as Array<{ path: string; sha: string; type: string }>;
+  return {
+    notModified: false,
+    etag: res.headers.get('etag'),
+    files: Array.isArray(data)
+      ? data.filter(item => item.type === 'file').map(item => ({ path: item.path, sha: item.sha }))
+      : [],
+  };
 }
 
 export async function putFileContent(

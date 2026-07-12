@@ -5,7 +5,7 @@ import { fetchFileContent } from '../lib/github';
 import { toRepoSession } from '../lib/helpers';
 import { errorResponse, jsonResponse } from '../lib/security';
 import { isManagedAssetPath, TEMPLATE_PATH } from '../lib/assets';
-import { getAssetSnapshot } from '../lib/dashboard';
+import { getAssetSnapshot, invalidateAssetSnapshot } from '../lib/dashboard';
 
 export async function handleGetAssets(request: Request, env: Env): Promise<Response> {
   const auth = await requireAuth(request, env);
@@ -24,8 +24,12 @@ export async function handleGetFile(request: Request, env: Env): Promise<Respons
   if (!path) return errorResponse('Missing path parameter', 400);
   if (!isManagedAssetPath(path)) return errorResponse('Unsupported file path', 400);
 
-  const file = await fetchFileContent(path, toRepoSession(auth.settings));
-  if (!file) return errorResponse('File not found', 404);
+  const session = toRepoSession(auth.settings);
+  const file = await fetchFileContent(path, session);
+  if (!file) {
+    await invalidateAssetSnapshot(env, session);
+    return errorResponse('File no longer exists', 404, 'ASSET_NOT_FOUND');
+  }
   return jsonResponse({ content: file.content, sha: file.sha });
 }
 

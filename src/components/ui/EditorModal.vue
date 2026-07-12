@@ -20,8 +20,11 @@
               <slot name="title">
                 <!-- Filename area -->
                 <div class="flex items-baseline min-w-0">
-                  <div class="relative inline-flex min-w-[9rem] max-w-[calc(100%-40px)]">
-                    <span class="invisible whitespace-pre overflow-hidden font-bold text-[15px] md:text-[16px] pr-0.5">{{ title || 'untitled' }}</span>
+                  <div
+                    class="relative inline-flex min-w-[2ch]"
+                    :class="editableTitle && viewMode !== 'preview' && extension ? 'max-w-[calc(100%-40px)]' : 'max-w-full'"
+                  >
+                    <span class="invisible overflow-hidden whitespace-pre pr-0.5 text-[15px] font-bold md:text-[16px]">{{ title || titlePlaceholder || 'untitled' }}</span>
                     <input
                       v-if="editableTitle && viewMode !== 'preview'"
                       :value="title"
@@ -31,7 +34,10 @@
                     />
                     <span v-else class="absolute inset-0 text-text-primary font-bold text-[15px] md:text-[16px] truncate">{{ title || 'untitled' }}</span>
                   </div>
-                  <span class="text-text-muted font-mono text-[11px] shrink-0 ml-0.5">.json</span>
+                  <span
+                    v-if="editableTitle && viewMode !== 'preview' && extension"
+                    class="ml-0.5 shrink-0 select-none font-mono text-[11px] text-text-muted"
+                  >{{ extension }}</span>
                 </div>
 
                 <!-- Note area -->

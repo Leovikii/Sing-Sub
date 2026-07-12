@@ -15,17 +15,16 @@
       <div class="card-info flex flex-col min-w-0 flex-1 space-y-2.5 md:space-y-3.5">
         <div class="flex items-center gap-2 min-w-0">
           <span class="card-title text-lg font-semibold text-text-primary truncate group-hover:text-brand-pink transition-colors">{{ title }}</span>
-          <span class="text-text-muted font-mono text-sm select-none hidden sm:inline">.json</span>
         </div>
 
-        <div class="flex items-center gap-2">
-          <span v-if="note" class="text-text-muted text-[11px] md:text-xs truncate">{{ note }}</span>
-          <span v-else class="text-[#48484a] text-[11px] md:text-xs italic">无备注</span>
+        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span v-if="note" class="min-w-0 truncate text-[11px] text-text-muted md:text-xs">{{ note }}</span>
+          <span v-else class="text-[11px] italic text-[#48484a] md:text-xs">无备注</span>
 
-          <template v-if="updatedAt">
-            <span class="text-[#48484a] text-[11px] md:text-xs">·</span>
-            <span class="text-text-muted text-[11px] md:text-xs whitespace-nowrap">{{ formatDynamicTime(updatedAt) }}</span>
-          </template>
+          <span v-if="updatedAt" class="card-updated inline-flex shrink-0 items-center gap-2">
+            <span class="card-updated-separator text-[#48484a] text-[11px] md:text-xs">·</span>
+            <span class="card-updated-time text-[11px] leading-tight text-text-muted md:text-xs md:whitespace-nowrap">{{ formatDynamicTime(updatedAt) }}</span>
+          </span>
         </div>
       </div>
 
@@ -128,6 +127,19 @@ function formatDynamicTime(ts: number): string {
 }
 
 @container (max-width: 30rem) {
+  .card-updated {
+    flex-basis: 100%;
+  }
+
+  .card-updated-separator {
+    display: none;
+  }
+
+  .card-updated-time {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
   :deep(.toolbar-button) {
     width: 2.25rem;
     padding-inline: 0;
@@ -142,7 +154,7 @@ function formatDynamicTime(ts: number): string {
   }
 }
 
-@container (max-width: 22rem) {
+@container (max-width: 13rem) {
   .card-layout {
     flex-direction: column;
     align-items: stretch;
