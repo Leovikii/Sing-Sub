@@ -47,16 +47,11 @@ export async function handleSubscription(
 }
 
 export async function handleRuleset(
-  request: Request,
+  _request: Request,
   env: Env,
   token: string,
   name: string
 ): Promise<Response> {
-  const ua = request.headers.get('User-Agent') || '';
-  if (!ALLOWED_UA_PATTERNS.some(p => ua.includes(p))) {
-    return errorResponse('Forbidden', 403);
-  }
-
   if (!SAFE_TOKEN.test(token) || !SAFE_TOKEN.test(name)) {
     return errorResponse('Invalid ruleset link', 400);
   }
