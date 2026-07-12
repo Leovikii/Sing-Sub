@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, onUnmounted, watch, nextTick } from 'vue';
 
 const props = defineProps<{
   isOpen?: boolean;
@@ -63,9 +63,16 @@ function onClickOutside(e: MouseEvent) {
   }
 }
 
-// 使用捕获阶段 (capture: true) 拦截全局点击，确保完美互斥
-onMounted(() => document.addEventListener('click', onClickOutside, { capture: true }));
-onUnmounted(() => document.removeEventListener('click', onClickOutside, { capture: true }));
+function removeClickOutsideListener() {
+  document.removeEventListener('click', onClickOutside, { capture: true });
+}
+
+watch(isOpenInternal, (open) => {
+  removeClickOutsideListener();
+  if (open) document.addEventListener('click', onClickOutside, { capture: true });
+}, { immediate: true });
+
+onUnmounted(removeClickOutsideListener);
 
 defineExpose({ close, toggle, isOpen: isOpenInternal });
 </script>

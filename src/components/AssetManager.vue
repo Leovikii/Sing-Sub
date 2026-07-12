@@ -71,9 +71,11 @@
       />
       <component
         v-else
+        ref="editorComponentRef"
         :is="type === 'ruleset' ? RuleSetEditor : CodeEditor"
         v-model="editorContent"
         @validity-change="ruleSetContentValid = $event"
+        @dirty-input="isEditorDirty = true"
         class="min-h-[60vh]"
       />
     </EditorModal>
@@ -123,6 +125,7 @@ const localFileNote = ref('');
 const originalFileNote = ref('');
 const ruleSetContentValid = ref(true);
 const copiedRulesetPath = ref('');
+const editorComponentRef = ref<{ flushPendingChange?: () => void } | null>(null);
 
 
 
@@ -167,6 +170,12 @@ function getBasename(path: string) {
 
 watch(editorContent, (newVal) => {
   isEditorDirty.value = newVal !== originalContent.value;
+});
+
+watch(viewMode, (mode, previousMode) => {
+  if (props.type === 'ruleset' && previousMode === 'edit' && mode === 'preview') {
+    editorComponentRef.value?.flushPendingChange?.();
+  }
 });
 
 let editFileSeq = 0;
@@ -231,6 +240,7 @@ function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
 }
 
 async function saveFileCode() {
+  if (props.type === 'ruleset') editorComponentRef.value?.flushPendingChange?.();
   if (!isValidJson.value) {
     emit('status', 'error', '请修复 JSON 语法错误后再保存');
     return;

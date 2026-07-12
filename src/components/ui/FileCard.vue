@@ -141,7 +141,7 @@ function formatDynamicTime(ts: number): string {
   }
 
   :deep(.toolbar-button) {
-    width: 2.25rem;
+    width: 2.75rem;
     padding-inline: 0;
   }
 
@@ -151,6 +151,14 @@ function formatDynamicTime(ts: number): string {
 
   :deep(.toolbar-button-tooltip) {
     display: block;
+  }
+}
+
+@media (min-width: 768px) {
+  @container (max-width: 30rem) {
+    :deep(.toolbar-button) {
+      width: 2.25rem;
+    }
   }
 }
 

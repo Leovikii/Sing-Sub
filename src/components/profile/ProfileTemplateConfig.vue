@@ -9,6 +9,7 @@
           @update:modelValue="onTemplateSelect"
           :options="templateOptions"
           placeholder="选择一个模板..."
+          ariaLabel="配置模板"
         />
         <div v-else class="flex gap-2 items-center">
           <Input v-model="profile.templateUrl" placeholder="https://..." class="flex-1" />
@@ -27,6 +28,7 @@
           @update:modelValue="profile.patchUrl = $event"
           :options="patchOptions"
           placeholder="无"
+          ariaLabel="配置补丁"
         />
       </div>
     </div>
@@ -38,6 +40,7 @@
           @update:modelValue="profile.nodesPath = $event"
           :options="nodeOptions"
           placeholder="选择一个节点文件..."
+          ariaLabel="节点配置"
         />
       </div>
     </div>

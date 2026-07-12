@@ -9,7 +9,7 @@
         <button
           v-if="user"
           type="button"
-          class="flex items-center gap-3 rounded-lg text-text-primary transition-colors hover:text-brand-pink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink"
+          class="flex min-h-11 min-w-11 items-center justify-center gap-3 rounded-lg text-text-primary transition-colors hover:text-brand-pink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink md:min-h-0 md:min-w-0"
           @click="$emit('open-settings')"
         >
           <span class="hidden text-sm font-medium md:inline">{{ user.login }}</span>
@@ -58,7 +58,7 @@
     </nav>
 
     <main
-      class="min-h-[calc(100vh-4rem)] pb-[calc(80px+env(safe-area-inset-bottom))] md:min-h-[calc(100vh-6rem)] md:pb-0 md:transition-[margin] md:duration-200 md:ease-out"
+      class="min-h-[calc(100dvh-4rem)] pb-[calc(80px+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-6rem)] md:pb-0 md:transition-[margin] md:duration-200 md:ease-out"
       :class="showNavigation ? (expanded ? 'md:ml-56' : 'md:ml-24') : ''"
     >
       <slot />

@@ -22,6 +22,7 @@
               :modelValue="String(sourceIntervalHours)"
               :options="sourceIntervalOptions"
               size="compact"
+              ariaLabel="来源更新周期"
               class="w-40"
               @update:modelValue="updateSourceInterval"
             />
@@ -41,7 +42,7 @@
             :readonly="readonly"
             placeholder="https://raw.githubusercontent.com/.../ruleset.json&#10;https://raw.githubusercontent.com/.../another-ruleset.json"
             class="min-h-[9rem] shrink-0 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
-            @input="emitChange"
+            @input="scheduleEmitChange"
           ></textarea>
           <p v-if="sourceError" class="mt-2 text-xs text-danger">{{ sourceError }}</p>
         </template>
@@ -97,6 +98,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string];
   'validity-change': [value: boolean];
+  'dirty-input': [];
 }>();
 
 interface RuleBucket {
@@ -126,6 +128,7 @@ const sourceError = ref('');
 const sourceDocument = ref<Record<string, unknown>>({});
 const openSections = ref<Set<SectionKey>>(new Set());
 let lastEmitted: string | null = null;
+let emitTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 const sourceIntervalOptions = [
   { label: '不自动更新', value: '0' },
@@ -267,6 +270,28 @@ function clearSection(key: SectionKey) {
 
 function updateSectionContent(key: ManualSectionKey, event: Event) {
   setSectionContent(key, (event.target as HTMLTextAreaElement).value);
+  scheduleEmitChange();
+}
+
+function clearEmitTimer() {
+  if (emitTimer !== null) {
+    window.clearTimeout(emitTimer);
+    emitTimer = null;
+  }
+}
+
+function scheduleEmitChange() {
+  emit('dirty-input');
+  clearEmitTimer();
+  emitTimer = window.setTimeout(() => {
+    emitTimer = null;
+    emitChange();
+  }, 180);
+}
+
+function flushPendingChange() {
+  if (emitTimer === null) return;
+  clearEmitTimer();
   emitChange();
 }
 
@@ -359,6 +384,8 @@ function emitChange() {
   emit('validity-change', true);
   emit('update:modelValue', json);
 }
+
+defineExpose({ flushPendingChange });
 </script>
 
 <style scoped>

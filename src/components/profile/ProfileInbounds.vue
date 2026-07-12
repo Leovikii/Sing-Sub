@@ -20,6 +20,7 @@
               <Select
                 v-model="tempFilter.action"
                 :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
+                ariaLabel="入站节点筛选方式"
                 class="w-28 shrink-0"
               />
               <Input v-model="tempFilter.keyword" placeholder="关键词，多个用逗号隔开" class="flex-1" />
