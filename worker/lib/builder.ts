@@ -2,7 +2,7 @@ import type { Env, Profile } from '../types';
 import { fetchFileContent, type RepoSession } from './github';
 import { pLimit } from './helpers';
 import { fetchPublicJson, parsePublicJsonUrl, readResponseTextLimited } from './rulesets';
-import { listAllKvKeys } from './kv';
+import { configCacheKey, listAllKvKeys } from './kv';
 
 interface Outbound {
   tag?: string;
@@ -236,9 +236,9 @@ export async function buildAllProfiles(
   subToken: string,
   env: Env
 ): Promise<void> {
-  const prefix = `config:${subToken}:`;
-  const keys = await listAllKvKeys(env, prefix);
-  const currentNames = profiles.map(p => p.name);
+  const currentKeys = new Set(profiles.map(profile =>
+    configCacheKey(subToken, session, profile.name)
+  ));
   const resourceCache = new Map<string, Promise<unknown>>();
   const cached = (key: string, loader: () => Promise<unknown>) => {
     let value = resourceCache.get(key);
@@ -254,16 +254,20 @@ export async function buildAllProfiles(
   };
 
   const limit = pLimit(3);
-  await Promise.all([
-    ...keys.map(async key => {
-      const name = key.substring(prefix.length);
-      if (!currentNames.includes(name)) {
-        await env.SESSIONS.delete(key);
-      }
-    }),
-    ...profiles.map(profile => limit(async () => {
-      const config = await buildProfile(profile, session, resources);
-      await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
-    }))
+  const [keys, builtProfiles] = await Promise.all([
+    listAllKvKeys(env, `config:${subToken}:`),
+    Promise.all(profiles.map(profile => limit(async () => ({
+      name: profile.name,
+      config: await buildProfile(profile, session, resources),
+    })))),
   ]);
+
+  // Publish only after every profile has built successfully, so source errors
+  // cannot leave a mixture of old and new configurations in KV.
+  await Promise.all(builtProfiles.map(({ name, config }) =>
+    env.SESSIONS.put(configCacheKey(subToken, session, name), config)
+  ));
+  await Promise.all(keys.map(async key => {
+    if (!currentKeys.has(key)) await env.SESSIONS.delete(key);
+  }));
 }

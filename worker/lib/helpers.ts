@@ -2,7 +2,7 @@ import type { Env, UserSettings, Profile } from '../types';
 import type { RepoSession } from './github';
 import { fetchFileContent, fetchDirectoryContents, GithubApiError } from './github';
 import { buildAllProfiles, buildProfile } from './builder';
-import { listAllKvKeys } from './kv';
+import { configCacheKey, listAllKvKeys } from './kv';
 
 export function pLimit(concurrency: number) {
   let activeCount = 0;
@@ -101,7 +101,7 @@ export async function rebuildSingleWithWarning(
     const profile = await fetchProfile(session, profileName);
     if (profile) {
       const config = await buildProfile(profile, session);
-      await env.SESSIONS.put(`config:${subToken}:${profile.name}`, config);
+      await env.SESSIONS.put(configCacheKey(subToken, session, profile.name), config);
     }
   } catch (e) {
     return { warning: e instanceof Error ? e.message : 'Build failed' };
@@ -109,10 +109,14 @@ export async function rebuildSingleWithWarning(
   return {};
 }
 
-export async function cleanupSubToken(token: string, env: Env): Promise<void> {
-  await env.SESSIONS.delete(`sub:${token}`);
+export async function cleanupConfigCache(token: string, env: Env): Promise<void> {
   const keys = await listAllKvKeys(env, `config:${token}:`);
   await Promise.all(keys.map(key => env.SESSIONS.delete(key)));
+}
+
+export async function cleanupSubToken(token: string, env: Env): Promise<void> {
+  await env.SESSIONS.delete(`sub:${token}`);
+  await cleanupConfigCache(token, env);
 }
 
 export function subscriptionResponse(config: string): Response {
