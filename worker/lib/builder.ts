@@ -160,7 +160,10 @@ export async function buildProfile(
     resources.loadRepoJson(profile.nodesPath),
   ]);
   
-  template = template || {};
+  // Resource loaders may cache parsed JSON objects across concurrent profile
+  // builds. Every build must own the objects it mutates.
+  template = structuredClone(template || {});
+  nodesData = structuredClone(nodesData);
 
   // Step 1: Apply overrides first
   if (profile.overrides) {
@@ -170,7 +173,8 @@ export async function buildProfile(
   // Step 2: Apply patch (before node insertion, so patch modifications to
   // template structure are in place before we inject nodes into it)
   if (profile.patchUrl) {
-    const patch = await resources.loadRepoJson(profile.patchUrl) as Record<string, unknown>;
+    const loadedPatch = await resources.loadRepoJson(profile.patchUrl) as Record<string, unknown>;
+    const patch = loadedPatch ? structuredClone(loadedPatch) : null;
     if (patch) {
       template = smartMerge(template, patch);
     }
