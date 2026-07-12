@@ -34,14 +34,14 @@
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          class="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
+        <ToolbarButton
+          :icon="LogOut"
+          label="断开连接"
+          variant="danger"
+          size="touch"
+          class="shrink-0"
           @click="$emit('disconnect')"
-        >
-          <LogOut :size="16" />
-          断开连接
-        </button>
+        />
       </section>
     </div>
 
@@ -85,15 +85,15 @@
           <label class="mb-1.5 block text-sm font-medium text-text-muted">Subscription Token</label>
           <div class="flex gap-2">
             <Input v-model="editToken" placeholder="订阅 Token" class="min-w-0 flex-1" />
-            <button
-              type="button"
-              class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border-base bg-bg-elevated text-text-muted transition-colors hover:bg-bg-hover hover:text-brand-pink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink"
-              title="随机生成"
-              aria-label="随机生成订阅 Token"
+            <ToolbarButton
+              :icon="Shuffle"
+              label="随机生成订阅 Token"
+              size="touch"
+              iconOnly
+              showTooltip
+              class="shrink-0"
               @click="generateToken"
-            >
-              <Shuffle :size="18" />
-            </button>
+            />
           </div>
           <div class="mt-2 min-h-5">
             <Transition name="fade">
@@ -119,6 +119,7 @@ import { computed, ref, watch } from 'vue';
 import { AlertTriangle, Database, ExternalLink, Github, Info, Key, LogOut, Shuffle } from 'lucide-vue-next';
 import Input from './ui/Input.vue';
 import Button from './ui/Button.vue';
+import ToolbarButton from './ui/ToolbarButton.vue';
 import type { GithubUser, UserSettings } from '../types';
 
 const props = defineProps<{

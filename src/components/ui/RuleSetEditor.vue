@@ -3,86 +3,80 @@
     <div v-if="loading" class="flex flex-1 items-center justify-center">
       <Loader2 class="h-8 w-8 animate-spin text-brand-pink" />
     </div>
-    <div v-else class="grid min-h-0 flex-1 grid-rows-[minmax(11rem,0.8fr)_repeat(4,minmax(13rem,1fr))] gap-4 overflow-y-auto p-4">
-      <section class="glass flex min-h-0 flex-col rounded-xl border border-border-base p-4">
-        <div class="mb-3 flex items-center justify-between gap-4">
+    <div v-else class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+      <section
+        data-rule-section="source"
+        class="glass flex shrink-0 flex-col rounded-lg border border-border-base p-4"
+        :class="isSectionVisible('source') ? 'min-h-[13rem]' : 'min-h-0'"
+      >
+        <div class="flex min-h-9 items-center justify-between gap-4" :class="isSectionVisible('source') ? 'mb-3' : ''">
           <div class="flex min-w-0 items-center gap-2">
-            <span class="rounded border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-purple-400">SOURCE</span>
-            <span class="truncate text-xs text-text-muted">每行一个 HTTPS URL，保存时会下载校验。</span>
+            <span class="shrink-0 rounded border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-purple-400">SOURCE</span>
+            <span class="truncate text-xs text-text-muted">
+              {{ sourceLastUpdated ? `最近更新 ${formatUpdatedAt(sourceLastUpdated)}` : '每行一个 HTTPS URL。' }}
+            </span>
           </div>
-          <Select
+          <div v-if="!readonly" class="flex shrink-0 items-center gap-2">
+            <Select
+              v-if="isSectionVisible('source')"
+              :modelValue="String(sourceIntervalHours)"
+              :options="sourceIntervalOptions"
+              size="compact"
+              ariaLabel="来源更新周期"
+              class="w-40"
+              @update:modelValue="updateSourceInterval"
+            />
+            <ToolbarButton
+              :icon="isSectionVisible('source') ? Trash2 : Plus"
+              :label="isSectionVisible('source') ? '删除 SOURCE' : '新增 SOURCE'"
+              :variant="isSectionVisible('source') ? 'danger' : 'secondary'"
+              iconOnly
+              showTooltip
+              @click="isSectionVisible('source') ? clearSection('source') : openSection('source')"
+            />
+          </div>
+        </div>
+        <template v-if="isSectionVisible('source')">
+          <textarea
+            v-model="sourceUrlsContent"
+            :readonly="readonly"
+            placeholder="https://raw.githubusercontent.com/.../ruleset.json&#10;https://raw.githubusercontent.com/.../another-ruleset.json"
+            class="min-h-[9rem] shrink-0 resize-none rounded-md border border-bg-elevated bg-bg-code-toolbar p-3 font-mono text-sm text-text-primary placeholder:text-text-subtle focus:border-brand-pink focus:outline-none"
+            @input="scheduleEmitChange"
+          ></textarea>
+          <p v-if="sourceError" class="mt-2 text-xs text-danger">{{ sourceError }}</p>
+        </template>
+      </section>
+
+      <section
+        v-for="section in manualSections"
+        :key="section.key"
+        :data-rule-section="section.key"
+        class="glass flex shrink-0 flex-col rounded-lg border border-border-base p-4"
+        :class="isSectionVisible(section.key) ? 'min-h-[13rem]' : 'min-h-0'"
+      >
+        <div class="flex min-h-9 items-center justify-between gap-4" :class="isSectionVisible(section.key) ? 'mb-3' : ''">
+          <div class="flex min-w-0 items-center gap-2">
+            <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">{{ section.label }}</span>
+            <span class="truncate text-xs text-text-muted">{{ section.description }}</span>
+          </div>
+          <ToolbarButton
             v-if="!readonly"
-            :modelValue="String(sourceIntervalHours)"
-            :options="sourceIntervalOptions"
-            size="compact"
-            class="w-40 shrink-0"
-            @update:modelValue="updateSourceInterval"
+            :icon="isSectionVisible(section.key) ? Trash2 : Plus"
+            :label="`${isSectionVisible(section.key) ? '删除' : '新增'} ${section.label}`"
+            :variant="isSectionVisible(section.key) ? 'danger' : 'secondary'"
+            iconOnly
+            showTooltip
+            @click="isSectionVisible(section.key) ? clearSection(section.key) : openSection(section.key)"
           />
         </div>
         <textarea
-          v-model="sourceUrlsContent"
+          v-if="isSectionVisible(section.key)"
+          :value="getSectionContent(section.key)"
           :readonly="readonly"
-          placeholder="https://raw.githubusercontent.com/.../ruleset.json&#10;https://raw.githubusercontent.com/.../another-ruleset.json"
-          class="min-h-0 flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
-          @input="emitChange"
-        ></textarea>
-        <p v-if="sourceLastUpdated" class="mt-2 text-xs text-text-muted">最近更新 {{ formatUpdatedAt(sourceLastUpdated) }}</p>
-        <p v-if="sourceError" class="mt-2 text-xs text-danger">{{ sourceError }}</p>
-      </section>
-
-      <section class="glass flex min-h-0 flex-col rounded-xl border border-border-base p-4">
-        <div class="mb-3 flex items-center gap-2">
-          <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">DOMAIN</span>
-          <span class="text-xs text-text-muted">每行一个完整域名。</span>
-        </div>
-        <textarea
-          v-model="domainContent"
-          :readonly="readonly"
-          placeholder="example.com&#10;www.example.com"
-          class="min-h-0 flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
-          @input="emitChange"
-        ></textarea>
-      </section>
-
-      <section class="glass flex min-h-0 flex-col rounded-xl border border-border-base p-4">
-        <div class="mb-3 flex items-center gap-2">
-          <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">DOMAIN_SUFFIX</span>
-          <span class="text-xs text-text-muted">每行一个域名后缀。</span>
-        </div>
-        <textarea
-          v-model="domainSuffixContent"
-          :readonly="readonly"
-          placeholder=".example.com&#10;.google.com"
-          class="min-h-0 flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
-          @input="emitChange"
-        ></textarea>
-      </section>
-
-      <section class="glass flex min-h-0 flex-col rounded-xl border border-border-base p-4">
-        <div class="mb-3 flex items-center gap-2">
-          <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">DOMAIN_KEYWORD</span>
-          <span class="text-xs text-text-muted">每行一个域名关键字。</span>
-        </div>
-        <textarea
-          v-model="domainKeywordContent"
-          :readonly="readonly"
-          placeholder="google&#10;youtube"
-          class="min-h-0 flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
-          @input="emitChange"
-        ></textarea>
-      </section>
-
-      <section class="glass flex min-h-0 flex-col rounded-xl border border-border-base p-4">
-        <div class="mb-3 flex items-center gap-2">
-          <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">DOMAIN_REGEX</span>
-          <span class="text-xs text-text-muted">每行一个 RE2 域名正则表达式。</span>
-        </div>
-        <textarea
-          v-model="domainRegexContent"
-          :readonly="readonly"
-          placeholder="^www\\.example\\.com$"
-          class="min-h-0 flex-1 resize-none rounded-md border border-bg-elevated bg-[#0a0a0a] p-3 font-mono text-sm text-[#e5e5ea] placeholder:text-[#48484a] focus:border-brand-pink focus:outline-none"
-          @input="emitChange"
+          :placeholder="section.placeholder"
+          class="min-h-[9rem] flex-1 resize-none rounded-md border border-bg-elevated bg-bg-code-toolbar p-3 font-mono text-sm text-text-primary placeholder:text-text-subtle focus:border-brand-pink focus:outline-none"
+          @input="updateSectionContent(section.key, $event)"
         ></textarea>
       </section>
     </div>
@@ -90,9 +84,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { Loader2 } from 'lucide-vue-next';
+import { nextTick, ref, watch } from 'vue';
+import { Loader2, Plus, Trash2 } from 'lucide-vue-next';
 import Select from './Select.vue';
+import ToolbarButton from './ToolbarButton.vue';
 
 const props = defineProps<{
   modelValue: string;
@@ -103,6 +98,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string];
   'validity-change': [value: boolean];
+  'dirty-input': [];
 }>();
 
 interface RuleBucket {
@@ -111,6 +107,9 @@ interface RuleBucket {
   domain_keyword: string[];
   domain_regex: string[];
 }
+
+type ManualSectionKey = keyof RuleBucket;
+type SectionKey = 'source' | ManualSectionKey;
 
 interface SourceConfig {
   url: string;
@@ -127,7 +126,9 @@ const domainKeywordContent = ref('');
 const domainRegexContent = ref('');
 const sourceError = ref('');
 const sourceDocument = ref<Record<string, unknown>>({});
+const openSections = ref<Set<SectionKey>>(new Set());
 let lastEmitted: string | null = null;
+let emitTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 const sourceIntervalOptions = [
   { label: '不自动更新', value: '0' },
@@ -135,6 +136,18 @@ const sourceIntervalOptions = [
   { label: '每周', value: '168' },
   { label: '每月', value: '720' },
   { label: '每年', value: '8760' },
+];
+
+const manualSections: Array<{
+  key: ManualSectionKey;
+  label: string;
+  description: string;
+  placeholder: string;
+}> = [
+  { key: 'domain', label: 'DOMAIN', description: '每行一个完整域名。', placeholder: 'example.com\nwww.example.com' },
+  { key: 'domain_suffix', label: 'DOMAIN_SUFFIX', description: '每行一个域名后缀。', placeholder: '.example.com\n.google.com' },
+  { key: 'domain_keyword', label: 'DOMAIN_KEYWORD', description: '每行一个域名关键字。', placeholder: 'google\nyoutube' },
+  { key: 'domain_regex', label: 'DOMAIN_REGEX', description: '每行一个 RE2 域名正则表达式。', placeholder: '^www\\.example\\.com$' },
 ];
 
 function clone<T>(value: T): T {
@@ -191,6 +204,7 @@ watch(() => props.modelValue, (newValue) => {
     domainSuffixContent.value = manual.domain_suffix.join('\n');
     domainKeywordContent.value = manual.domain_keyword.join('\n');
     domainRegexContent.value = manual.domain_regex.join('\n');
+    openSections.value = new Set();
     sourceError.value = '';
     emit('validity-change', true);
   } catch {
@@ -200,6 +214,85 @@ watch(() => props.modelValue, (newValue) => {
 
 function lines(content: string) {
   return content.split('\n').map(value => value.trim()).filter(Boolean);
+}
+
+function getSectionContent(key: SectionKey): string {
+  switch (key) {
+    case 'source': return sourceUrlsContent.value;
+    case 'domain': return domainContent.value;
+    case 'domain_suffix': return domainSuffixContent.value;
+    case 'domain_keyword': return domainKeywordContent.value;
+    case 'domain_regex': return domainRegexContent.value;
+  }
+}
+
+function setSectionContent(key: SectionKey, value: string) {
+  switch (key) {
+    case 'source': sourceUrlsContent.value = value; break;
+    case 'domain': domainContent.value = value; break;
+    case 'domain_suffix': domainSuffixContent.value = value; break;
+    case 'domain_keyword': domainKeywordContent.value = value; break;
+    case 'domain_regex': domainRegexContent.value = value; break;
+  }
+}
+
+function setSectionOpen(key: SectionKey, open: boolean) {
+  const next = new Set(openSections.value);
+  if (open) next.add(key);
+  else next.delete(key);
+  openSections.value = next;
+}
+
+function hasSectionContent(key: SectionKey): boolean {
+  return lines(getSectionContent(key)).length > 0;
+}
+
+function isSectionVisible(key: SectionKey): boolean {
+  return hasSectionContent(key) || openSections.value.has(key);
+}
+
+async function openSection(key: SectionKey) {
+  setSectionOpen(key, true);
+  await nextTick();
+  document.querySelector<HTMLTextAreaElement>(`[data-rule-section="${key}"] textarea`)?.focus();
+}
+
+function clearSection(key: SectionKey) {
+  setSectionContent(key, '');
+  setSectionOpen(key, false);
+  if (key === 'source') {
+    sourceIntervalHours.value = 0;
+    sourceLastUpdated.value = undefined;
+    sourceError.value = '';
+  }
+  emitChange();
+}
+
+function updateSectionContent(key: ManualSectionKey, event: Event) {
+  setSectionContent(key, (event.target as HTMLTextAreaElement).value);
+  scheduleEmitChange();
+}
+
+function clearEmitTimer() {
+  if (emitTimer !== null) {
+    window.clearTimeout(emitTimer);
+    emitTimer = null;
+  }
+}
+
+function scheduleEmitChange() {
+  emit('dirty-input');
+  clearEmitTimer();
+  emitTimer = window.setTimeout(() => {
+    emitTimer = null;
+    emitChange();
+  }, 180);
+}
+
+function flushPendingChange() {
+  if (emitTimer === null) return;
+  clearEmitTimer();
+  emitChange();
 }
 
 function validateSourceUrls(urls: string): string | null {
@@ -291,6 +384,8 @@ function emitChange() {
   emit('validity-change', true);
   emit('update:modelValue', json);
 }
+
+defineExpose({ flushPendingChange });
 </script>
 
 <style scoped>

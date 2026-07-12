@@ -78,7 +78,7 @@
               :loading="assetsLoading"
               :globalBusy="globalBusy"
               :subToken="settings?.subToken"
-              @refresh="refreshAssets"
+              @refresh="handleAssetRefreshRequest"
               @status="(t, m) => showStatus(t, m, 5000)"
               @delete="markAssetForDeletion"
               @saved="handleAssetSaved"
@@ -152,6 +152,8 @@ const expandedIndex = ref<number | null>(null);
 const availableAssets = ref<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }>({ nodes: [], templates: [], patches: [], rulesets: [] });
 const assetsLoaded = ref(false);
 const assetsLoading = ref(false);
+const assetsLastCheckedAt = ref(0);
+const ASSET_CHECK_INTERVAL_MS = 60_000;
 
 const activeTab = ref<'config' | 'assets' | 'settings'>('config');
 const assetType = ref<'node' | 'template' | 'patch' | 'ruleset'>('node');
@@ -221,9 +223,10 @@ function recomputeOrders() {
 
 const { user, settings, login, bootstrap, saveSettings, deleteSettings, getState, saveState, rebuild, getAssets, deleteFile } = useApi();
 
-async function refreshAssets(excludedPaths: Iterable<string> = [], force = false): Promise<boolean> {
+async function refreshAssets(excludedPaths: Iterable<string> = [], force = false): Promise<number | false> {
   const excluded = new Set(excludedPaths);
-  assetsLoading.value = true;
+  const showInitialLoading = !assetsLoaded.value;
+  if (showInitialLoading) assetsLoading.value = true;
   try {
     const data = await getAssets(force);
     availableAssets.value = {
@@ -233,37 +236,55 @@ async function refreshAssets(excludedPaths: Iterable<string> = [], force = false
       rulesets: data.rulesets.filter((item: any) => !excluded.has(item.path || item)),
     };
     assetsLoaded.value = true;
-    pruneStaleReferences();
-    return true;
+    assetsLastCheckedAt.value = Date.now();
+    return pruneStaleReferences();
   } catch {
-    availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    if (!assetsLoaded.value) {
+      availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    }
     return false;
   } finally {
-    assetsLoading.value = false;
+    if (showInitialLoading) assetsLoading.value = false;
   }
 }
 
 async function ensureAssetsLoaded() {
-  if (!assetsLoaded.value) await refreshAssets();
+  if (!assetsLoaded.value || Date.now() - assetsLastCheckedAt.value >= ASSET_CHECK_INTERVAL_MS) {
+    await refreshAssets();
+  }
+}
+
+function handleAssetRefreshRequest(force = false) {
+  void refreshAssets([], force);
 }
 
 function pruneStaleReferences() {
-  if (!stateData.value?.profiles) return;
+  if (!stateData.value?.profiles) return 0;
   const nodePaths = new Set(availableAssets.value.nodes.map((n: any) => n.path || n));
   const templatePaths = new Set(availableAssets.value.templates.map((t: any) => t.path || t));
   const patchPaths = new Set(availableAssets.value.patches.map((p: any) => p.path || p));
+  let removedCount = 0;
 
   for (const profile of stateData.value.profiles) {
     if (profile.nodesPath && !nodePaths.has(profile.nodesPath)) {
       profile.nodesPath = '';
+      removedCount++;
     }
     if (profile.templateUrl && !profile.templateUrl.startsWith('http') && !templatePaths.has(profile.templateUrl)) {
       profile.templateUrl = '';
+      removedCount++;
     }
     if (profile.patchUrl && !patchPaths.has(profile.patchUrl)) {
       profile.patchUrl = '';
+      removedCount++;
     }
   }
+
+  if (removedCount > 0) {
+    isDirty.value = true;
+    showStatus('warning', `已清理 ${removedCount} 个失效的组件引用，请检查并保存配置`, 5000);
+  }
+  return removedCount;
 }
 
 function setStateData(state: StateData) {
@@ -300,6 +321,7 @@ function handleAssetSaved(file: { path: string; oldPath?: string; note: string; 
   if (existing && typeof existing === 'object') Object.assign(existing, next);
   else if (!existing) list.unshift(next);
   assetsLoaded.value = true;
+  assetsLastCheckedAt.value = Date.now();
 }
 
 onMounted(async () => {
@@ -323,6 +345,7 @@ async function handleSetup() {
     const result = await login(setupData);
     const data = await bootstrap();
     assetsLoaded.value = false;
+    assetsLastCheckedAt.value = 0;
     availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
     if (data.state) setStateData(data.state);
     setupData.pat = '';
@@ -341,6 +364,7 @@ async function handleSaveSettings(newSettings: { owner: string; repo: string; pa
   try {
     const result = await saveSettings(newSettings);
     assetsLoaded.value = false;
+    assetsLastCheckedAt.value = 0;
     availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
     const data = await bootstrap();
     if (data.state) setStateData(data.state);
@@ -371,6 +395,7 @@ async function confirmDisconnect() {
   await deleteSettings();
   stateData.value = null;
   assetsLoaded.value = false;
+  assetsLastCheckedAt.value = 0;
   availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
 }
 
@@ -601,8 +626,29 @@ function handleGlobalSave() {
   handleSave();
 }
 
-function handleGlobalRefresh() {
-  handleRefresh();
+async function handleGlobalRefresh() {
+  if (activeTab.value !== 'assets') {
+    await handleRefresh();
+    return;
+  }
+  if (refreshing.value) return;
+  refreshing.value = true;
+  saveStatus.value = 'refreshing';
+  statusMessage.value = '';
+  try {
+    const prunedCount = await refreshAssets([], true);
+    if (prunedCount === false) throw new Error('无法从 GitHub 同步组件');
+    deletedAssets.value = [];
+    if (prunedCount > 0) {
+      showStatus('warning', `组件同步成功，已清理 ${prunedCount} 个失效引用，请检查并保存配置`, 5000);
+    } else {
+      showStatus('success', '组件同步成功', 3000);
+    }
+  } catch (e: any) {
+    showStatus('error', '组件同步失败: ' + e.message, 5000);
+  } finally {
+    refreshing.value = false;
+  }
 }
 </script>
 

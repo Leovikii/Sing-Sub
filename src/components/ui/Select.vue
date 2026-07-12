@@ -5,13 +5,15 @@
       role="combobox"
       aria-haspopup="listbox"
       :aria-expanded="isOpen"
-      :aria-activedescendant="isOpen ? `select-option-${highlightedIndex}` : undefined"
+      :aria-controls="listboxId"
+      :aria-label="ariaLabel || placeholder || '选择选项'"
+      :aria-activedescendant="isOpen ? optionId(highlightedIndex) : undefined"
       tabindex="0"
       @click="toggleOpen"
       @keydown="handleTriggerKeydown"
       :class="[
         'appearance-none rounded-lg border bg-bg-surface/80 text-text-primary transition-[border-color,box-shadow,background-color] duration-200 outline-none w-full flex items-center justify-between cursor-pointer select-none',
-        size === 'compact' ? 'h-9 px-3 text-sm' : 'py-3 px-4 text-[14px]',
+        size === 'compact' ? 'h-11 px-3 text-sm md:h-9' : 'min-h-11 px-4 py-3 text-[14px]',
         isOpen ? 'border-brand-pink ring-4 ring-brand-pink/20' : 'border-border-base hover:border-brand-pink/50',
         !selectedLabel && 'text-text-muted'
       ]"
@@ -39,12 +41,13 @@
     >
       <ul
         v-if="isOpen"
+        :id="listboxId"
         role="listbox"
         class="absolute z-50 w-full mt-2 py-1 bg-bg-elevated border border-border-base rounded-xl shadow-xl max-h-60 overflow-auto focus:outline-none"
       >
         <li
           v-for="(opt, idx) in options"
-          :id="`select-option-${idx}`"
+          :id="optionId(idx)"
           :key="opt.value"
           role="option"
           :aria-selected="modelValue === opt.value"
@@ -74,13 +77,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onUnmounted, useId, watch } from 'vue';
 
 const props = defineProps<{
   modelValue: string;
   options: { label: string; value: string }[];
   placeholder?: string;
   size?: 'default' | 'compact';
+  ariaLabel?: string;
 }>();
 
 const emit = defineEmits<{
@@ -90,6 +94,12 @@ const emit = defineEmits<{
 const isOpen = ref(false);
 const containerRef = ref<HTMLElement | null>(null);
 const highlightedIndex = ref(0);
+const instanceId = useId();
+const listboxId = `${instanceId}-listbox`;
+
+function optionId(index: number) {
+  return `${instanceId}-option-${index}`;
+}
 
 const selectedLabel = computed(() => {
   const opt = props.options.find(o => o.value === props.modelValue);
@@ -135,11 +145,13 @@ function handleTriggerKeydown(e: KeyboardEvent) {
 }
 
 watch(isOpen, (open) => {
+  document.removeEventListener('mousedown', handleClickOutside);
   if (open) {
     const idx = props.options.findIndex(o => o.value === props.modelValue);
     highlightedIndex.value = idx >= 0 ? idx : 0;
+    document.addEventListener('mousedown', handleClickOutside);
   }
-});
+}, { immediate: true });
 
 // Click outside to close
 function handleClickOutside(e: MouseEvent) {
@@ -147,10 +159,6 @@ function handleClickOutside(e: MouseEvent) {
     isOpen.value = false;
   }
 }
-
-onMounted(() => {
-  document.addEventListener('mousedown', handleClickOutside);
-});
 
 onUnmounted(() => {
   document.removeEventListener('mousedown', handleClickOutside);

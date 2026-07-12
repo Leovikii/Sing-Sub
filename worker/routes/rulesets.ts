@@ -142,7 +142,10 @@ export async function handleDeleteFile(request: Request, env: Env): Promise<Resp
 
   const session = toRepoSession(auth.settings);
   const file = await fetchFileContent(path, session);
-  if (!file) return errorResponse('File not found', 404);
+  if (!file) {
+    await invalidateAssetSnapshot(env, session);
+    return errorResponse('File no longer exists', 404, 'ASSET_NOT_FOUND');
+  }
 
   try {
     if (!isRulesetPath(path)) {

@@ -2,7 +2,7 @@
   <Teleport to="body">
     <div
       v-if="visible"
-      class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-bg-page/80 backdrop-blur-md"
+      class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-bg-page/85"
       @click.self="$emit('close')"
       @keydown.esc="$emit('close')"
     >

@@ -20,24 +20,21 @@
               <Select
                 v-model="tempFilter.action"
                 :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
+                ariaLabel="入站节点筛选方式"
                 class="w-28 shrink-0"
               />
               <Input v-model="tempFilter.keyword" placeholder="关键词，多个用逗号隔开" class="flex-1" />
             </div>
             
-            <button
+            <ToolbarButton
               @click="confirmEdit"
+              :icon="Check"
+              label="确认"
+              variant="emphasis"
+              size="card"
               :disabled="!tempFilter.keyword.trim()"
-              :class="[
-                'order-2 md:order-3 ml-auto md:ml-0 px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0 flex items-center gap-1.5',
-                tempFilter.keyword.trim()
-                  ? 'bg-brand-pink/10 text-brand-pink hover:bg-brand-pink/20 cursor-pointer'
-                  : 'bg-bg-elevated text-text-muted border border-border-base cursor-not-allowed'
-              ]"
-            >
-              <Check class="w-4 h-4 md:hidden" />
-              <span class="hidden md:inline">确认</span>
-            </button>
+              class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
+            />
           </template>
 
           <!-- Confirmed Mode -->
@@ -58,25 +55,26 @@
             </div>
 
             <!-- Actions -->
-            <button
+            <ToolbarButton
               @click="clearRule"
-              class="order-2 md:order-3 ml-auto md:ml-0 px-3 py-1.5 bg-bg-elevated hover:bg-danger/10 border border-border-base hover:border-danger/30 text-text-muted hover:text-danger rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0"
-            >
-              <Trash2 class="w-4 h-4" />
-              <span class="hidden md:inline">删除</span>
-            </button>
+              :icon="Trash2"
+              label="删除"
+              variant="danger"
+              size="card"
+              class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
+            />
           </template>
 
           <!-- Empty Mode -->
           <template v-else>
             <!-- Insert Button -->
-            <button
+            <ToolbarButton
               @click="startEdit"
-              class="order-2 md:order-3 ml-auto md:ml-0 px-4 py-2 bg-bg-elevated hover:bg-border-base border border-border-base text-text-primary rounded-xl text-sm transition-colors flex items-center gap-1.5 shrink-0"
-            >
-              <Plus class="w-4 h-4" />
-              <span class="hidden md:inline">插入节点</span>
-            </button>
+              :icon="Plus"
+              label="插入节点"
+              size="card"
+              class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
+            />
           </template>
 
       </div>
@@ -90,6 +88,7 @@ import { ArrowDown, Plus, Trash2, Check } from 'lucide-vue-next';
 import Input from '../ui/Input.vue';
 import Select from '../ui/Select.vue';
 import NodeMicroCard from '../ui/NodeMicroCard.vue';
+import ToolbarButton from '../ui/ToolbarButton.vue';
 import type { Profile, FilterAction } from '../../types';
 
 const props = defineProps<{

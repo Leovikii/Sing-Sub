@@ -62,13 +62,20 @@
       @save="saveFileCode"
       @close="closeEditor"
     >
-      <component
-        :is="type === 'ruleset' && viewMode === 'edit' ? RuleSetEditor : CodeEditor"
-        v-model="editorContent"
-        :readonly="viewMode === 'preview'"
-        @validity-change="ruleSetContentValid = $event"
+      <CodePreview
+        v-if="viewMode === 'preview'"
+        :content="editorContent"
         :loading="isLoading"
         loadingText="读取中..."
+        class="min-h-[60vh]"
+      />
+      <component
+        v-else
+        ref="editorComponentRef"
+        :is="type === 'ruleset' ? RuleSetEditor : CodeEditor"
+        v-model="editorContent"
+        @validity-change="ruleSetContentValid = $event"
+        @dirty-input="isEditorDirty = true"
         class="min-h-[60vh]"
       />
     </EditorModal>
@@ -83,6 +90,7 @@ import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check, Loader2 
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
 import ToolbarButton from './ui/ToolbarButton.vue';
+import CodePreview from './ui/CodePreview.vue';
 
 const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
 const RuleSetEditor = defineAsyncComponent(() => import('./ui/RuleSetEditor.vue'));
@@ -96,7 +104,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  'refresh': [];
+  'refresh': [force?: boolean];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
   'delete': [file: any];
   'saved': [file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'patch' | 'ruleset' }];
@@ -117,6 +125,7 @@ const localFileNote = ref('');
 const originalFileNote = ref('');
 const ruleSetContentValid = ref(true);
 const copiedRulesetPath = ref('');
+const editorComponentRef = ref<{ flushPendingChange?: () => void } | null>(null);
 
 
 
@@ -163,6 +172,12 @@ watch(editorContent, (newVal) => {
   isEditorDirty.value = newVal !== originalContent.value;
 });
 
+watch(viewMode, (mode, previousMode) => {
+  if (props.type === 'ruleset' && previousMode === 'edit' && mode === 'preview') {
+    editorComponentRef.value?.flushPendingChange?.();
+  }
+});
+
 let editFileSeq = 0;
 
 async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
@@ -177,7 +192,16 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
 
   try {
     const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
-    if (!res.ok) throw new Error('Failed to load file');
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({})) as { error?: string; code?: string };
+      if (res.status === 404 && error.code === 'ASSET_NOT_FOUND') {
+        closeEditor();
+        emit('status', 'warning', '文件已在仓库中删除，组件列表已刷新', 5000);
+        emit('refresh', true);
+        return;
+      }
+      throw new Error(error.error || 'Failed to load file');
+    }
     const data = await res.json();
     if (seq !== editFileSeq) return; // A newer editFile() call superseded this one
 
@@ -216,6 +240,7 @@ function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
 }
 
 async function saveFileCode() {
+  if (props.type === 'ruleset') editorComponentRef.value?.flushPendingChange?.();
   if (!isValidJson.value) {
     emit('status', 'error', '请修复 JSON 语法错误后再保存');
     return;

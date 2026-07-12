@@ -1,22 +1,20 @@
 <template>
-  <div class="relative flex h-9 items-center p-0.5 bg-bg-surface/80 backdrop-blur-xl border border-border-base rounded-full shadow-md">
+  <div
+    class="relative grid h-[46px] items-center rounded-full border border-border-base bg-bg-surface p-0 shadow-md md:h-9 md:p-0.5"
+    :style="{ gridTemplateColumns: `repeat(${segmentCount}, minmax(0, 1fr))` }"
+  >
     <!-- Animated slider background -->
     <div
-      class="absolute rounded-full bg-border-base shadow-sm pointer-events-none"
-      :class="[!ready && 'opacity-0', sliding ? 'transition-[left,width] duration-[220ms] ease-[cubic-bezier(0.2,0,0,1)]' : 'transition-none']"
-      :style="{
-        left: `${sliderLeft}px`,
-        width: `${sliderWidth}px`,
-        height: `calc(100% - 4px)`,
-        top: '2px',
-      }"
+      class="pointer-events-none absolute left-0.5 top-0.5 h-[calc(100%-4px)] rounded-full bg-border-base shadow-sm transition-transform duration-[220ms] ease-[cubic-bezier(0.2,0,0,1)]"
+      :style="sliderStyle"
     />
 
     <!-- Buttons -->
     <button
-      v-for="(opt, index) in options"
+      v-for="opt in options"
       :key="opt.value"
-      :ref="el => { if (el) buttonRefs[index] = el as HTMLButtonElement }"
+      type="button"
+      :aria-pressed="opt.value === modelValue"
       @click="handleSelect(opt.value)"
       :class="[
         'relative flex items-center justify-center rounded-full font-medium cursor-pointer z-10 transition-[color,transform] duration-200 active:scale-95',
@@ -32,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onMounted, onUnmounted, type Component } from 'vue';
+import { computed, type Component } from 'vue';
 
 const props = withDefaults(defineProps<{
   modelValue: string;
@@ -48,22 +46,22 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void;
 }>();
 
-const buttonRefs = ref<HTMLButtonElement[]>([]);
-const sliderLeft = ref(0);
-const sliderWidth = ref(0);
-const ready = ref(false);
-const sliding = ref(false);
-let resizeObserver: ResizeObserver | null = null;
+const segmentCount = computed(() => Math.max(props.options.length, 1));
+const selectedIndex = computed(() => Math.max(props.options.findIndex(option => option.value === props.modelValue), 0));
+const sliderStyle = computed(() => ({
+  width: `calc((100% - 4px) / ${segmentCount.value})`,
+  transform: `translateX(${selectedIndex.value * 100}%)`,
+}));
 
 const sizeClass = computed(() => {
   switch (props.size) {
     case 'sm':
-      return 'gap-1 px-2 py-1 text-[11px]';
+      return 'h-full min-w-11 gap-1 px-2 text-[11px] md:min-w-0';
     case 'lg':
-      return 'gap-2 px-4 py-2 text-sm';
+      return 'h-full min-w-11 gap-2 px-4 text-sm md:min-w-0';
     case 'md':
     default:
-      return 'gap-1.5 px-3 py-1.5 text-xs';
+      return 'h-full min-w-11 gap-1.5 px-3 text-xs md:min-w-0';
   }
 });
 
@@ -79,73 +77,7 @@ const iconSize = computed(() => {
   }
 });
 
-function updateSliderPosition(animate = true) {
-  const selectedIndex = props.options.findIndex(opt => opt.value === props.modelValue);
-  if (selectedIndex === -1 || !buttonRefs.value[selectedIndex]) return;
-
-  const selectedButton = buttonRefs.value[selectedIndex];
-  const container = selectedButton.parentElement;
-  if (!container) return;
-
-  const containerRect = container.getBoundingClientRect();
-  const buttonRect = selectedButton.getBoundingClientRect();
-
-  sliding.value = animate;
-  sliderLeft.value = buttonRect.left - containerRect.left;
-  sliderWidth.value = buttonRect.width;
-
-  if (!ready.value) {
-    ready.value = true;
-  }
-
-  if (animate) {
-    setTimeout(() => {
-      sliding.value = false;
-    }, 220);
-  }
-}
-
 function handleSelect(value: string) {
   emit('update:modelValue', value);
 }
-
-watch(() => props.modelValue, () => {
-  nextTick(() => {
-    updateSliderPosition();
-  });
-});
-
-watch(() => props.options.length, () => {
-  nextTick(() => {
-    updateSliderPosition();
-  });
-});
-
-function handleWindowResize() {
-  updateSliderPosition(false);
-}
-
-onMounted(() => {
-  nextTick(() => {
-    updateSliderPosition(false);
-  });
-
-  // Re-calculate on window resize
-  window.addEventListener('resize', handleWindowResize);
-
-  // Observe size changes of buttons (responsive label visibility)
-  if (buttonRefs.value.length > 0 && buttonRefs.value[0]) {
-    resizeObserver = new ResizeObserver(() => {
-      updateSliderPosition(false);
-    });
-    buttonRefs.value.forEach(btn => {
-      if (btn) resizeObserver?.observe(btn);
-    });
-  }
-});
-
-onUnmounted(() => {
-  window.removeEventListener('resize', handleWindowResize);
-  resizeObserver?.disconnect();
-});
 </script>

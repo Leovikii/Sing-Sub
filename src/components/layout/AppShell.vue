@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-bg-page">
     <header
-      class="sticky top-0 z-40 h-16 border-b border-border-base bg-bg-surface/95 backdrop-blur-xl md:h-24 md:transition-[margin] md:duration-200 md:ease-out"
+      class="sticky top-0 z-40 h-16 border-b border-border-base bg-bg-surface md:h-24 md:transition-[margin] md:duration-200 md:ease-out"
       :class="showNavigation ? (expanded ? 'md:ml-56' : 'md:ml-24') : ''"
     >
       <div class="flex h-full items-center justify-between px-5 md:px-8">
@@ -9,7 +9,7 @@
         <button
           v-if="user"
           type="button"
-          class="flex items-center gap-3 rounded-lg text-text-primary transition-colors hover:text-brand-pink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink"
+          class="flex min-h-11 min-w-11 items-center justify-center gap-3 rounded-lg text-text-primary transition-colors hover:text-brand-pink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink md:min-h-0 md:min-w-0"
           @click="$emit('open-settings')"
         >
           <span class="hidden text-sm font-medium md:inline">{{ user.login }}</span>
@@ -21,7 +21,7 @@
     <nav
       v-if="showNavigation"
       aria-label="主导航"
-      class="fixed inset-x-0 bottom-0 z-50 flex h-[72px] items-center justify-around gap-2 border-t border-border-base bg-bg-surface/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:inset-x-auto md:bottom-0 md:left-0 md:top-0 md:h-screen md:flex-col md:justify-start md:gap-2 md:border-r md:border-t-0 md:px-3 md:py-0 md:transition-[width,box-shadow] md:duration-200 md:ease-out"
+      class="fixed inset-x-0 bottom-0 z-50 flex h-[calc(64px+env(safe-area-inset-bottom))] items-center justify-around gap-1 border-t border-border-base bg-bg-surface/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:inset-x-auto md:bottom-0 md:left-0 md:top-0 md:h-screen md:flex-col md:justify-start md:gap-2 md:border-r md:border-t-0 md:bg-bg-surface md:px-3 md:py-0 md:backdrop-blur-none md:transition-[width,box-shadow] md:duration-200 md:ease-out"
       :class="[
         isPanelExpanded ? 'md:w-56' : 'md:w-24',
         isPanelExpanded && !expanded ? 'md:shadow-[12px_0_32px_rgba(0,0,0,0.24)]' : 'md:shadow-none'
@@ -58,7 +58,7 @@
     </nav>
 
     <main
-      class="min-h-[calc(100vh-4rem)] pb-28 md:min-h-[calc(100vh-6rem)] md:pb-0 md:transition-[margin] md:duration-200 md:ease-out"
+      class="min-h-[calc(100dvh-4rem)] pb-[calc(80px+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-6rem)] md:pb-0 md:transition-[margin] md:duration-200 md:ease-out"
       :class="showNavigation ? (expanded ? 'md:ml-56' : 'md:ml-24') : ''"
     >
       <slot />

@@ -3,35 +3,43 @@
     <Transition name="modal">
       <div
         v-if="isOpen"
-        class="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-6 bg-bg-page/80 backdrop-blur-md"
+        class="fixed inset-0 z-[60] flex items-end justify-center bg-bg-page/85 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:items-center md:p-6"
         @click.self="handleBackdropClick"
         @keydown.esc="handleEscapeKey"
       >
         <div
           role="dialog"
           aria-modal="true"
+          :aria-label="title || '编辑窗口'"
           tabindex="-1"
           ref="dialogRef"
-          class="modal-panel w-full md:max-w-4xl h-[92vh] md:h-[88vh] bg-bg-surface border border-border-base md:rounded-2xl rounded-t-2xl shadow-xl flex flex-col overflow-hidden relative"
+          class="modal-panel relative flex h-full max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border-base bg-bg-surface shadow-xl outline-none md:h-[88dvh] md:max-h-[56rem] md:max-w-4xl md:rounded-2xl"
+          @keydown.tab="handleTabKey"
         >
           <!-- Header -->
-          <div class="flex items-center justify-between gap-2 p-3 md:p-4 border-b border-border-base bg-[#0a0a0a]/60 backdrop-blur-xl shrink-0 z-10">
+          <div class="flex items-center justify-between gap-2 p-3 md:p-4 border-b border-border-base bg-bg-code-toolbar shrink-0 z-10">
             <div class="flex flex-col min-w-0 flex-1">
               <slot name="title">
                 <!-- Filename area -->
                 <div class="flex items-baseline min-w-0">
-                  <div class="relative inline-flex min-w-[9rem] max-w-[calc(100%-40px)]">
-                    <span class="invisible whitespace-pre overflow-hidden font-bold text-[15px] md:text-[16px] pr-0.5">{{ title || 'untitled' }}</span>
+                  <div
+                    class="relative inline-flex min-w-[2ch]"
+                    :class="editableTitle && viewMode !== 'preview' && extension ? 'max-w-[calc(100%-40px)]' : 'max-w-full'"
+                  >
+                    <span class="invisible overflow-hidden whitespace-pre pr-0.5 text-[15px] font-bold md:text-[16px]">{{ title || titlePlaceholder || 'untitled' }}</span>
                     <input
                       v-if="editableTitle && viewMode !== 'preview'"
                       :value="title"
                       @input="$emit('update:title', ($event.target as HTMLInputElement).value)"
-                      class="absolute inset-0 bg-transparent text-text-primary font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder-[#555]"
+                      class="absolute inset-0 bg-transparent text-text-primary font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder:text-text-subtle"
                       :placeholder="titlePlaceholder || '输入名称'"
                     />
                     <span v-else class="absolute inset-0 text-text-primary font-bold text-[15px] md:text-[16px] truncate">{{ title || 'untitled' }}</span>
                   </div>
-                  <span class="text-text-muted font-mono text-[11px] shrink-0 ml-0.5">.json</span>
+                  <span
+                    v-if="editableTitle && viewMode !== 'preview' && extension"
+                    class="ml-0.5 shrink-0 select-none font-mono text-[11px] text-text-muted"
+                  >{{ extension }}</span>
                 </div>
 
                 <!-- Note area -->
@@ -41,7 +49,7 @@
                     v-if="editableNote !== false && viewMode !== 'preview'"
                     :value="note"
                     @input="$emit('update:note', ($event.target as HTMLInputElement).value)"
-                    class="bg-transparent text-text-muted hover:text-text-primary focus:text-text-primary font-medium outline-none text-[12px] min-w-[60px] flex-1 truncate transition-colors placeholder-[#444]"
+                    class="bg-transparent text-text-muted hover:text-text-primary focus:text-text-primary font-medium outline-none text-[12px] min-w-[60px] flex-1 truncate transition-colors placeholder:text-text-subtle"
                     placeholder="未添加..."
                   />
                   <span v-else class="text-text-muted font-medium text-[12px] min-w-[60px] flex-1 truncate">{{ note || '未添加' }}</span>
@@ -112,13 +120,16 @@
 
 <script setup lang="ts">
 import { X, Save, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
-import { ref, watch, nextTick } from 'vue';
+import { nextTick, onUnmounted, ref, watch } from 'vue';
 import PopoverMenu from './PopoverMenu.vue';
 import SegmentedControl from './SegmentedControl.vue';
 import ToolbarButton from './ToolbarButton.vue';
 
 const showUnsavedConfirm = ref(false);
 const dialogRef = ref<HTMLElement | null>(null);
+let previouslyFocused: HTMLElement | null = null;
+let backgroundRoot: HTMLElement | null = null;
+let backgroundWasInert = false;
 
 const viewModeOptions = [
   { value: 'preview', label: '预览', icon: Eye },
@@ -181,13 +192,67 @@ function handleEscapeKey() {
   handleBackdropClick();
 }
 
+function getFocusableElements() {
+  if (!dialogRef.value) return [];
+  const selector = [
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'textarea:not([disabled])',
+    'select:not([disabled])',
+    'a[href]',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+  return Array.from(dialogRef.value.querySelectorAll<HTMLElement>(selector))
+    .filter(element => !element.hidden && element.getAttribute('aria-hidden') !== 'true' && element.getClientRects().length > 0);
+}
+
+function handleTabKey(event: KeyboardEvent) {
+  const focusable = getFocusableElements();
+  if (focusable.length === 0) {
+    event.preventDefault();
+    dialogRef.value?.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function setBackgroundInert(inert: boolean) {
+  if (inert) {
+    backgroundRoot = document.getElementById('app');
+    backgroundWasInert = backgroundRoot?.inert ?? false;
+    if (backgroundRoot) backgroundRoot.inert = true;
+  } else if (backgroundRoot) {
+    backgroundRoot.inert = backgroundWasInert;
+    backgroundRoot = null;
+  }
+}
+
 watch(() => props.isOpen, (open) => {
   if (open) {
+    previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setBackgroundInert(true);
     nextTick(() => {
       dialogRef.value?.focus();
     });
+  } else {
+    setBackgroundInert(false);
+    const focusTarget = previouslyFocused;
+    previouslyFocused = null;
+    nextTick(() => {
+      if (focusTarget?.isConnected) focusTarget.focus();
+    });
   }
 });
+
+onUnmounted(() => setBackgroundInert(false));
 </script>
 
 <style scoped>

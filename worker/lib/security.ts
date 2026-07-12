@@ -34,6 +34,6 @@ export function jsonResponse(
   return new Response(JSON.stringify(data), { status, headers });
 }
 
-export function errorResponse(message: string, status: number): Response {
-  return jsonResponse({ error: message }, status);
+export function errorResponse(message: string, status: number, code?: string): Response {
+  return jsonResponse(code ? { error: message, code } : { error: message }, status);
 }
