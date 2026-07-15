@@ -46,7 +46,7 @@
 | ADR-043 | ACCEPTED | 用可编辑 replacement adapter 取代通用 patch DSL | 初始化创建 Momo 预设；构建器只支持严格路径替换和唯一数组匹配替换。 |
 | ADR-044 | ACCEPTED | 私有订阅直接切换为 25 字符确定性短 Token | 单 workspace 不需要在 URL 重复携带 claims；128-bit HMAC tag 保留轮换和隔离能力并显著缩短链接。 |
 | ADR-045 | ACCEPTED | Beta 初始化目标由本地部署助手承担 Secret 与 Cloudflare 资源配置 | WebUI 默认只初始化空 workspace，GitHub 后连；本轮只记录方案，不修改现有初始化实现。 |
-| ADR-046 | ACCEPTED | 用正确管理员登录触发一次性 R2 schema v1→v2 升级 | CAS 原子切换 active root；v2 自动 no-op，生产验证后删除临时代码。 |
+| ADR-046 | SUPERSEDED | 用正确管理员登录触发一次性 R2 schema v1→v2 升级 | 生产迁移验证完成；临时 schema、登录接线与测试已删除。 |
 
 ## ADR-002：PrimeVue 版本政策
 
@@ -214,12 +214,14 @@
 - adapter schema v1 只有 `replacements`。每条 replacement 使用字符串数组 `path` 指向已存在字段；没有 `match` 时整体替换字段，有 `match` 时目标必须为数组并恰好命中一个浅层 primitive 字段子集，然后整体替换该元素。
 - 路径缺失、目标类型错误、零匹配或多匹配均中止构建并返回明确错误。adapter 不合并、不追加、不删除、不创建缺失字段，不支持条件、通配符、表达式或脚本。
 - adapter 在 inbound/outbound 节点注入前执行。Momo 预设整体替换 `inbounds`，并在 `route.rules` 中按 `action: hijack-dns` 查找后整体替换为绑定 `dns-in` 的规则。
-- workspace snapshot 升级为 schema v2，旧 patches/Profile schema 与旧 GitHub 路径不属于长期兼容范围。生产已有 v1 workspace 使用 ADR-046 的临时一次性升级器过渡；正式版运行时不保留 v1 读取或转换代码。
+- workspace snapshot 升级为 schema v2，旧 patches/Profile schema 与旧 GitHub 路径不属于长期兼容范围。ADR-046 的生产迁移与清理已完成；正式版运行时不保留 v1 读取或转换代码。
 
 ## ADR-046：管理员登录触发的一次性 R2 schema 升级
 
-状态：ACCEPTED
+状态：SUPERSEDED
 日期：2026-07-16
+
+结果：生产 active workspace 与 GitHub manifest 已验证为 v2，临时迁移代码随后删除；以下内容仅保留为迁移审计记录。
 
 - 未登录 bootstrap 只识别合法 active v1 workspace 并继续显示普通登录，不修改 R2。只有 Worker Secret 校验通过的管理员登录才允许迁移。
 - 升级器校验 head、active revision identity 与 canonical content hash；随后写入 immutable v2 revision，并以 head ETag 条件更新完成原子可见切换。失败不覆盖现有 head。
@@ -227,7 +229,7 @@
 - 节点、模板、Profile、规则集、settings、build/SRS pointer、migration metadata 与 private GitHub credentials 保留。旧 patches 和 overrides 丢弃；有 `patchUrl` 的 Profile 映射到 Momo adapter，无 `patchUrl` 的 Profile 不增加 adapter。
 - GitHub sync base 重置为 `never`，避免 v2 同步逻辑读取旧 v1 base revision。迁移请求不自动访问或写入 GitHub。
 - 旧远端 Profile schema 无法校验时，同步状态固定为 conflict，只允许用户显式执行 R2 overwrite push，禁止 pull；该通用保护不解析旧 patch DSL，push 后远端受管文件自然升级为 v2。
-- active workspace 已为 v2 时升级器只读检查后 no-op。生产验证通过后删除临时 schema、登录接线与测试，正式版不得携带 v1 解析路径。
+- active workspace 已为 v2 后，临时 schema、登录接线与测试已删除；正式版不携带 v1 解析路径。
 
 ## ADR-044：确定性短订阅 Token
 
