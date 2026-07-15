@@ -41,7 +41,7 @@ interface WorkspaceSnapshot {
 - 普通业务数据进入 immutable revision。
 - GitHub PAT、短期 job ticket 等敏感动态配置不得进入 revision、快照导出或 GitHub manifest。
 - SRS 二进制不嵌入 workspace JSON，只保存 artifact descriptor。
-- `schemaVersion` 必须由 shared schema 校验。ADR-043 的 workspace schema v2 是 Beta 直接切换，运行时不读取或迁移 v1；生产数据必须在部署前重新初始化或一次性重新导入。
+- `schemaVersion` 必须由 shared schema 校验。ADR-043 的 workspace schema v2 是持久化主契约；ADR-046 仅在本次 Beta 生产切换期间允许管理员正确登录触发一次 v1 到 v2 的 CAS 升级，完成生产验证后删除临时读取器。
 - workspace 之外不维护需要事务同步的业务索引。
 
 ## R2 对象布局

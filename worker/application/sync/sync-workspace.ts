@@ -18,8 +18,12 @@ import {
   createSrsJobId,
   SRS_COMPILER_VERSION,
 } from '../../domain/rulesets/compiler-source';
-import { exportSyncBusinessFiles, exportWorkspaceForSync } from './export-workspace';
-import { importSyncTree, type ImportedSyncTree } from './import-sync-tree';
+import { exportSyncBusinessFiles, exportWorkspaceForSync, hashSyncFiles } from './export-workspace';
+import {
+  importSyncTree,
+  SyncTreeValidationError,
+  type ImportedSyncTree,
+} from './import-sync-tree';
 
 const MAX_BASE_RECORD_ATTEMPTS = 4;
 
@@ -55,6 +59,18 @@ interface LoadedSyncContext {
   analysis: ReturnType<typeof analyzeSyncState>;
 }
 
+class InvalidRemoteSyncTreeError extends Error {
+  constructor(
+    readonly current: WorkspaceRead<WorkspaceSnapshot>,
+    readonly local: SyncTreeState,
+    readonly remote: SyncTreeState,
+    readonly validation: SyncTreeValidationError,
+  ) {
+    super('GitHub sync tree is invalid');
+    this.name = 'InvalidRemoteSyncTreeError';
+  }
+}
+
 function repositoryName(connection: SyncRepositoryConnection): string {
   return `${connection.owner}/${connection.repo}`;
 }
@@ -68,12 +84,22 @@ async function loadSyncContext(
     exportSyncBusinessFiles(current.snapshot),
     dependencies.gateway.download(),
   ]);
-  const importedRemote = await importSyncTree(download.files);
   const local: SyncTreeState = {
     revision: current.revision,
     contentHash: localBusiness.contentHash,
     files: localBusiness.files,
   };
+  let importedRemote: ImportedSyncTree;
+  try {
+    importedRemote = await importSyncTree(download.files);
+  } catch (error) {
+    if (!(error instanceof SyncTreeValidationError)) throw error;
+    throw new InvalidRemoteSyncTreeError(current, local, {
+      revision: download.remoteRevision,
+      contentHash: await hashSyncFiles(download.files),
+      files: download.files,
+    }, error);
+  }
   const remote: SyncTreeState = {
     revision: download.remoteRevision,
     contentHash: importedRemote.contentHash,
@@ -108,7 +134,34 @@ export async function getWorkspaceSyncStatus(
   dependencies: SyncWorkspaceDependencies,
   workspaceId: string,
 ): Promise<SyncStatusResult> {
-  const context = await loadSyncContext(dependencies, workspaceId);
+  let context: LoadedSyncContext;
+  try {
+    context = await loadSyncContext(dependencies, workspaceId);
+  } catch (error) {
+    if (!(error instanceof InvalidRemoteSyncTreeError)) throw error;
+    return {
+      connected: true,
+      repository: repositoryName(dependencies.connection),
+      defaultBranch: dependencies.connection.defaultBranch,
+      status: 'conflict',
+      local: {
+        revision: error.local.revision,
+        contentHash: error.local.contentHash,
+        changedFromBase: true,
+        changes: diffSyncFiles([], error.local.files),
+      },
+      remote: {
+        revision: error.remote.revision,
+        contentHash: error.remote.contentHash,
+        changedFromBase: true,
+        changes: diffSyncFiles([], error.remote.files),
+      },
+      sameContent: false,
+      canPush: false,
+      canPull: false,
+      requiresResolution: true,
+    };
+  }
   const { analysis, base, local, remote } = context;
   return {
     connected: true,
@@ -262,7 +315,40 @@ export async function pushWorkspaceToGithub(
   dependencies: SyncWorkspaceDependencies,
   command: { workspaceId: string; expectedRevision: string; overwrite: boolean },
 ): Promise<SyncOperationResult> {
-  const context = await loadSyncContext(dependencies, command.workspaceId);
+  let context: LoadedSyncContext;
+  try {
+    context = await loadSyncContext(dependencies, command.workspaceId);
+  } catch (error) {
+    if (!(error instanceof InvalidRemoteSyncTreeError)) throw error;
+    if (error.current.revision !== command.expectedRevision) {
+      throw new WorkspaceConflictError(command.expectedRevision, error.current.revision);
+    }
+    if (!command.overwrite) throw new SyncConflictError('conflict', 'push');
+    const exportedAt = new Date().toISOString();
+    const exported = await exportWorkspaceForSync(error.current.snapshot, {
+      baseRemoteRevision: error.remote.revision,
+      exportedAt,
+    });
+    const pushed = await dependencies.gateway.push({
+      expectedRemoteRevision: error.remote.revision,
+      message: `chore: sync Sing-Sub workspace ${exportedAt}`,
+      files: exported.files,
+    });
+    const revision = await recordPushedBase(
+      dependencies,
+      command.workspaceId,
+      error.current.revision,
+      pushed.remoteRevision,
+      exported.contentHash,
+    );
+    return {
+      action: 'pushed',
+      revision,
+      remoteRevision: pushed.remoteRevision,
+      contentHash: exported.contentHash,
+      changes: diffSyncFiles(error.remote.files, error.local.files),
+    };
+  }
   if (context.current.revision !== command.expectedRevision) {
     throw new WorkspaceConflictError(command.expectedRevision, context.current.revision);
   }
@@ -354,7 +440,13 @@ export async function pullWorkspaceFromGithub(
   dependencies: SyncWorkspaceDependencies,
   command: { workspaceId: string; expectedRevision: string; overwrite: boolean },
 ): Promise<SyncOperationResult> {
-  const context = await loadSyncContext(dependencies, command.workspaceId);
+  let context: LoadedSyncContext;
+  try {
+    context = await loadSyncContext(dependencies, command.workspaceId);
+  } catch (error) {
+    if (error instanceof InvalidRemoteSyncTreeError) throw error.validation;
+    throw error;
+  }
   if (context.current.revision !== command.expectedRevision) {
     throw new WorkspaceConflictError(command.expectedRevision, context.current.revision);
   }
