@@ -221,8 +221,10 @@ export class R2WorkspaceStore implements WorkspaceStore<WorkspaceSnapshot> {
   }
 
   private async serializeSnapshot(snapshot: WorkspaceSnapshot): Promise<{ body: string; hash: string }> {
-    const body = canonicalJson(snapshot);
-    return { body, hash: await sha256Hex(body) };
+    // Persist the insertion order of asset JSON so generated configurations
+    // retain the template's layout. Hashes remain canonical for CAS/integrity.
+    const body = JSON.stringify(snapshot);
+    return { body, hash: await sha256Hex(canonicalJson(snapshot)) };
   }
 
   private async putImmutableRevision(snapshot: WorkspaceSnapshot, body: string, hash: string): Promise<void> {

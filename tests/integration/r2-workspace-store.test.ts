@@ -52,6 +52,32 @@ describe('R2WorkspaceStore', () => {
     });
   });
 
+  it('persists snapshot asset key order while hashing canonically', async () => {
+    const bucket = new InMemoryR2Bucket();
+    const store = new R2WorkspaceStore(bucket);
+    const ordered = snapshot('revision-ordered', null);
+    ordered.assets.templates.default = {
+      path: 'sing-sub/templates/default.json',
+      content: {
+        experimental: { cache_file: 'cache.db' },
+        log: { level: 'info' },
+        inbounds: [],
+        outbounds: [],
+      },
+    };
+
+    await store.create({ workspaceId: 'workspace-1', snapshot: ordered });
+    const stored = await bucket.get(r2ObjectKeys.revision('workspace-1', 'revision-ordered'));
+    expect(stored).not.toBeNull();
+    const raw = JSON.parse(await stored!.text());
+    expect(Object.keys(raw.assets.templates.default.content)).toEqual([
+      'experimental', 'log', 'inbounds', 'outbounds',
+    ]);
+    await expect(store.read('workspace-1')).resolves.toMatchObject({
+      snapshot: { assets: { templates: { default: { content: { experimental: { cache_file: 'cache.db' } } } } } },
+    });
+  });
+
   it('does not replace an existing workspace head', async () => {
     const bucket = new InMemoryR2Bucket();
     const store = new R2WorkspaceStore(bucket);

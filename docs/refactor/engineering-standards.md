@@ -34,6 +34,7 @@
 - R2 保存 workspace revision、head、private metadata、deterministic job 与不可变 SRS artifact。
 - 所有 object key 由 `r2ObjectKeys.ts` 生成。
 - revision/artifact 写入使用新 key；业务发布只切换 head，禁止覆盖 revision 或 active artifact。
+- Workspace revision 的完整性 hash 使用 canonical JSON，但 revision body 必须保留资产 JSON 的插入顺序；不得为了 hash 稳定性把模板字段排序后再作为业务内容持久化。
 - R2 bucket 保持 private，浏览器和 Actions 不持有 R2 凭据。
 - 删除遵循保留策略，不得删除 head/current/previous/sync base 或 active artifact 引用的 object。
 - 使用 Standard storage class；禁止使用不享受免费额度的 Infrequent Access。
@@ -159,6 +160,7 @@ interface ApiFailure {
 - AbortController 或 sequence token 用于取消/忽略陈旧请求。
 - conflict 不通过递归 save 处理。
 - 不实现通用 refresh/rebuild/force-refresh UI 或 API。订阅由 current revision 动态构建，revision-aware Cache API 只做加速。
+- Profile 最终 JSON 保留模板字段和数组顺序；override/patch 只覆盖原位置或在没有对应字段时追加，筛选节点保持节点源顺序并在同一锚点按规则顺序稳定插入。
 - 浏览器重新加载已足以读取 current R2 state；未保存草稿的多设备变化使用显式 reload/discard 确认，不以刷新按钮静默覆盖。
 - GitHub pull/push、规则来源更新和 SRS retry 必须分别命名、确认并展示独立状态，不能收敛为“刷新”。
 
