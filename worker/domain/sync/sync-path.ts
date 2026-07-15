@@ -1,7 +1,7 @@
-export type SyncEntityKind = 'configs' | 'nodes' | 'templates' | 'patches' | 'rulesets';
+export type SyncEntityKind = 'configs' | 'nodes' | 'templates' | 'adapters' | 'rulesets';
 
 const SAFE_ENTITY_ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
-const SYNC_PATH = /^sing-sub\/(configs|nodes|templates|patches|rulesets)\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})\.json$/;
+const SYNC_PATH = /^sing-sub\/(configs|nodes|templates|adapters|rulesets)\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})\.json$/;
 
 export interface SyncEntityPath {
   kind: SyncEntityKind;

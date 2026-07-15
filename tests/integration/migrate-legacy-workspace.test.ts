@@ -8,7 +8,7 @@ import { R2PrivateMetadataStore } from '../../worker/infrastructure/r2/r2-privat
 import { r2ObjectKeys } from '../../worker/infrastructure/r2/r2-object-keys';
 import { R2WorkspaceStore } from '../../worker/infrastructure/r2/r2-workspace-store';
 import { InMemoryR2Bucket } from '../fakes/in-memory-r2-bucket';
-import type { WorkspaceSnapshot } from '../../shared';
+import { MOMO_ADAPTER_PRESET, type WorkspaceSnapshot } from '../../shared';
 import { exportSyncBusinessFiles } from '../../worker/application/sync/export-workspace';
 import { dryRunLegacyMigration } from '../../worker/infrastructure/legacy/legacy-migration-dry-run';
 
@@ -32,7 +32,7 @@ function normalized(): NormalizedLegacyWorkspace {
       defaultBranch: 'main',
     },
     profiles: [],
-    assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
   };
 }
 
@@ -110,7 +110,7 @@ describe('migrateLegacyWorkspace', () => {
 
   it('restores an exported editable tree and records the pinned GitHub commit as its sync base', async () => {
     const original: WorkspaceSnapshot = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       workspaceId: 'primary',
       revisionId: 'source-revision',
       previousRevisionId: null,
@@ -122,7 +122,15 @@ describe('migrateLegacyWorkspace', () => {
       }],
       assets: {
         nodes: { default: { path: 'sing-sub/nodes/default.json', content: [{ tag: 'proxy' }] } },
-        templates: {}, patches: {}, rulesets: {},
+        templates: {},
+        adapters: {
+          momo: {
+            path: 'sing-sub/adapters/momo.json',
+            note: 'OpenWrt Momo',
+            content: MOMO_ADAPTER_PRESET,
+          },
+        },
+        rulesets: {},
       },
       builds: {},
       sync: { status: 'never' },

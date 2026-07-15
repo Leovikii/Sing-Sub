@@ -83,7 +83,7 @@ npm run verify
 npm run preview
 ```
 
-Patch syntax is documented in [WIKI.md](WIKI.md). Refactor architecture, decisions, and progress are tracked in [docs/refactor](docs/refactor/README.md).
+Adapter syntax is documented in [WIKI.md](WIKI.md). Refactor architecture, decisions, and progress are tracked in [docs/refactor](docs/refactor/README.md).
 Release compatibility, production checks, and recovery procedures are documented in [docs/operations/release-and-recovery.md](docs/operations/release-and-recovery.md).
 
 ## License

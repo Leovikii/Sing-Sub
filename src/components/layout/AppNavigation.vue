@@ -91,7 +91,7 @@ const items = computed<NavigationItem[]>(() => [
     items: [
       { key: 'nodes', label: t('nav.nodes'), iconComponent: Network, route: '/resources/nodes' },
       { key: 'templates', label: t('nav.templates'), iconComponent: Layers3, route: '/resources/templates' },
-      { key: 'patches', label: t('nav.patches'), iconComponent: Puzzle, route: '/resources/patches' },
+      { key: 'adapters', label: t('nav.adapters'), iconComponent: Puzzle, route: '/resources/adapters' },
       { key: 'rulesets', label: t('nav.rulesets'), iconComponent: ShieldCheck, route: '/resources/rulesets' },
     ],
   },

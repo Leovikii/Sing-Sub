@@ -3,7 +3,7 @@ import { z } from 'zod';
 const opaqueIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/);
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 const syncPathSchema = z.string().regex(
-  /^sing-sub\/(?:configs|nodes|templates|patches|rulesets)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.json$/,
+  /^sing-sub\/(?:configs|nodes|templates|adapters|rulesets)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.json$/,
 );
 
 export const syncManifestFileSchema = z.object({
@@ -13,7 +13,7 @@ export const syncManifestFileSchema = z.object({
 }).strict();
 
 export const syncManifestSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   format: z.literal('sing-sub-editable-sync'),
   workspaceId: opaqueIdSchema,
   workspaceRevision: opaqueIdSchema,

@@ -64,7 +64,7 @@ async function mockApi(page: Page, setupRequired = true): Promise<ApiMockState> 
       return;
     }
     if (url.pathname === '/api/assets') {
-      await json({ nodes: [], templates: [], patches: [], rulesets: [] });
+      await json({ nodes: [], templates: [], adapters: [], rulesets: [] });
       return;
     }
     if (url.pathname === '/api/file' && request.method() === 'PUT') {
@@ -232,7 +232,7 @@ test('logs in and creates a profile', async ({ page }) => {
   await expect(dialog).toBeHidden();
 });
 
-test('creates node and ruleset assets', async ({ page }) => {
+test('creates node, adapter, and ruleset assets', async ({ page }) => {
   const mockState = await mockApi(page);
   await login(page, mockState);
 
@@ -254,15 +254,30 @@ test('creates node and ruleset assets', async ({ page }) => {
   });
   expect(JSON.parse(nodePayload.content)).toEqual({ inbounds: [], outbounds: [] });
 
+  await navigateTo(page, '适配器');
+  await expect(page.getByText('暂无适配器。')).toBeVisible();
+  await page.getByRole('button', { name: '新建' }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByPlaceholder('输入文件名').fill('smoke-adapter');
+  await dialog.getByRole('button', { name: '保存' }).click();
+  await expect.poll(() => mockState.fileRequests.length).toBe(2);
+  const adapterPayload = mockState.fileRequests[1].postDataJSON();
+  expect(adapterPayload.path).toBe('sing-sub/adapters/smoke-adapter.json');
+  expect(JSON.parse(adapterPayload.content)).toEqual({
+    schemaVersion: 1,
+    name: 'smoke-adapter',
+    replacements: [{ path: ['inbounds'], value: [] }],
+  });
+
   await navigateTo(page, '规则集');
   await expect(page.getByText('暂无规则集。')).toBeVisible();
   await page.getByRole('button', { name: '新建' }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByPlaceholder('输入文件名称').fill('smoke-rules');
   await dialog.getByRole('button', { name: '保存' }).click();
-  await expect.poll(() => mockState.fileRequests.length).toBe(2);
+  await expect.poll(() => mockState.fileRequests.length).toBe(3);
 
-  const rulesetPayload = mockState.fileRequests[1].postDataJSON();
+  const rulesetPayload = mockState.fileRequests[2].postDataJSON();
   expect(rulesetPayload.path).toBe('sing-sub/rulesets/smoke-rules.json');
   expect(JSON.parse(rulesetPayload.content)).toEqual({
     version: 2,
@@ -283,7 +298,7 @@ test('retries a failed ruleset build and exposes the SRS link when ready', async
         data: {
           nodes: [],
           templates: [],
-          patches: [],
+          adapters: [],
           rulesets: [{ path: 'sing-sub/rulesets/smoke-rules.json', note: '' }],
         },
       }),

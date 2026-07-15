@@ -1,4 +1,4 @@
-import { jsonAssetSchema, profileSchema, type Profile } from '../../../shared';
+import { adapterPresetSchema, jsonAssetSchema, profileSchema, type Profile } from '../../../shared';
 import type {
   GithubImportSettings,
   NormalizedLegacyWorkspace,
@@ -25,7 +25,7 @@ export interface LegacyMigrationDryRunResult {
     profiles: number;
     nodes: number;
     templates: number;
-    patches: number;
+    adapters: number;
     rulesets: number;
   };
   issues: LegacyMigrationIssue[];
@@ -50,7 +50,7 @@ export function dryRunLegacyMigration(
   const issues: LegacyMigrationIssue[] = [];
   const profiles: Profile[] = [];
   const assets: NormalizedLegacyWorkspace['assets'] = {
-    nodes: {}, templates: {}, patches: {}, rulesets: {},
+    nodes: {}, templates: {}, adapters: {}, rulesets: {},
   };
   const seenNames = new Map<string, string>();
 
@@ -107,7 +107,7 @@ export function dryRunLegacyMigration(
     }
 
     if (!json || typeof json !== 'object' ||
-        ((managed.kind === 'templates' || managed.kind === 'patches' || managed.kind === 'rulesets') && Array.isArray(json))) {
+        ((managed.kind === 'templates' || managed.kind === 'adapters' || managed.kind === 'rulesets') && Array.isArray(json))) {
       issues.push({ severity: 'error', code: 'INVALID_SCHEMA', path: file.path, message: 'Asset JSON root is invalid' });
       continue;
     }
@@ -127,6 +127,13 @@ export function dryRunLegacyMigration(
       issues.push({ severity: 'error', code: 'INVALID_SCHEMA', path: file.path, message: 'Asset schema is invalid' });
       continue;
     }
+    if (managed.kind === 'adapters') {
+      const adapter = adapterPresetSchema.safeParse(json);
+      if (!adapter.success || adapter.data.name !== managed.entityId) {
+        issues.push({ severity: 'error', code: 'INVALID_SCHEMA', path: file.path, message: 'Adapter preset schema or name is invalid' });
+        continue;
+      }
+    }
     assets[managed.kind][managed.entityId] = asset.data;
   }
 
@@ -145,7 +152,7 @@ export function dryRunLegacyMigration(
     const references = [
       ['nodesPath', profile.nodesPath],
       ['templateUrl', profile.templateUrl],
-      ['patchUrl', profile.patchUrl],
+      ['adapterUrl', profile.adapterUrl],
     ] as const;
     for (const [field, reference] of references) {
       if (!reference || /^https?:\/\//i.test(reference) || reference === 'custom') continue;
@@ -164,7 +171,7 @@ export function dryRunLegacyMigration(
     profiles: profiles.length,
     nodes: Object.keys(assets.nodes).length,
     templates: Object.keys(assets.templates).length,
-    patches: Object.keys(assets.patches).length,
+    adapters: Object.keys(assets.adapters).length,
     rulesets: Object.keys(assets.rulesets).length,
   };
   const valid = !issues.some(issue => issue.severity === 'error');

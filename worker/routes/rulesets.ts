@@ -1,4 +1,4 @@
-import { putFileRequestSchema, type JsonAsset } from '../../shared';
+import { adapterPresetSchema, putFileRequestSchema, type JsonAsset } from '../../shared';
 import { deleteAsset, saveAsset } from '../application/commands/assets/mutate-asset';
 import { saveRulesetSource } from '../application/commands/rulesets/save-ruleset-source';
 import { dispatchSrsBuild } from '../application/srs/manage-srs-build';
@@ -86,8 +86,14 @@ export async function handlePutFile(
     return errorResponse('Asset is not valid JSON', 400, 'VALIDATION_FAILED');
   }
   if (!content || typeof content !== 'object' ||
-      ((target.kind === 'templates' || target.kind === 'patches' || target.kind === 'rulesets') && Array.isArray(content))) {
+      ((target.kind === 'templates' || target.kind === 'adapters' || target.kind === 'rulesets') && Array.isArray(content))) {
     return errorResponse('Asset JSON root is invalid', 400, 'VALIDATION_FAILED');
+  }
+  if (target.kind === 'adapters') {
+    const adapter = adapterPresetSchema.safeParse(content);
+    if (!adapter.success || adapter.data.name !== target.entityId) {
+      return errorResponse('Adapter preset schema or name is invalid', 400, 'VALIDATION_FAILED');
+    }
   }
 
   const createdAt = new Date().toISOString();

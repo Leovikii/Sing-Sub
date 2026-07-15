@@ -176,7 +176,7 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 引入 Pinia：session/profiles/assets/rulesets/sync stores；Toast 保持短期 UI 状态，不建立历史通知中心。
 - 引入 Vue Router：connect/profiles/resources/:kind/sync/settings/:section。
 - App shell 接入 RouterView，使用一份侧栏 DOM 实现桌面常驻与窄屏 off-canvas，清空 `App.vue` 业务状态。
-- 导航固定为配置、资源（节点集/模板/补丁/规则集）、同步、设置（通用/订阅/仓库/关于）；规则集属于资源但使用专属子路由和页面。
+- 导航固定为配置、资源（节点集/模板/适配器/规则集）、同步、设置（通用/订阅/仓库/关于）；规则集属于资源但使用专属子路由和页面。
 - 建立少量项目语义组件，不复制 PrimeVue primitives。
 - 删除旧全局刷新按钮、`/api/rebuild`、`?refresh=1` 与“从 GitHub 同步组件”文案；多设备冲突改为明确 reload/discard 流程。
 
@@ -227,7 +227,7 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 
 ## Phase 9：Beta 稳定与产品化（IN_PROGRESS）
 
-目标：在重构完成的 `3.0.0-beta.1` 基础上完成真实使用反馈、部署产品化、补丁机制优化和前端收束；本阶段结束前不发布 `3.0.0` 正式版。
+目标：在重构完成的 `3.0.0-beta.1` 基础上完成真实使用反馈、部署产品化、适配器机制优化和前端收束；本阶段结束前不发布 `3.0.0` 正式版。
 
 ### A. 普通用户部署与升级
 
@@ -237,11 +237,12 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 生产更新必须区分首次安装、更新和回滚；发现新版本不得自动覆盖用户 Worker。
 - 记录 Worker version、应用版本和 workspace schema 兼容关系，保留代码回滚与 R2 数据恢复的独立边界。
 
-### B. Profile 派生与补丁机制
+### B. Profile replacement adapter（完成）
 
-- 评估并设计 `target adapter` 模型，以 `native`/`momo` 等运行目标替代日常使用的通用 patch DSL。
-- 合并或移除重复的 `profile.overrides` 与 `patchUrl` 语义，减少用户需要理解的 JSON 操作符。
-- 使用真实 Momo 配置样例定义 typed target options、确定性构建顺序和失败校验；在迁移完成前保留可回滚路径。
+- 已用 replacement-only adapter 取代通用 patch DSL；Profile 只引用可选 `adapterUrl`。
+- 已删除 `profile.overrides`、`patchUrl`、`smartMerge` 与所有 `$` 操作符，构建器只执行严格路径整体替换和唯一数组匹配替换。
+- 新 workspace 初始化创建可编辑 Momo 预设；adapter 在节点注入前执行，路径/匹配不明确时构建失败。
+- Beta 采用 workspace schema v2 直接切换，不保留旧 patch workspace、GitHub 路径或 Profile schema 兼容代码。
 - 目标是维护一份基础模板和节点集，按目标生成适配配置，不复制维护多套完整模板。
 
 ### C. 前端 Beta 收束
@@ -259,7 +260,7 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 完整 `verify`、Worker dry-run、desktop/mobile E2E、版本/依赖/文档/许可证扫描通过。
 - 只有所有必需项完成后，才把版本从 `3.0.0-beta.*` 更新为 `3.0.0` 并创建正式 Release。
 
-详细部署设想见 `deployment-automation-backlog.md`；补丁/目标适配器方案在本阶段形成独立 ADR。
+详细部署设想见 `deployment-automation-backlog.md`；replacement adapter 方案见 ADR-043。
 
 ## PR 切分规则
 

@@ -1,4 +1,4 @@
-import type { Profile } from '../../shared';
+import { adapterPresetSchema, type Profile } from '../../shared';
 
 interface Outbound {
   tag?: string;
@@ -13,69 +13,54 @@ interface Inbound {
   [key: string]: unknown;
 }
 
-function isObject(item: any): boolean {
-  return (item && typeof item === 'object' && !Array.isArray(item));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function smartMerge(target: any, source: any): any {
-  if (Array.isArray(source)) {
-    return source;
-  }
-  if (isObject(source)) {
-    if (source['$set'] !== undefined) return source['$set'];
-    
-    if (Array.isArray(target) && (source['$prepend'] || source['$append'] || source['$remove'] || source['$replace'])) {
-      let result = [...target];
-      if (source['$remove']) {
-        const toRemove = Array.isArray(source['$remove']) ? source['$remove'] : [source['$remove']];
-        result = result.filter(item => {
-          return !toRemove.some((rm: any) => {
-            if (!isObject(item) || !isObject(rm)) return item === rm;
-            return Object.keys(rm).every(k => item[k] === rm[k]);
-          });
-        });
+function pathLabel(path: string[]): string {
+  return path.join('.');
+}
+
+export function applyAdapterPreset(
+  target: Record<string, unknown>,
+  source: unknown,
+): Record<string, unknown> {
+  const adapter = adapterPresetSchema.parse(source);
+  for (const [index, replacement] of adapter.replacements.entries()) {
+    let parent: Record<string, unknown> = target;
+    for (const segment of replacement.path.slice(0, -1)) {
+      const next = parent[segment];
+      if (!isRecord(next)) {
+        throw new Error(`Adapter ${adapter.name} replacement ${index + 1} path ${pathLabel(replacement.path)} does not exist`);
       }
-      if (source['$replace']) {
-        const replaces = Array.isArray(source['$replace']) ? source['$replace'] : [source['$replace']];
-        result = result.map(item => {
-          for (const rep of replaces) {
-            if (rep.match && rep.with) {
-              const matches = Object.keys(rep.match).every(k => {
-                if (!isObject(item)) return false;
-                return item[k] === rep.match[k];
-              });
-              if (matches) return rep.with;
-            }
-          }
-          return item;
-        });
-      }
-      if (source['$prepend']) {
-        const prep = Array.isArray(source['$prepend']) ? source['$prepend'] : [source['$prepend']];
-        result = [...prep, ...result];
-      }
-      if (source['$append']) {
-        const app = Array.isArray(source['$append']) ? source['$append'] : [source['$append']];
-        result = [...result, ...app];
-      }
-      return result;
+      parent = next;
     }
-    
-    const output: any = { ...target };
-    Object.keys(source).forEach(key => {
-      if (isObject(source[key]) || Array.isArray(source[key])) {
-        if (!(key in target)) {
-          output[key] = source[key];
-        } else {
-          output[key] = smartMerge(target[key], source[key]);
-        }
-      } else {
-        output[key] = source[key];
-      }
+    const key = replacement.path.at(-1)!;
+    if (!(key in parent)) {
+      throw new Error(`Adapter ${adapter.name} replacement ${index + 1} path ${pathLabel(replacement.path)} does not exist`);
+    }
+    if (!replacement.match) {
+      parent[key] = structuredClone(replacement.value);
+      continue;
+    }
+    const candidates = parent[key];
+    if (!Array.isArray(candidates)) {
+      throw new Error(`Adapter ${adapter.name} replacement ${index + 1} target ${pathLabel(replacement.path)} is not an array`);
+    }
+    const matches = candidates.flatMap((candidate, candidateIndex) => {
+      if (!isRecord(candidate)) return [];
+      return Object.entries(replacement.match!).every(([field, value]) => candidate[field] === value)
+        ? [candidateIndex]
+        : [];
     });
-    return output;
+    if (matches.length !== 1) {
+      throw new Error(
+        `Adapter ${adapter.name} replacement ${index + 1} expected one match at ${pathLabel(replacement.path)}, found ${matches.length}`,
+      );
+    }
+    candidates[matches[0]] = structuredClone(replacement.value);
   }
-  return source;
+  return target;
 }
 
 function parseKeywords(str: string): string[] {
@@ -127,22 +112,15 @@ export async function buildProfile(
   template = structuredClone(template || {});
   nodesData = structuredClone(nodesData);
 
-  // Step 1: Apply overrides first
-  if (profile.overrides) {
-    template = smartMerge(template, profile.overrides);
+  // Apply the selected adapter before node insertion so replacement inbounds
+  // become the anchors used by inbound rules.
+  if (profile.adapterUrl) {
+    const adapter = await resources.loadRepoJson(profile.adapterUrl);
+    if (!adapter) throw new Error(`Adapter not found: ${profile.adapterUrl}`);
+    template = applyAdapterPreset(template, adapter);
   }
 
-  // Step 2: Apply patch (before node insertion, so patch modifications to
-  // template structure are in place before we inject nodes into it)
-  if (profile.patchUrl) {
-    const loadedPatch = await resources.loadRepoJson(profile.patchUrl) as Record<string, unknown>;
-    const patch = loadedPatch ? structuredClone(loadedPatch) : null;
-    if (patch) {
-      template = smartMerge(template, patch);
-    }
-  }
-
-  // Step 3: Insert inbound nodes
+  // Step 2: Insert inbound nodes
   if (nodesData) {
     const inboundsArray = normalizeArray<Inbound>(nodesData, 'inbounds');
     const templateInbounds = Array.isArray(template.inbounds) ? template.inbounds : [];
@@ -168,7 +146,7 @@ export async function buildProfile(
     }
   }
 
-  // Step 4: Insert outbound nodes
+  // Step 3: Insert outbound nodes
   if (nodesData) {
     const outboundsArray = normalizeArray<Outbound>(nodesData, 'outbounds');
 

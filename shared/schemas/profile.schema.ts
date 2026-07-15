@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const SAFE_ENTITY_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+const ADAPTER_PATH = /^sing-sub\/adapters\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.json$/;
 
 export const filterActionSchema = z.object({
   action: z.enum(['include', 'exclude']),
@@ -23,11 +24,12 @@ export const profileSchema = z.object({
   templateUrl: z.string().refine(value => !/^https?:\/\//i.test(value), {
     message: 'External templates are not supported',
   }),
-  patchUrl: z.string().optional(),
+  adapterUrl: z.string().refine(value => value === '' || ADAPTER_PATH.test(value), {
+    message: 'Adapter must reference a workspace adapter asset',
+  }).optional(),
   nodesPath: z.string(),
   rules: z.array(outboundRuleSchema),
   inboundRules: z.array(inboundRuleSchema),
-  overrides: z.record(z.string(), z.unknown()).optional(),
   created_at: z.number().optional(),
   updated_at: z.number().optional(),
   order: z.number().int().nonnegative(),

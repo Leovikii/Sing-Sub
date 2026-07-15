@@ -4,93 +4,39 @@
 
 ## Data Model
 
-Profiles, node sets, templates, patches, and rule sets are stored in the private R2 workspace. GitHub is optional and only participates when the user explicitly imports, pushes, pulls, or enables SRS compilation.
+Profiles, node sets, templates, adapters, and rule sets are stored in the private R2 workspace. GitHub is optional and only participates when the user explicitly imports, pushes, pulls, or enables SRS compilation.
 
 A profile is built dynamically from:
 
 1. a workspace template;
-2. profile overrides;
-3. an optional workspace patch;
-4. filtered inbound and outbound nodes.
+2. an optional replacement adapter;
+3. filtered inbound and outbound nodes.
 
 Saving an asset publishes a new immutable workspace revision. Configuration subscriptions are built from the current revision and may use revision-aware Cache API acceleration.
 
-## Patch Syntax
+## Adapters
 
-Patch objects are recursively merged into the selected template. New keys are added, nested objects continue merging, and primitive values overwrite the template value.
-
-```json
-{
-  "log": {
-    "level": "warn",
-    "timestamp": true
-  }
-}
-```
-
-For arrays, Sing-Sub supports four explicit operators.
-
-### `$set`
-
-Replace the target value completely:
+Adapters only perform complete replacements. Each replacement points to an existing field. When `match` is present, the target must be an array containing exactly one shallow field match.
 
 ```json
 {
-  "dns": {
-    "servers": {
-      "$set": [{ "type": "udp", "server": "1.1.1.1" }]
+  "schemaVersion": 1,
+  "name": "momo",
+  "replacements": [
+    {
+      "path": ["inbounds"],
+      "value": []
+    },
+    {
+      "path": ["route", "rules"],
+      "match": { "action": "hijack-dns" },
+      "value": { "inbound": "dns-in", "action": "hijack-dns" }
     }
-  }
+  ]
 }
 ```
 
-### `$prepend` and `$append`
-
-Insert one item or a list of items before or after the existing array:
-
-```json
-{
-  "route": {
-    "rules": {
-      "$prepend": { "action": "sniff" },
-      "$append": [{ "protocol": "dns", "action": "hijack-dns" }]
-    }
-  }
-}
-```
-
-### `$remove`
-
-Remove primitives or objects matching the supplied subset:
-
-```json
-{
-  "outbounds": {
-    "$remove": { "tag": "ads-block" }
-  }
-}
-```
-
-### `$replace`
-
-Replace matching array elements with a complete new value:
-
-```json
-{
-  "outbounds": {
-    "$replace": {
-      "match": { "tag": "proxy" },
-      "with": {
-        "type": "urltest",
-        "tag": "proxy",
-        "outbounds": ["node-1", "node-2"]
-      }
-    }
-  }
-}
-```
-
-`$remove` and `$replace` also accept arrays when multiple operations are required. Validate the resulting JSON in Profile preview before saving production changes.
+Missing paths, missing matches, duplicate matches, and non-array matched targets fail the build. Adapters do not merge, append, remove, execute expressions, or create missing fields. A writable Momo preset is created with every new workspace and can be copied to create other adapters.
 
 ## Rule Sets
 

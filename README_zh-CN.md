@@ -82,7 +82,7 @@ npm run verify
 npm run preview
 ```
 
-补丁语法见 [WIKI_zh-CN.md](WIKI_zh-CN.md)。架构、决策和进度见 [docs/refactor](docs/refactor/README.md)，发布与恢复说明见 [docs/operations/release-and-recovery.md](docs/operations/release-and-recovery.md)。
+适配器语法见 [WIKI_zh-CN.md](WIKI_zh-CN.md)。架构、决策和进度见 [docs/refactor](docs/refactor/README.md)，发布与恢复说明见 [docs/operations/release-and-recovery.md](docs/operations/release-and-recovery.md)。
 
 ## 许可证
 

@@ -18,7 +18,7 @@ npx wrangler secret put SUBSCRIPTION_SIGNING_SECRET
 
 ## 初始化方式
 
-空 R2 首次打开 WebUI 时显示“初始化工作区”。默认只输入管理员口令，即可创建空的 `primary` workspace、首个 immutable revision/head 和自动签名的订阅 Token。
+空 R2 首次打开 WebUI 时显示“初始化工作区”。默认只输入管理员口令，即可创建 `primary` workspace、首个 immutable revision/head、自动签名的订阅 Token，以及可编辑的 `sing-sub/adapters/momo.json` 预设。
 
 需要导入现有数据时，展开“从 GitHub 导入现有配置（可选）”，再填写：
 
@@ -40,6 +40,7 @@ workspace 存在后，所有桌面和移动设备只输入管理员口令。`own
 [ ] 空初始化未创建 GitHub private credentials
 [ ] 可选 GitHub 导入完整且不会写入仓库
 [ ] Asset/Profile 保存与 revision 冲突处理正常
+[ ] 初始化后的 Momo adapter 可编辑，并能替换 `inbounds` 与唯一 `hijack-dns` 规则
 [ ] `s2` 短订阅 Token 可用，轮换后旧 Token 和旧 `v1` 格式均失效
 [ ] GitHub 不可用或未配置时仍可登录和 CRUD
 [ ] 桌面与移动端均可使用密码登录

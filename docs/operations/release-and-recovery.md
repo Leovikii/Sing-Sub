@@ -9,6 +9,7 @@
 - Workers observability 与 Turnstile 暂不启用。
 - Profile 外部 HTTP/HTTPS 模板是明确移除的兼容项；旧数据必须先把模板导入 `sing-sub/templates/` 并更新 Profile 引用，不能依赖旧 URL 读取旁路。
 - 私有配置订阅 Token 已直接切换为 `s2.<22-char-tag>`；旧 `v1.payload.signature` 链接不兼容，部署后必须从 WebUI 重新复制订阅链接。
+- replacement adapter 将 workspace 直接切换为 schema v2；运行时不读取 v1 patch revision。首次部署该版本前必须重新初始化 workspace，或把现有业务文件一次性改为 `adapters`/`adapterUrl` 后重新导入；只删除旧 patch 文件不足以升级 R2 revision。
 - 规则集公开 URL 导入不受上述变化影响，仍使用独立的 SSRF、大小、重定向和超时限制。
 
 ## 发布前检查

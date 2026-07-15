@@ -218,7 +218,7 @@ Sing-Sub/
 │  │  │  └─ assetName.ts
 │  │  ├─ profiles/
 │  │  │  ├─ buildProfile.ts
-│  │  │  ├─ mergePatch.ts
+│  │  │  ├─ applyAdapter.ts
 │  │  │  └─ profile.ts
 │  │  ├─ revisions/
 │  │  │  ├─ conflict.ts

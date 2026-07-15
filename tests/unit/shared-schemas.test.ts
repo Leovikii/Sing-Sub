@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { loginRequestSchema, profileSchema, putStateRequestSchema, stateDataSchema } from '../../shared';
+import {
+  adapterPresetSchema,
+  loginRequestSchema,
+  profileSchema,
+  putStateRequestSchema,
+  stateDataSchema,
+} from '../../shared';
 
 const validProfile = {
   name: 'default',
@@ -7,7 +13,7 @@ const validProfile = {
   nodesPath: 'sing-sub/nodes/default.json',
   rules: [{ group: 'proxy', filters: [{ action: 'include' as const, keyword: 'HK' }] }],
   inboundRules: [{ tag: 'tun', filters: [{ action: 'exclude' as const, keyword: 'LAN' }] }],
-  overrides: { log: { level: 'warn' } },
+  adapterUrl: 'sing-sub/adapters/momo.json',
   order: 0,
 };
 
@@ -25,6 +31,24 @@ describe('shared request schemas', () => {
   it('rejects external profile templates', () => {
     const profile = { ...validProfile, templateUrl: 'https://example.com/template.json' };
     expect(profileSchema.safeParse(profile).success).toBe(false);
+  });
+
+  it('only accepts workspace adapter references', () => {
+    expect(profileSchema.safeParse({ ...validProfile, adapterUrl: 'sing-sub/templates/momo.json' }).success).toBe(false);
+    expect(profileSchema.safeParse({ ...validProfile, adapterUrl: 'https://example.com/momo.json' }).success).toBe(false);
+  });
+
+  it('accepts replacement-only adapters and rejects unknown operations', () => {
+    expect(adapterPresetSchema.safeParse({
+      schemaVersion: 1,
+      name: 'momo',
+      replacements: [{ path: ['inbounds'], value: [] }],
+    }).success).toBe(true);
+    expect(adapterPresetSchema.safeParse({
+      schemaVersion: 1,
+      name: 'momo',
+      replacements: [{ op: 'append', path: ['inbounds'], value: [] }],
+    }).success).toBe(false);
   });
 
   it('rejects duplicate profile names', () => {

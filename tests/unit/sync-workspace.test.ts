@@ -19,7 +19,7 @@ import { InMemoryWorkspaceStore } from '../fakes/in-memory-workspace-store';
 
 function snapshot(note = 'base'): WorkspaceSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: 'primary',
     revisionId: 'revision-1',
     previousRevisionId: null,
@@ -30,7 +30,7 @@ function snapshot(note = 'base'): WorkspaceSnapshot {
     profiles: [{
       name: 'default', note, templateUrl: '', nodesPath: '', rules: [], inboundRules: [], order: 0,
     }],
-    assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
     builds: {},
     sync: { status: 'never' },
   };

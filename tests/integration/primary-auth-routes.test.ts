@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceSnapshot } from '../../shared';
+import { MOMO_ADAPTER_PRESET, type WorkspaceSnapshot } from '../../shared';
 import {
   handleBootstrap,
   handleLogin,
@@ -14,7 +14,7 @@ import worker from '../../worker/index';
 
 function snapshot(): WorkspaceSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: 'primary',
     revisionId: 'revision-1',
     previousRevisionId: null,
@@ -29,7 +29,7 @@ function snapshot(): WorkspaceSnapshot {
       tokenVersion: 1,
     },
     profiles: [],
-    assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
     builds: {},
     sync: { status: 'never' },
   };
@@ -84,7 +84,18 @@ describe('primary workspace auth routes', () => {
       snapshot: {
         settings: { userLogin: 'Administrator', authVersion: 1, tokenVersion: 1 },
         profiles: [],
-        assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+        assets: {
+          nodes: {},
+          templates: {},
+          adapters: {
+            momo: {
+              path: 'sing-sub/adapters/momo.json',
+              note: 'OpenWrt Momo',
+              content: MOMO_ADAPTER_PRESET,
+            },
+          },
+          rulesets: {},
+        },
       },
     });
     await expect(new R2PrivateMetadataStore(bucket).read('primary')).resolves.toBeNull();
@@ -262,6 +273,45 @@ describe('primary workspace auth routes', () => {
       { headers: { Cookie: cookie } },
     ), env);
     expect(missing.status).toBe(404);
+  });
+
+  it('validates adapter assets before publishing them', async () => {
+    const bucket = new InMemoryR2Bucket();
+    await new R2WorkspaceStore(bucket).create({ workspaceId: 'primary', snapshot: snapshot() });
+    const env = environment(bucket);
+    const login = await handleLogin(new Request('https://example.com/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ adminPassword: 'correct-password' }),
+    }), env);
+    const cookie = login.headers.get('Set-Cookie')!.split(';')[0];
+    const invalid = await worker.fetch(new Request('https://example.com/api/file', {
+      method: 'PUT',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: 'sing-sub/adapters/custom.json',
+        content: JSON.stringify({ schemaVersion: 1, name: 'other', replacements: [] }),
+        expectedRevision: 'revision-1',
+      }),
+    }), env);
+    expect(invalid.status).toBe(400);
+
+    const saved = await worker.fetch(new Request('https://example.com/api/file', {
+      method: 'PUT',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: 'sing-sub/adapters/custom.json',
+        content: JSON.stringify({
+          schemaVersion: 1,
+          name: 'custom',
+          replacements: [{ path: ['inbounds'], value: [] }],
+        }),
+        expectedRevision: 'revision-1',
+      }),
+    }), env);
+    expect(saved.status).toBe(200);
+    await expect(new R2WorkspaceStore(bucket).read('primary')).resolves.toMatchObject({
+      snapshot: { assets: { adapters: { custom: { content: { name: 'custom' } } } } },
+    });
   });
 
   it('builds subscriptions from the current revision, bypasses stale cache, and invalidates rotated tokens', async () => {

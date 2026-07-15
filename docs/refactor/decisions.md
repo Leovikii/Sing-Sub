@@ -42,8 +42,8 @@
 | ADR-036 | ACCEPTED | 订阅按 current revision 动态构建，Cache 仅做加速 | 避免持久化最终配置、手动重建与失效扇出；保存后通过新 revision 自动绕过旧 cache。 |
 | ADR-037 | ACCEPTED | SRS 使用短期 job ticket 自动 provision | 不要求用户配置 GitHub Action Secret/Variable；ticket 只授权单一、短期 build callback。 |
 | ADR-038 | ACCEPTED | GitHub sync 使用安全方向同步 | 保留 base/local/remote 防误覆盖，但第一版不自动逐文件合并；冲突时只允许显式整侧覆盖。 |
-| ADR-042 | ACCEPTED | 重构完成后进入 Beta 稳定阶段，设置 `3.0.0` 发布门禁 | 部署产品化、补丁机制和前端反馈仍需要真实使用验证，不能把架构完成等同于正式版完成。 |
-| ADR-043 | PROPOSED | 用 target adapter 取代日常通用 patch DSL | Momo 适配是明确目标；typed adapter 比任意 JSON 操作符更容易理解、校验和测试。 |
+| ADR-042 | ACCEPTED | 重构完成后进入 Beta 稳定阶段，设置 `3.0.0` 发布门禁 | 部署产品化、适配器机制和前端反馈仍需要真实使用验证，不能把架构完成等同于正式版完成。 |
+| ADR-043 | ACCEPTED | 用可编辑 replacement adapter 取代通用 patch DSL | 初始化创建 Momo 预设；构建器只支持严格路径替换和唯一数组匹配替换。 |
 | ADR-044 | ACCEPTED | 私有订阅直接切换为 25 字符确定性短 Token | 单 workspace 不需要在 URL 重复携带 claims；128-bit HMAC tag 保留轮换和隔离能力并显著缩短链接。 |
 | ADR-045 | ACCEPTED | Beta 初始化目标由本地部署助手承担 Secret 与 Cloudflare 资源配置 | WebUI 默认只初始化空 workspace，GitHub 后连；本轮只记录方案，不修改现有初始化实现。 |
 
@@ -122,7 +122,7 @@
 
 ## ADR-036：动态订阅与无通用刷新
 
-- 私有配置订阅请求从 current workspace revision 动态加载模板、节点、patch 和 profile 规则后构建最终 JSON；最终配置不写入 R2、GitHub 或其他持久化缓存。
+- 私有配置订阅请求从 current workspace revision 动态加载模板、节点、adapter 和 profile 规则后构建最终 JSON；最终配置不写入 R2、GitHub 或其他持久化缓存。
 - Workers Cache API 仅缓存可丢弃的最终响应，cache identity 必须包含 workspace revision 与 profile。任何内部数据保存发布新 revision 后，下一次请求自动使用新 key，不需要用户重建或清除缓存。
 - Profile 模板只来自 workspace revision，预览与订阅都使用明确的 revision 信号；外部模板不属于当前能力范围。
 - WebUI 不保留通用“刷新/重建”按钮、`?refresh=1` 或隐式 GitHub pull。浏览器重新加载已经足以读取 current R2 state。
@@ -166,7 +166,7 @@
 日期：2026-07-15
 
 - WebUI 只渲染一套侧栏：桌面常驻，窄屏时同一侧栏以 off-canvas 方式展开/收起；不再用第二个 Drawer 容器重复导航视觉。
-- 一级入口为配置、资源、同步、设置。资源包含节点集、模板、补丁和规则集；规则集仍属于资源语义，但因公开 JSON/SRS 与构建生命周期使用独立子路由和专属页面。
+- 一级入口为配置、资源、同步、设置。资源包含节点集、模板、适配器和规则集；规则集仍属于资源语义，但因公开 JSON/SRS 与构建生命周期使用独立子路由和专属页面。
 - 设置子项固定为通用、订阅、仓库、关于。仓库页管理连接、PAT、默认分支与 SRS 全局开关；同步页管理 diff、push、pull 和冲突决策。
 - Profile 保留卡片/列表打开 Dialog 的低成本交互，编辑/预览切换保留；预览基于未保存 draft 动态构建。废弃设计稿中的页面内展开编辑区。
 - 顶栏标题是页面唯一标题。语义相同的操作必须共享图标、尺寸、variant 和 tooltip；不建立历史通知中心。
@@ -199,19 +199,21 @@
 日期：2026-07-15
 
 - Phase 0-8 的架构重构已经完成，当前版本保持 `3.0.0-beta.1` 并进入 Phase 9 Beta 稳定与产品化。
-- Beta 阶段统一承接普通用户部署/升级方案、Profile 补丁机制优化、前端反馈和生产回归，不再把这些工作标记为低优先级尾项。
+- Beta 阶段统一承接普通用户部署/升级方案、Profile 适配器机制优化、前端反馈和生产回归，不再把这些工作标记为低优先级尾项。
 - `3.0.0` 不是单纯修改版本号；只有部署/升级/回滚演练、P0/P1 bug、正式版文档、完整验证和兼容矩阵全部通过后才可发布。
 - Beta 中的数据结构或行为修改必须提供迁移与回滚路径；现有 R2 revision、GitHub sync、SRS 和签名认证边界继续作为不可降低的基线。
 
-## ADR-043：Profile target adapter 方向
+## ADR-043：可编辑 replacement adapter
 
-状态：PROPOSED
-日期：2026-07-15
+状态：ACCEPTED
+日期：2026-07-16
 
-- 当前 `profile.overrides`、`patchUrl` 与 `$set/$append/$prepend/$remove/$replace` 同时存在，通用性超过了主要需求并增加用户理解和测试成本。
-- 候选方向是保留一份基础模板与节点集，由 Profile 选择 `native`、`momo` 等 target；target 使用 typed options 和确定性 adapter 生成最终配置。
-- 在接受该 ADR 前，需要收集一份可运行的 Momo 基础配置、现有 patch 及期望产物，明确哪些字段固定转换、哪些允许用户配置、adapter 在节点注入前后哪个阶段执行。
-- 迁移期间不得直接破坏已有 Profile；完成样例测试与迁移设计后，再决定是否移除 patch 资源页、`patchUrl` 和通用 DSL。
+- Profile 只保留 `templateUrl`、可选 `adapterUrl`、`nodesPath` 与节点筛选规则；删除 `overrides`、`patchUrl`、`smartMerge` 和 `$set/$append/$prepend/$remove/$replace`。
+- adapter 是普通、可编辑、可同步的 workspace JSON 资源，路径为 `sing-sub/adapters/{name}.json`。新 workspace 初始化时创建 `momo` 预设，用户可修改、复制或新增其他 adapter；Worker 不包含 Momo 专用分支。
+- adapter schema v1 只有 `replacements`。每条 replacement 使用字符串数组 `path` 指向已存在字段；没有 `match` 时整体替换字段，有 `match` 时目标必须为数组并恰好命中一个浅层 primitive 字段子集，然后整体替换该元素。
+- 路径缺失、目标类型错误、零匹配或多匹配均中止构建并返回明确错误。adapter 不合并、不追加、不删除、不创建缺失字段，不支持条件、通配符、表达式或脚本。
+- adapter 在 inbound/outbound 节点注入前执行。Momo 预设整体替换 `inbounds`，并在 `route.rules` 中按 `action: hijack-dns` 查找后整体替换为绑定 `dns-in` 的规则。
+- 本次为 Beta 直接切换：workspace snapshot 升级为 schema v2，旧 patches/Profile schema 与旧 GitHub 路径不兼容；运行时不保留读取或转换代码。生产切换必须重新初始化 workspace 或在部署前一次性重新导入新格式数据。
 
 ## ADR-044：确定性短订阅 Token
 

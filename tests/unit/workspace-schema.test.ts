@@ -11,7 +11,7 @@ const hash = 'a'.repeat(64);
 const now = '2026-07-14T12:00:00.000Z';
 
 const snapshot = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   workspaceId: 'workspace-1',
   revisionId: 'revision-1',
   previousRevisionId: null,
@@ -26,13 +26,13 @@ const snapshot = {
     tokenVersion: 1,
   },
   profiles: [],
-  assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+  assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
   builds: {},
   sync: { status: 'never' },
 };
 
 describe('R2 workspace schemas', () => {
-  it('accepts the canonical version 1 workspace and head', () => {
+  it('accepts the canonical version 2 workspace and version 1 head', () => {
     expect(workspaceSnapshotSchema.parse(snapshot)).toEqual(snapshot);
     expect(workspaceHeadSchema.safeParse({
       schemaVersion: 1,
@@ -42,6 +42,14 @@ describe('R2 workspace schemas', () => {
       updatedAt: now,
       contentHash: hash,
     }).success).toBe(true);
+  });
+
+  it('does not accept legacy patch workspaces', () => {
+    expect(workspaceSnapshotSchema.safeParse({
+      ...snapshot,
+      schemaVersion: 1,
+      assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    }).success).toBe(false);
   });
 
   it('accepts a local workspace without GitHub and rejects partial coordinates', () => {

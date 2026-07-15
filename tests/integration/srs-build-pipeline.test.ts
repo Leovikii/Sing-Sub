@@ -23,7 +23,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 function snapshot(): WorkspaceSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: 'primary',
     revisionId: 'revision-1',
     previousRevisionId: null,
@@ -35,7 +35,7 @@ function snapshot(): WorkspaceSnapshot {
       tokenVersion: 1,
     },
     profiles: [],
-    assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
     builds: {},
     sync: { status: 'never' },
   };
