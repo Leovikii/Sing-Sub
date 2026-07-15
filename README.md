@@ -73,7 +73,7 @@ On an empty R2 bucket, the WebUI creates a blank workspace with only the adminis
 - SRS provisioning uses the repository-scoped PAT already stored in private R2 metadata. Users do not create an Actions Secret or Variable; callbacks use a short-lived job ticket derived from the existing session signing secret.
 - Release users deploy locally with Wrangler and do not require Actions, a fork, or a GitHub repository.
 
-A standalone Release package, guided Windows deployment assistant, and controlled update flow are tracked as low-priority Phase 9 work after the core refactor. Ordinary users will not be required to fork the source repository.
+The core refactor is complete. `3.0.0-beta.1` now enters Phase 9 Beta stabilization, covering standalone Release deployment, controlled updates, target-based profile adaptation, and frontend polish. Ordinary users will not be required to fork the source repository. Version `3.0.0` will only be published after the Beta release gates pass.
 
 ## Development
 

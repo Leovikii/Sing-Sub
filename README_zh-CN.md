@@ -72,7 +72,7 @@ npm run deploy
 - 启用 SRS 后，Worker 会自动向已连接的私有仓库安装版本化编译 workflow；用户不需要手动创建 Actions Secret 或 Variable。
 - 普通发布用户使用本地 Wrangler 部署，不要求 fork、GitHub Actions 或数据仓库。
 
-独立 Release 包、Windows 部署助手和受控升级流程记录在低优先级 Phase 9。
+核心重构已经完成。`3.0.0-beta.1` 进入 Phase 9 Beta 稳定阶段，统一处理独立 Release 部署、受控升级、目标化配置派生和前端体验收束。普通用户不要求 fork；只有 Beta 发布门禁全部通过后才发布 `3.0.0` 正式版。
 
 ## 开发
 

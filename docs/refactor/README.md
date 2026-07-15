@@ -2,6 +2,8 @@
 
 本文档集是 Sing-Sub 重构工作的唯一计划与进度来源。后续开发任务开始前必须先阅读本页、`decisions.md` 和 `progress.md`，完成后必须更新进度与验证结果。
 
+Phase 0-8 的架构重构已经完成。当前 `3.0.0-beta.1` 进入 Phase 9 Beta 稳定与产品化；该阶段继续使用本计划集追踪普通用户部署、Profile 派生机制、前端反馈和 `3.0.0` 正式版发布门禁。
+
 ## 重构目标
 
 1. UI 基础控件由成熟组件库提供，删除不必要的自研 Button、Select、Dialog、Popover、Toast 等实现。
@@ -22,7 +24,7 @@
 - [roadmap.md](./roadmap.md)：实施阶段、任务顺序、验收门槛和回滚边界。
 - [decisions.md](./decisions.md)：已锁定和待确认的架构决策。
 - [progress.md](./progress.md)：任务状态、验证记录、阻塞项和会话日志。
-- [deployment-automation-backlog.md](./deployment-automation-backlog.md)：重构后 Release CI/CD、Windows 部署助手、升级与回滚设想。
+- [deployment-automation-backlog.md](./deployment-automation-backlog.md)：Beta 阶段 Release CI/CD、Windows 部署助手、升级与回滚方案。
 
 ## 执行方式
 

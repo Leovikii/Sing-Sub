@@ -100,6 +100,7 @@
 - Release 的首次初始化、日常升级和回滚必须是不同操作，不能由 main push 或发现新版本隐式完成。
 - 普通用户部署不得要求 fork；维护仓库 Release Action 不能获得或代理用户 Cloudflare 凭据。
 - SRS compiler 属于连接私有仓库后的可选能力，维护者与 Release 用户使用同一机制。
+- `3.0.0-beta.*` 阶段允许基于真实使用反馈优化产品能力，但不得降低数据、鉴权、同步和恢复边界；部署方案、Profile target adapter、前端 Beta 收束和 P0/P1 回归全部完成前不得发布 `3.0.0`。
 - 未连接 GitHub 或未配置 compiler 时，WebUI、R2 CRUD、私有 JSON 配置订阅、ruleset 编辑及公开 JSON ruleset 订阅必须完整可用。
 
 ## 9. 快照与加密

@@ -42,6 +42,8 @@
 | ADR-036 | ACCEPTED | 订阅按 current revision 动态构建，Cache 仅做加速 | 避免持久化最终配置、手动重建与失效扇出；保存后通过新 revision 自动绕过旧 cache。 |
 | ADR-037 | ACCEPTED | SRS 使用短期 job ticket 自动 provision | 不要求用户配置 GitHub Action Secret/Variable；ticket 只授权单一、短期 build callback。 |
 | ADR-038 | ACCEPTED | GitHub sync 使用安全方向同步 | 保留 base/local/remote 防误覆盖，但第一版不自动逐文件合并；冲突时只允许显式整侧覆盖。 |
+| ADR-042 | ACCEPTED | 重构完成后进入 Beta 稳定阶段，设置 `3.0.0` 发布门禁 | 部署产品化、补丁机制和前端反馈仍需要真实使用验证，不能把架构完成等同于正式版完成。 |
+| ADR-043 | PROPOSED | 用 target adapter 取代日常通用 patch DSL | Momo 适配是明确目标；typed adapter 比任意 JSON 操作符更容易理解、校验和测试。 |
 
 ## ADR-002：PrimeVue 版本政策
 
@@ -188,6 +190,26 @@
 - 每个请求生成不可由客户端指定的 UUID request ID，并通过 `X-Request-ID` 返回。Worker 日志使用结构化 JSON 和字段白名单，订阅 token、job id 路径参数化，禁止记录认证头、Cookie、PAT、ticket、请求体和私有 JSON。
 - 外部模板兼容立即删除，不提供迁移读取旁路。规则集公开 URL 导入仍保留既有 SSRF、大小、重定向和超时限制，两者不得混用。
 - R2 retention/budget 默认值保持不变；先完成本地恢复演练，再做生产只读检查，生产部署和数据写入必须另行授权。
+
+## ADR-042：Beta 稳定阶段与正式版门禁
+
+状态：ACCEPTED
+日期：2026-07-15
+
+- Phase 0-8 的架构重构已经完成，当前版本保持 `3.0.0-beta.1` 并进入 Phase 9 Beta 稳定与产品化。
+- Beta 阶段统一承接普通用户部署/升级方案、Profile 补丁机制优化、前端反馈和生产回归，不再把这些工作标记为低优先级尾项。
+- `3.0.0` 不是单纯修改版本号；只有部署/升级/回滚演练、P0/P1 bug、正式版文档、完整验证和兼容矩阵全部通过后才可发布。
+- Beta 中的数据结构或行为修改必须提供迁移与回滚路径；现有 R2 revision、GitHub sync、SRS 和签名认证边界继续作为不可降低的基线。
+
+## ADR-043：Profile target adapter 方向
+
+状态：PROPOSED
+日期：2026-07-15
+
+- 当前 `profile.overrides`、`patchUrl` 与 `$set/$append/$prepend/$remove/$replace` 同时存在，通用性超过了主要需求并增加用户理解和测试成本。
+- 候选方向是保留一份基础模板与节点集，由 Profile 选择 `native`、`momo` 等 target；target 使用 typed options 和确定性 adapter 生成最终配置。
+- 在接受该 ADR 前，需要收集一份可运行的 Momo 基础配置、现有 patch 及期望产物，明确哪些字段固定转换、哪些允许用户配置、adapter 在节点注入前后哪个阶段执行。
+- 迁移期间不得直接破坏已有 Profile；完成样例测试与迁移设计后，再决定是否移除 patch 资源页、`patchUrl` 和通用 DSL。
 
 ## ADR-027：免费额度策略
 
