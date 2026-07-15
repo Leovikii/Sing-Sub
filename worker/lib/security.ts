@@ -1,3 +1,5 @@
+import type { ApiErrorCode, ApiFailure, ApiSuccess } from '../../shared';
+
 export function addSecurityHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
   headers.set('X-Content-Type-Options', 'nosniff');
@@ -31,9 +33,35 @@ export function jsonResponse(
     'Content-Type': 'application/json',
     ...extraHeaders,
   };
-  return new Response(JSON.stringify(data), { status, headers });
+  const body: ApiSuccess<unknown> = { data };
+  return new Response(JSON.stringify(body), { status, headers });
 }
 
-export function errorResponse(message: string, status: number, code?: string): Response {
-  return jsonResponse(code ? { error: message, code } : { error: message }, status);
+function defaultErrorCode(status: number): ApiErrorCode {
+  if (status === 400) return 'VALIDATION_FAILED';
+  if (status === 401) return 'NOT_AUTHENTICATED';
+  if (status === 403) return 'FORBIDDEN';
+  if (status === 404) return 'NOT_FOUND';
+  if (status === 409) return 'REVISION_CONFLICT';
+  return 'INTERNAL_ERROR';
+}
+
+export function errorResponse(
+  message: string,
+  status: number,
+  code: ApiErrorCode = defaultErrorCode(status),
+  requestId?: string,
+  details?: Record<string, string | number | boolean>,
+): Response {
+  const body: ApiFailure = {
+    error: {
+      code,
+      details: { message, ...details },
+      ...(requestId ? { requestId } : {}),
+    },
+  };
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }

@@ -13,27 +13,32 @@
           <div class="flex min-w-0 items-center gap-2">
             <span class="shrink-0 rounded border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-purple-400">SOURCE</span>
             <span class="truncate text-xs text-text-muted">
-              {{ sourceLastUpdated ? `最近更新 ${formatUpdatedAt(sourceLastUpdated)}` : '每行一个 HTTPS URL。' }}
+              {{ sourceLastUpdated ? t('rulesets.sourceUpdated', { time: formatUpdatedAt(sourceLastUpdated) }) : t('rulesets.sourceDescription') }}
             </span>
           </div>
           <div v-if="!readonly" class="flex shrink-0 items-center gap-2">
-            <Select
+            <PrimeSelect
               v-if="isSectionVisible('source')"
               :modelValue="String(sourceIntervalHours)"
               :options="sourceIntervalOptions"
-              size="compact"
-              ariaLabel="来源更新周期"
+              option-label="label"
+              option-value="value"
+              size="small"
+              :aria-label="t('rulesets.sourceInterval')"
               class="w-40"
               @update:modelValue="updateSourceInterval"
             />
-            <ToolbarButton
-              :icon="isSectionVisible('source') ? Trash2 : Plus"
-              :label="isSectionVisible('source') ? '删除 SOURCE' : '新增 SOURCE'"
-              :variant="isSectionVisible('source') ? 'danger' : 'secondary'"
-              iconOnly
-              showTooltip
+            <Button
+              :severity="isSectionVisible('source') ? 'danger' : 'secondary'"
+              text
+              rounded
+              :aria-label="t(isSectionVisible('source') ? 'rulesets.removeSection' : 'rulesets.addSection', { section: 'SOURCE' })"
+              v-tooltip.top="t(isSectionVisible('source') ? 'rulesets.removeSection' : 'rulesets.addSection', { section: 'SOURCE' })"
               @click="isSectionVisible('source') ? clearSection('source') : openSection('source')"
-            />
+            >
+              <Trash2 v-if="isSectionVisible('source')" :size="18" aria-hidden="true" />
+              <Plus v-else :size="18" aria-hidden="true" />
+            </Button>
           </div>
         </div>
         <template v-if="isSectionVisible('source')">
@@ -60,15 +65,18 @@
             <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">{{ section.label }}</span>
             <span class="truncate text-xs text-text-muted">{{ section.description }}</span>
           </div>
-          <ToolbarButton
+          <Button
             v-if="!readonly"
-            :icon="isSectionVisible(section.key) ? Trash2 : Plus"
-            :label="`${isSectionVisible(section.key) ? '删除' : '新增'} ${section.label}`"
-            :variant="isSectionVisible(section.key) ? 'danger' : 'secondary'"
-            iconOnly
-            showTooltip
+            :severity="isSectionVisible(section.key) ? 'danger' : 'secondary'"
+            text
+            rounded
+            :aria-label="t(isSectionVisible(section.key) ? 'rulesets.removeSection' : 'rulesets.addSection', { section: section.label })"
+            v-tooltip.top="t(isSectionVisible(section.key) ? 'rulesets.removeSection' : 'rulesets.addSection', { section: section.label })"
             @click="isSectionVisible(section.key) ? clearSection(section.key) : openSection(section.key)"
-          />
+          >
+            <Trash2 v-if="isSectionVisible(section.key)" :size="18" aria-hidden="true" />
+            <Plus v-else :size="18" aria-hidden="true" />
+          </Button>
         </div>
         <textarea
           v-if="isSectionVisible(section.key)"
@@ -84,10 +92,14 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Loader2, Plus, Trash2 } from 'lucide-vue-next';
-import Select from './Select.vue';
-import ToolbarButton from './ToolbarButton.vue';
+import Button from 'primevue/button';
+import PrimeSelect from 'primevue/select';
+import type { RuleBucket, RulesetSource } from '../../../shared';
+
+const { t, locale } = useI18n();
 
 const props = defineProps<{
   modelValue: string;
@@ -101,21 +113,10 @@ const emit = defineEmits<{
   'dirty-input': [];
 }>();
 
-interface RuleBucket {
-  domain: string[];
-  domain_suffix: string[];
-  domain_keyword: string[];
-  domain_regex: string[];
-}
-
 type ManualSectionKey = keyof RuleBucket;
 type SectionKey = 'source' | ManualSectionKey;
 
-interface SourceConfig {
-  url: string;
-  interval_hours: number;
-  last_updated?: string;
-}
+type SourceConfig = RulesetSource;
 
 const sourceUrlsContent = ref('');
 const sourceIntervalHours = ref(0);
@@ -130,25 +131,25 @@ const openSections = ref<Set<SectionKey>>(new Set());
 let lastEmitted: string | null = null;
 let emitTimer: ReturnType<typeof window.setTimeout> | null = null;
 
-const sourceIntervalOptions = [
-  { label: '不自动更新', value: '0' },
-  { label: '每天', value: '24' },
-  { label: '每周', value: '168' },
-  { label: '每月', value: '720' },
-  { label: '每年', value: '8760' },
-];
+const sourceIntervalOptions = computed(() => [
+  { label: t('rulesets.intervalNever'), value: '0' },
+  { label: t('rulesets.intervalDaily'), value: '24' },
+  { label: t('rulesets.intervalWeekly'), value: '168' },
+  { label: t('rulesets.intervalMonthly'), value: '720' },
+  { label: t('rulesets.intervalYearly'), value: '8760' },
+]);
 
-const manualSections: Array<{
+const manualSections = computed<Array<{
   key: ManualSectionKey;
   label: string;
   description: string;
   placeholder: string;
-}> = [
-  { key: 'domain', label: 'DOMAIN', description: '每行一个完整域名。', placeholder: 'example.com\nwww.example.com' },
-  { key: 'domain_suffix', label: 'DOMAIN_SUFFIX', description: '每行一个域名后缀。', placeholder: '.example.com\n.google.com' },
-  { key: 'domain_keyword', label: 'DOMAIN_KEYWORD', description: '每行一个域名关键字。', placeholder: 'google\nyoutube' },
-  { key: 'domain_regex', label: 'DOMAIN_REGEX', description: '每行一个 RE2 域名正则表达式。', placeholder: '^www\\.example\\.com$' },
-];
+}>>(() => [
+  { key: 'domain', label: 'DOMAIN', description: t('rulesets.domainDescription'), placeholder: 'example.com\nwww.example.com' },
+  { key: 'domain_suffix', label: 'DOMAIN_SUFFIX', description: t('rulesets.domainSuffixDescription'), placeholder: '.example.com\n.google.com' },
+  { key: 'domain_keyword', label: 'DOMAIN_KEYWORD', description: t('rulesets.domainKeywordDescription'), placeholder: 'google\nyoutube' },
+  { key: 'domain_regex', label: 'DOMAIN_REGEX', description: t('rulesets.domainRegexDescription'), placeholder: '^www\\.example\\.com$' },
+]);
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -302,12 +303,12 @@ function validateSourceUrls(urls: string): string | null {
     try {
       const url = new URL(value);
       if (url.protocol !== 'https:' || url.username || url.password || !url.hostname || isPrivateHostname(url.hostname)) {
-        return '来源仅支持公网 HTTPS URL。';
+        return t('rulesets.publicHttpsOnly');
       }
     } catch {
-      return '每行必须是完整的 HTTPS URL。';
+      return t('rulesets.invalidSourceUrl');
     }
-    if (seen.has(value)) return '来源 URL 不能重复。';
+    if (seen.has(value)) return t('rulesets.duplicateSourceUrl');
     seen.add(value);
   }
   return null;
@@ -327,7 +328,7 @@ function isPrivateHostname(hostname: string) {
 
 function formatUpdatedAt(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale.value);
 }
 
 function updateSourceInterval(value: string) {

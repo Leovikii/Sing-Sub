@@ -1,0 +1,93 @@
+name: Compile Sing-Sub SRS
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Opaque Sing-Sub build job ID
+        required: true
+        type: string
+      worker_url:
+        description: Sing-Sub Worker origin
+        required: true
+        type: string
+      job_ticket:
+        description: Short-lived build job ticket
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: srs-${{ inputs.job_id }}
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      JOB_ID: ${{ inputs.job_id }}
+      WORKER_URL: ${{ inputs.worker_url }}
+      JOB_TICKET: ${{ inputs.job_ticket }}
+      SING_BOX_VERSION: 1.13.14
+      SING_BOX_ARCHIVE: sing-box-1.13.14-linux-amd64.tar.gz
+      SING_BOX_SHA256: f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697
+    steps:
+      - name: Validate job configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$JOB_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$ ]]
+          [[ "$WORKER_URL" =~ ^https://[^/]+$ ]]
+          test -n "$JOB_TICKET"
+          echo "::add-mask::${JOB_TICKET}"
+
+      - name: Download verified sing-box compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --connect-timeout 10 \
+            "https://github.com/SagerNet/sing-box/releases/download/v${SING_BOX_VERSION}/${SING_BOX_ARCHIVE}" \
+            --output sing-box.tar.gz
+          echo "${SING_BOX_SHA256}  sing-box.tar.gz" | sha256sum --check --strict
+          tar -xzf sing-box.tar.gz
+          mv "sing-box-${SING_BOX_VERSION}-linux-amd64/sing-box" ./sing-box
+          chmod +x ./sing-box
+          ./sing-box version
+
+      - name: Fetch source and compile SRS
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --connect-timeout 10 \
+            --header "Authorization: Bearer ${JOB_TICKET}" \
+            --header "Accept: application/json" \
+            "${WORKER_URL}/internal/srs-jobs/${JOB_ID}/source" \
+            --output source.json
+          ./sing-box rule-set compile source.json -o output.srs
+
+      - name: Publish compiled artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTENT_SHA256=$(sha256sum output.srs | cut -d ' ' -f 1)
+          curl --fail --silent --show-error --retry 3 --connect-timeout 10 \
+            --request PUT \
+            --header "Authorization: Bearer ${JOB_TICKET}" \
+            --header "Content-Type: application/octet-stream" \
+            --header "X-SRS-SHA256: ${CONTENT_SHA256}" \
+            --header "X-Sing-Box-Version: ${SING_BOX_VERSION}" \
+            --data-binary @output.srs \
+            "${WORKER_URL}/internal/srs-jobs/${JOB_ID}/complete"
+
+      - name: Report failure
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          curl --silent --show-error --max-time 20 \
+            --request POST \
+            --header "Authorization: Bearer ${JOB_TICKET}" \
+            --header "Content-Type: application/json" \
+            --data "{\"compilerVersion\":\"${SING_BOX_VERSION}\",\"reason\":\"compiler workflow failed\"}" \
+            "${WORKER_URL}/internal/srs-jobs/${JOB_ID}/failed" || true

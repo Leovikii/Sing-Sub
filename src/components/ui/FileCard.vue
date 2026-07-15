@@ -1,88 +1,69 @@
 <template>
-  <div
-    :class="[
-      'card card-container glass p-5 md:p-6 cursor-pointer select-none relative group border border-transparent hover:border-brand-pink/30 transition-colors duration-300',
-      menuOpen ? 'z-50' : 'z-10 hover:z-20'
-    ]"
+  <article
+    class="card-container group relative cursor-pointer select-none rounded-lg border border-border-base bg-bg-surface p-5 shadow-sm transition-[border-color,box-shadow] hover:border-primary-300 hover:shadow-md md:p-6"
     @click="$emit('click')"
   >
-    <!-- Background highlight on hover -->
-    <div class="absolute inset-0 rounded-xl bg-brand-pink/[0.03] shadow-[inset_0_0_20px_rgba(245,150,170,0.05)] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
-
-    <div class="card-layout relative flex items-center justify-between h-full gap-4 md:gap-6">
-      
-      <!-- 左侧/上部容器：纯粹的信息展示区 -->
-      <div class="card-info flex flex-col min-w-0 flex-1 space-y-2.5 md:space-y-3.5">
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="card-title text-lg font-semibold text-text-primary truncate group-hover:text-brand-pink transition-colors">{{ title }}</span>
+    <div class="card-layout flex h-full items-center justify-between gap-4 md:gap-6">
+      <div class="min-w-0 flex-1 space-y-2">
+        <div class="truncate text-base font-semibold text-text-primary transition-colors group-hover:text-primary-600">
+          {{ title }}
         </div>
-
-        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span v-if="note" class="min-w-0 truncate text-[11px] text-text-muted md:text-xs">{{ note }}</span>
-          <span v-else class="text-[11px] italic text-text-subtle md:text-xs">无备注</span>
-
-          <span v-if="updatedAt" class="card-updated inline-flex shrink-0 items-center gap-2">
-            <span class="card-updated-separator text-text-subtle text-[11px] md:text-xs">·</span>
-            <span class="card-updated-time text-[11px] leading-tight text-text-muted md:text-xs md:whitespace-nowrap">{{ formatDynamicTime(updatedAt) }}</span>
-          </span>
+        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
+          <span class="min-w-0 truncate">{{ note || t('common.noNote') }}</span>
+          <template v-if="updatedAt">
+            <span aria-hidden="true">·</span>
+            <time :datetime="new Date(updatedAt).toISOString()">{{ formatDynamicTime(updatedAt) }}</time>
+          </template>
         </div>
       </div>
 
-      <!-- 右侧/下部容器：纯粹的操作区 -->
-      <div class="card-actions flex items-center gap-2 shrink-0">
-        <slot name="actions"></slot>
-        <ToolbarButton
+      <div class="flex shrink-0 items-center gap-1.5">
+        <slot name="actions" />
+        <Button
+          severity="secondary"
+          text
+          rounded
+          :aria-label="t('common.edit')"
+          v-tooltip.top="t('common.edit')"
           @click.stop="$emit('edit')"
-          :icon="Pencil"
-          label="编辑"
-          size="card"
-          mobileLabel
-        />
-
-        <!-- ⋯ Menu -->
-        <PopoverMenu 
-          v-model:isOpen="menuOpen"
-          wrapperClass="relative flex shrink-0"
-          contentClass="right-0 bottom-full md:bottom-auto md:top-full mb-2 md:mb-0 md:mt-2 min-w-[120px] w-max p-1.5 rounded-xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-lg origin-bottom-right md:origin-top-right flex flex-col gap-0.5"
         >
-          <template #trigger="{ toggle, isOpen }">
-            <ToolbarButton
-              @click.stop="toggle"
-              :icon="MoreHorizontal"
-              label="更多操作"
-              :active="isOpen"
-              size="card"
-              iconOnly
-            />
+          <Pencil :size="18" aria-hidden="true" />
+        </Button>
+        <Button
+          v-if="menuItems.length"
+          severity="secondary"
+          text
+          rounded
+          :aria-label="moreLabel"
+          v-tooltip.top="moreLabel"
+          @click.stop="toggleMenu"
+        >
+          <MoreHorizontal :size="18" aria-hidden="true" />
+        </Button>
+        <Menu ref="menu" :model="menuModel" popup @show="menuOpen = true" @hide="menuOpen = false">
+          <template #item="{ item, props }">
+            <a v-bind="props.action" class="flex items-center gap-2.5" :class="item.danger ? 'text-red-600' : ''">
+              <component :is="item.iconComponent" :size="16" aria-hidden="true" />
+              <span>{{ item.label }}</span>
+            </a>
           </template>
-
-          <template #content="{ close }">
-            <button
-              v-for="(item, idx) in menuItems"
-              :key="idx"
-              @click="handleMenuAction(item.action); close()"
-              :class="['w-full flex items-center gap-2.5 px-3 py-2 text-[13px] font-medium transition-colors cursor-pointer rounded-xl', item.danger ? 'text-danger hover:bg-danger/15' : 'text-text-primary hover:bg-white/10']"
-            >
-              <component :is="item.icon" :size="14" /> 
-              <span class="whitespace-nowrap">{{ item.label }}</span>
-            </button>
-          </template>
-        </PopoverMenu>
+        </Menu>
       </div>
     </div>
-  </div>
+  </article>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Pencil, MoreHorizontal } from 'lucide-vue-next';
-import PopoverMenu from './PopoverMenu.vue';
-import ToolbarButton from './ToolbarButton.vue';
+import { computed, ref, type Component } from 'vue';
+import { useI18n } from 'vue-i18n';
+import Button from 'primevue/button';
+import Menu from 'primevue/menu';
+import { MoreHorizontal, Pencil } from 'lucide-vue-next';
 
-interface MenuItem {
+interface CardMenuItem {
   label: string;
   action: string;
-  icon: any;
+  icon: Component;
   danger?: boolean;
 }
 
@@ -90,7 +71,7 @@ const props = defineProps<{
   title: string;
   note?: string;
   updatedAt?: number;
-  menuItems: MenuItem[];
+  menuItems: CardMenuItem[];
 }>();
 
 const emit = defineEmits<{
@@ -99,25 +80,30 @@ const emit = defineEmits<{
   action: [actionName: string];
 }>();
 
+const { t, locale } = useI18n();
+const menu = ref<InstanceType<typeof Menu> | null>(null);
 const menuOpen = ref(false);
+const moreLabel = computed(() => t('common.moreActions'));
+const menuModel = computed(() => props.menuItems.map(item => ({
+  label: item.label,
+  iconComponent: item.icon,
+  danger: item.danger,
+  command: () => emit('action', item.action),
+})));
 
-function handleMenuAction(action: string) {
-  emit('action', action);
+function toggleMenu(event: Event) {
+  menu.value?.toggle(event);
 }
 
-function formatDynamicTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days > 7) {
-    const d = new Date(ts);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  }
-  if (days >= 1) return `${days}天前`;
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  if (hours >= 1) return `${hours}小时前`;
-  const minutes = Math.floor(diff / (1000 * 60));
-  if (minutes >= 1) return `${minutes}分钟前`;
-  return '刚才更新';
+function formatDynamicTime(timestamp: number): string {
+  const formatter = new Intl.RelativeTimeFormat(locale.value, { numeric: 'auto' });
+  const elapsedMinutes = Math.round((timestamp - Date.now()) / 60_000);
+  if (Math.abs(elapsedMinutes) < 60) return formatter.format(elapsedMinutes, 'minute');
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (Math.abs(elapsedHours) < 24) return formatter.format(elapsedHours, 'hour');
+  const elapsedDays = Math.round(elapsedHours / 24);
+  if (Math.abs(elapsedDays) <= 7) return formatter.format(elapsedDays, 'day');
+  return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp);
 }
 </script>
 
@@ -126,51 +112,10 @@ function formatDynamicTime(ts: number): string {
   container-type: inline-size;
 }
 
-@container (max-width: 30rem) {
-  .card-updated {
-    flex-basis: 100%;
-  }
-
-  .card-updated-separator {
-    display: none;
-  }
-
-  .card-updated-time {
-    overflow-wrap: anywhere;
-    white-space: normal;
-  }
-
-  :deep(.toolbar-button) {
-    width: 2.75rem;
-    padding-inline: 0;
-  }
-
-  :deep(.toolbar-button-label) {
-    display: none;
-  }
-
-  :deep(.toolbar-button-tooltip) {
-    display: block;
-  }
-}
-
-@media (min-width: 768px) {
-  @container (max-width: 30rem) {
-    :deep(.toolbar-button) {
-      width: 2.25rem;
-    }
-  }
-}
-
-@container (max-width: 13rem) {
+@container (max-width: 18rem) {
   .card-layout {
-    flex-direction: column;
     align-items: stretch;
-  }
-
-  .card-actions {
-    width: 100%;
-    justify-content: flex-end;
+    flex-direction: column;
   }
 }
 </style>

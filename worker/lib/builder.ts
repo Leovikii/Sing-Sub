@@ -1,8 +1,4 @@
-import type { Env, Profile } from '../types';
-import { fetchFileContent, type RepoSession } from './github';
-import { pLimit } from './helpers';
-import { fetchPublicJson, parsePublicJsonUrl, readResponseTextLimited } from './rulesets';
-import { configCacheKey, listAllKvKeys } from './kv';
+import type { Profile } from '../../shared';
 
 interface Outbound {
   tag?: string;
@@ -111,48 +107,14 @@ function normalizeArray<T>(data: unknown, key: string): T[] {
   return [];
 }
 
-function sanitizeMetadata(obj: any): any {
-  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-    delete obj.note;
-    delete obj._note;
-  }
-  return obj;
-}
-
-async function fetchJson(url: string): Promise<unknown> {
-  try {
-    const res = await fetchPublicJson(parsePublicJsonUrl(url));
-    if (!res.ok) throw new Error(`Fetch failed: ${url} (${res.status})`);
-    return sanitizeMetadata(JSON.parse(await readResponseTextLimited(res)));
-  } catch (e: any) {
-    throw e;
-  }
-}
-
-async function fetchRepoJson(path: string, session: RepoSession): Promise<unknown> {
-  if (!path) return null;
-  const file = await fetchFileContent(path, session);
-  if (!file) return null;
-  return sanitizeMetadata(JSON.parse(file.content));
-}
-
-export async function loadTemplate(templateUrl: string, session: RepoSession): Promise<unknown> {
-  const isExternalTemplate = templateUrl.startsWith('http://') || templateUrl.startsWith('https://');
-  return isExternalTemplate ? fetchJson(templateUrl) : fetchRepoJson(templateUrl, session);
-}
-
-interface BuildResourceLoader {
+export interface BuildResourceLoader {
   loadTemplate(templateUrl: string): Promise<unknown>;
   loadRepoJson(path: string): Promise<unknown>;
 }
 
 export async function buildProfile(
   profile: Profile,
-  session: RepoSession,
-  resources: BuildResourceLoader = {
-    loadTemplate: (url) => loadTemplate(url, session),
-    loadRepoJson: (path) => fetchRepoJson(path, session),
-  },
+  resources: BuildResourceLoader,
 ): Promise<string> {
   const templateUrl = profile.templateUrl;
   let [template, nodesData] = await Promise.all([
@@ -183,7 +145,7 @@ export async function buildProfile(
   // Step 3: Insert inbound nodes
   if (nodesData) {
     const inboundsArray = normalizeArray<Inbound>(nodesData, 'inbounds');
-    let templateInbounds = Array.isArray(template.inbounds) ? template.inbounds : [];
+    const templateInbounds = Array.isArray(template.inbounds) ? template.inbounds : [];
     if (profile.inboundRules && profile.inboundRules.length > 0) {
       profile.inboundRules.forEach(rule => {
         if (!rule.tag || !rule.filters) return;
@@ -228,46 +190,4 @@ export async function buildProfile(
   }
 
   return JSON.stringify(template, null, 2);
-}
-
-export async function buildAllProfiles(
-  profiles: Profile[],
-  session: RepoSession,
-  subToken: string,
-  env: Env
-): Promise<void> {
-  const currentKeys = new Set(profiles.map(profile =>
-    configCacheKey(subToken, session, profile.name)
-  ));
-  const resourceCache = new Map<string, Promise<unknown>>();
-  const cached = (key: string, loader: () => Promise<unknown>) => {
-    let value = resourceCache.get(key);
-    if (!value) {
-      value = loader();
-      resourceCache.set(key, value);
-    }
-    return value;
-  };
-  const resources: BuildResourceLoader = {
-    loadTemplate: (url) => cached(`template:${url}`, () => loadTemplate(url, session)),
-    loadRepoJson: (path) => cached(`repo:${path}`, () => fetchRepoJson(path, session)),
-  };
-
-  const limit = pLimit(3);
-  const [keys, builtProfiles] = await Promise.all([
-    listAllKvKeys(env, `config:${subToken}:`),
-    Promise.all(profiles.map(profile => limit(async () => ({
-      name: profile.name,
-      config: await buildProfile(profile, session, resources),
-    })))),
-  ]);
-
-  // Publish only after every profile has built successfully, so source errors
-  // cannot leave a mixture of old and new configurations in KV.
-  await Promise.all(builtProfiles.map(({ name, config }) =>
-    env.SESSIONS.put(configCacheKey(subToken, session, name), config)
-  ));
-  await Promise.all(keys.map(async key => {
-    if (!currentKeys.has(key)) await env.SESSIONS.delete(key);
-  }));
 }

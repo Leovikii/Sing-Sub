@@ -1,28 +1,13 @@
+import type { RuleBucket, RulesetMetadata, RulesetSource } from '../../shared';
+
+export type { RuleBucket, RulesetMetadata, RulesetSource } from '../../shared';
+
 export const RULESET_METADATA_KEY = '_sing_sub';
 export const MAX_REMOTE_JSON_BYTES = 5 * 1024 * 1024;
 export const MAX_RULESET_IMPORT_BYTES = MAX_REMOTE_JSON_BYTES;
 
-export interface RuleBucket {
-  domain: string[];
-  domain_suffix: string[];
-  domain_keyword: string[];
-  domain_regex: string[];
-}
-
 const RULE_FIELDS = ['domain', 'domain_suffix', 'domain_keyword', 'domain_regex'] as const;
 type RuleField = typeof RULE_FIELDS[number];
-
-export interface RulesetSource {
-  url: string;
-  interval_hours: number;
-  last_updated?: string;
-}
-
-export interface RulesetMetadata {
-  note?: string;
-  manual: RuleBucket;
-  sources: RulesetSource[];
-}
 
 function emptyBucket(): RuleBucket {
   return { domain: [], domain_suffix: [], domain_keyword: [], domain_regex: [] };
@@ -109,7 +94,7 @@ export async function readResponseTextLimited(response: Response): Promise<strin
     merged.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder('utf-8', { fatal: true }).decode(merged);
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(merged);
 }
 
 export const parseRulesetImportUrl = parsePublicJsonUrl;

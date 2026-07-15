@@ -19,6 +19,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, shallowRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import EditorToolbar from './EditorToolbar.vue';
 
 // CodeMirror Core
@@ -29,6 +30,8 @@ import { search, searchKeymap, openSearchPanel } from '@codemirror/search';
 import { linter, lintKeymap } from '@codemirror/lint';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { oneDark } from '@codemirror/theme-one-dark';
+
+const { locale } = useI18n();
 
 const props = defineProps<{
   modelValue: string;
@@ -46,6 +49,24 @@ const canUndo = ref(false);
 const canRedo = ref(false);
 
 const readOnlyCompartment = new Compartment();
+const localeCompartment = new Compartment();
+
+function editorPhrases(): Record<string, string> {
+  if (locale.value !== 'zh-CN') return {};
+  return {
+    "Find": "查找",
+    "Replace": "替换",
+    "Replace all": "全部替换",
+    "Match case": "区分大小写",
+    "Regexp": "正则表达式",
+    "By word": "全字匹配",
+    "Close": "关闭",
+    "next": "下一个",
+    "previous": "上一个",
+    "replace": "替换",
+    "replace all": "全部替换"
+  };
+}
 
 function getActiveView(): EditorView | null {
   return view.value;
@@ -63,7 +84,7 @@ function formatCode() {
         changes: { from: 0, to: v.state.doc.length, insert: formatted }
       });
     }
-  } catch (e) {
+  } catch {
     // Cannot format invalid JSON, ignore
   }
 }
@@ -236,19 +257,7 @@ function createExtensions() {
       canUndo.value = undoDepth(update.state) > 0;
       canRedo.value = redoDepth(update.state) > 0;
     }),
-    EditorState.phrases.of({
-      "Find": "查找",
-      "Replace": "替换",
-      "Replace all": "全部替换",
-      "Match case": "区分大小写",
-      "Regexp": "正则表达式",
-      "By word": "全字匹配",
-      "Close": "关闭",
-      "next": "下一个",
-      "previous": "上一个",
-      "replace": "替换",
-      "replace all": "全部替换"
-    }),
+    localeCompartment.of(EditorState.phrases.of(editorPhrases())),
     readOnlyCompartment.of(EditorState.readOnly.of(!!props.readonly))
   ];
 
@@ -282,6 +291,15 @@ watch(() => props.readonly, (newVal) => {
   if (v) {
     v.dispatch({
       effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(!!newVal))
+    });
+  }
+});
+
+watch(locale, () => {
+  const v = getActiveView();
+  if (v) {
+    v.dispatch({
+      effects: localeCompartment.reconfigure(EditorState.phrases.of(editorPhrases()))
     });
   }
 });

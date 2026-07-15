@@ -1,42 +1,80 @@
 <template>
-  <div class="max-w-md mx-auto mt-20">
-    <div class="glass p-8 space-y-8 shadow-2xl">
-      <div class="text-center space-y-2">
-        <h2 class="text-2xl font-semibold text-text-primary">连接 GitHub 仓库</h2>
-        <p class="text-sm text-text-muted">关联私有仓库以管理订阅配置</p>
-      </div>
-      <form @submit.prevent="$emit('save')" class="space-y-6">
-        <div class="space-y-4">
-          <Input :modelValue="ownerRepo" @update:modelValue="onOwnerRepoChange" placeholder="owner/repo (如: user/singbox-private)" />
-          <Input :modelValue="setupData.pat" @update:modelValue="update('pat', $event)" type="password" placeholder="GitHub PAT (repo 读写权限)" />
+  <Card class="mx-auto mt-8 w-full max-w-md sm:mt-16">
+    <template #title>
+      <h2 class="text-center text-xl">{{ setupRequired ? t('auth.setupTitle') : t('auth.loginTitle') }}</h2>
+    </template>
+    <template #subtitle>
+      <div class="text-center">{{ setupRequired ? t('auth.setupSubtitle') : t('auth.loginSubtitle') }}</div>
+    </template>
+    <template #content>
+      <form class="space-y-5" @submit.prevent="$emit('save')">
+        <div class="space-y-2">
+          <label for="admin-password" class="settings-label">{{ t('auth.password') }}</label>
+          <Password
+            id="admin-password"
+            :model-value="setupData.adminPassword"
+            :feedback="false"
+            toggle-mask
+            fluid
+            autocomplete="current-password"
+            :placeholder="t('auth.password')"
+            @update:model-value="update('adminPassword', $event)"
+          />
         </div>
-        <Button type="submit" :loading="loading" variant="primary" class="w-full !py-3">
-          登录
+
+        <Accordion v-if="setupRequired" value="">
+          <AccordionPanel value="github-import">
+            <AccordionHeader>{{ t('auth.optionalImport') }}</AccordionHeader>
+            <AccordionContent>
+              <div class="space-y-4 pt-2">
+                <InputText
+                  :model-value="ownerRepo"
+                  :placeholder="t('auth.repository')"
+                  autocomplete="off"
+                  class="w-full"
+                  @update:model-value="onOwnerRepoChange"
+                />
+                <Password
+                  :model-value="setupData.pat || ''"
+                  :feedback="false"
+                  toggle-mask
+                  fluid
+                  autocomplete="new-password"
+                  :placeholder="t('auth.pat')"
+                  @update:model-value="update('pat', $event)"
+                />
+                <Message severity="info" size="small" :closable="false">{{ t('auth.importHint') }}</Message>
+              </div>
+            </AccordionContent>
+          </AccordionPanel>
+        </Accordion>
+
+        <Button type="submit" :loading="loading" class="w-full">
+          {{ setupRequired ? t('auth.setupAction') : t('auth.loginAction') }}
         </Button>
       </form>
-      <div class="border-t border-border-base pt-4 space-y-2">
-        <p class="text-xs text-text-muted leading-relaxed">
-          本站不存储您的 GitHub 密码，PAT 仅用于访问您指定的仓库。
-          建议为 PAT 设置最小权限范围（仅 repo）并定期轮换。
-        </p>
-        <p class="text-xs text-text-muted leading-relaxed">
-          本项目完全开源，建议自行部署使用。
-          <a href="https://github.com/Leovikii/Sing-Sub" target="_blank" rel="noopener" class="text-brand-pink hover:underline">查看源码</a>
-        </p>
-      </div>
-    </div>
-  </div>
+    </template>
+  </Card>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import Input from './ui/Input.vue';
-import Button from './ui/Button.vue';
+import { useI18n } from 'vue-i18n';
+import Accordion from 'primevue/accordion';
+import AccordionContent from 'primevue/accordioncontent';
+import AccordionHeader from 'primevue/accordionheader';
+import AccordionPanel from 'primevue/accordionpanel';
+import Button from 'primevue/button';
+import Card from 'primevue/card';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Password from 'primevue/password';
 import type { SetupData } from '../types';
 
 const props = defineProps<{
   setupData: SetupData;
   loading: boolean;
+  setupRequired: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -44,22 +82,23 @@ const emit = defineEmits<{
   'update:setupData': [value: SetupData];
 }>();
 
+const { t } = useI18n();
 const ownerRepo = ref('');
 
-watch(() => [props.setupData.owner, props.setupData.repo], ([o, r]) => {
-  const combined = o && r ? `${o}/${r}` : o || r;
+watch(() => [props.setupData.owner || '', props.setupData.repo || ''], ([owner, repo]) => {
+  const combined = owner && repo ? `${owner}/${repo}` : owner || repo;
   if (combined !== ownerRepo.value) ownerRepo.value = combined;
 }, { immediate: true });
 
-function onOwnerRepoChange(value: string) {
-  ownerRepo.value = value;
-  const slash = value.indexOf('/');
-  const owner = slash >= 0 ? value.slice(0, slash) : value;
-  const repo = slash >= 0 ? value.slice(slash + 1) : '';
+function onOwnerRepoChange(value: string | undefined) {
+  ownerRepo.value = value || '';
+  const slash = ownerRepo.value.indexOf('/');
+  const owner = slash >= 0 ? ownerRepo.value.slice(0, slash) : ownerRepo.value;
+  const repo = slash >= 0 ? ownerRepo.value.slice(slash + 1) : '';
   emit('update:setupData', { ...props.setupData, owner, repo });
 }
 
-function update(key: keyof SetupData, value: string) {
-  emit('update:setupData', { ...props.setupData, [key]: value });
+function update(key: keyof SetupData, value: string | undefined) {
+  emit('update:setupData', { ...props.setupData, [key]: value || '' });
 }
 </script>

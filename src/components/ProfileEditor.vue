@@ -10,14 +10,16 @@
     @action="handleCardAction"
   >
     <template #actions>
-      <ToolbarButton
+      <Button
         @click.stop="$emit('copyLink', profile.name || '', index)"
-        :icon="copyStatus ? Check : Link2"
-        :label="copyStatus ? '已复制订阅链接' : '订阅'"
-        variant="emphasis"
-        size="card"
-        mobileLabel
-      />
+        outlined
+        class="!min-h-11 md:!min-h-9"
+        :aria-label="copyStatus ? t('profiles.copiedSubscription') : t('profiles.subscription')"
+      >
+        <Check v-if="copyStatus" :size="18" aria-hidden="true" />
+        <Link2 v-else :size="18" aria-hidden="true" />
+        <span>{{ copyStatus ? t('profiles.copiedSubscription') : t('profiles.subscription') }}</span>
+      </Button>
     </template>
   </FileCard>
 
@@ -26,17 +28,16 @@
     @update:isOpen="isOpen = $event"
     :title="localProfileName"
     @update:title="localProfileName = $event"
-    titlePlaceholder="输入配置名称"
+    :titlePlaceholder="t('profiles.name')"
     :note="localProfileNote"
     @update:note="localProfileNote = $event"
     :editableTitle="true"
     :editableNote="true"
-    extension=".json"
     :isDirty="isDirty"
     :isSaving="isSaving || globalBusy"
     :showSave="true"
     :saveDisabled="!isValidProfileName"
-    saveText="保存"
+    :saveText="t('common.save')"
     :showViewToggle="true"
     v-model:viewMode="viewMode"
     @save="handleLocalSave"
@@ -46,9 +47,9 @@
       <!-- Visual Editor -->
       <div v-if="viewMode === 'edit'" class="flex-1 overflow-auto flex flex-col min-h-0">
         <div class="p-5 sm:p-6 space-y-6 flex-1 min-h-0">
-          <ProfileTemplateConfig :profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" :availablePatches="availablePatches" />
-          <ProfileInbounds :profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
-          <ProfileOutbounds :profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
+          <ProfileTemplateConfig v-model:profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" :availablePatches="availablePatches" />
+          <ProfileInbounds v-model:profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
+          <ProfileOutbounds v-model:profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
         </div>
       </div>
 
@@ -57,7 +58,7 @@
         <CodePreview
           :content="previewContent"
           :loading="previewLoading"
-          loadingText="读取中..."
+          :loadingText="t('assets.reading')"
           class="flex-1 min-h-0"
         />
       </div>
@@ -68,9 +69,10 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, defineAsyncComponent } from 'vue';
+import { useI18n } from 'vue-i18n';
+import Button from 'primevue/button';
 import { Trash2, Copy, Link2, Check } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
-import ToolbarButton from './ui/ToolbarButton.vue';
 import EditorModal from './ui/EditorModal.vue';
 import CodePreview from './ui/CodePreview.vue';
 import type { Profile } from '../types';
@@ -79,6 +81,7 @@ import { useApi } from '../composables/useApi';
 const ProfileTemplateConfig = defineAsyncComponent(() => import('./profile/ProfileTemplateConfig.vue'));
 const ProfileInbounds = defineAsyncComponent(() => import('./profile/ProfileInbounds.vue'));
 const ProfileOutbounds = defineAsyncComponent(() => import('./profile/ProfileOutbounds.vue'));
+const { t } = useI18n();
 
 const props = defineProps<{
   profile: Profile;
@@ -99,7 +102,7 @@ const emit = defineEmits<{
   remove: [index: number];
   duplicate: [profile: Profile];
   discard: [profile: Profile];
-  save: [name: string, oldName?: string];
+  save: [profile: Profile, index: number, oldName?: string];
   'update:expanded': [value: boolean];
   status: [type: 'success' | 'warning' | 'error', message: string, duration?: number];
 }>();
@@ -110,10 +113,10 @@ const isOpen = computed({
 });
 
 
-const cardMenuItems = [
-  { label: '复制配置', action: 'duplicate', icon: Copy },
-  { label: '删除配置', action: 'remove', icon: Trash2, danger: true },
-];
+const cardMenuItems = computed(() => [
+  { label: t('profiles.duplicate'), action: 'duplicate', icon: Copy },
+  { label: t('profiles.remove'), action: 'remove', icon: Trash2, danger: true },
+]);
 
 function handleCardAction(action: string) {
   if (action === 'duplicate') emit('duplicate', props.profile);
@@ -163,7 +166,7 @@ async function fetchPreview() {
     const data = await postPreview(localProfile.value);
     previewContent.value = data.content;
   } catch (e: any) {
-    previewContent.value = `// 获取预览失败\n// ${e.message || '未知错误'}`;
+    previewContent.value = `// ${t('profiles.previewFailed')}\n// ${e.message || t('common.unknownError')}`;
   } finally {
     previewLoading.value = false;
   }
@@ -185,7 +188,7 @@ async function fetchTemplateData(url: string) {
   } catch (e: any) {
     if (seq !== fetchTemplateSeq) return;
     console.error('Failed to fetch template', e);
-    emit('status', 'error', '获取模板失败: ' + e.message);
+    emit('status', 'error', `${t('profiles.templateFailed')}: ${e.message}`);
     fetchedTemplateData.value = null;
   }
 }
@@ -203,7 +206,7 @@ async function fetchNodesData(path: string) {
   } catch (e: any) {
     if (seq !== fetchNodesSeq) return;
     console.error('Failed to fetch nodes', e);
-    emit('status', 'error', '获取节点文件失败: ' + e.message);
+    emit('status', 'error', `${t('profiles.nodesFailed')}: ${e.message}`);
     fetchedNodesData.value = null;
   }
 }
@@ -263,7 +266,7 @@ watch(viewMode, (mode) => {
 
 function handleLocalSave() {
   if (!isValidProfileName.value) {
-    emit('status', 'error', '请输入有效的配置名称');
+    emit('status', 'error', t('profiles.invalidName'));
     return;
   }
 
@@ -281,14 +284,6 @@ function handleLocalSave() {
     }
   }
   
-  // Mutate parent profile
-  for (const key in props.profile) {
-    if (Object.prototype.hasOwnProperty.call(props.profile, key)) {
-      delete (props.profile as any)[key];
-    }
-  }
-  Object.assign(props.profile, localProfile.value);
-  
-  emit('save', props.profile.name || '', originalProfileName || undefined);
+  emit('save', JSON.parse(JSON.stringify(localProfile.value)), props.index, originalProfileName || undefined);
 }
 </script>

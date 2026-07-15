@@ -1,12 +1,17 @@
 name = "sing-sub"
 main = "worker/index.ts"
-compatibility_date = "2024-12-01"
+compatibility_date = "2026-07-15"
 workers_dev = false
 
 [assets]
 directory = "./dist"
 not_found_handling = "single-page-application"
 
-[[kv_namespaces]]
-binding = "SESSIONS"
-id = "66594dbcfd284d29918b5e61374c4096"
+[[r2_buckets]]
+binding = "WORKSPACE_BUCKET"
+bucket_name = "sing-sub-data"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.yml"]
+fallthrough = true

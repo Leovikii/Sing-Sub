@@ -51,12 +51,45 @@
   --shadow-brand: 0 0 20px rgba(245, 150, 170, 0.2);
 }
 
+:root {
+  --color-bg-page: #f7f7f8;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #f1f1f3;
+  --color-bg-hover: #e7e7ea;
+  --color-bg-code: #111113;
+  --color-bg-code-toolbar: #09090b;
+  --color-border-base: #dedee3;
+  --color-text-primary: #202024;
+  --color-text-muted: #68686f;
+  --color-text-subtle: #9a9aa2;
+  --color-text-nav: #5f5f67;
+  --color-text-nav-active: #a82f51;
+  color-scheme: light;
+}
+
+.app-dark {
+  --color-bg-page: #121212;
+  --color-bg-surface: #1c1c1e;
+  --color-bg-elevated: #2c2c2e;
+  --color-bg-hover: #3a3a3c;
+  --color-bg-code: #0d0d0d;
+  --color-bg-code-toolbar: #0a0a0a;
+  --color-border-base: #38383a;
+  --color-text-primary: #f5f5f7;
+  --color-text-muted: #a1a1a8;
+  --color-text-subtle: #606067;
+  --color-text-nav: #b5b5bc;
+  --color-text-nav-active: #ffc4d0;
+  color-scheme: dark;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
   background-color: var(--color-bg-page);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
-  color-scheme: dark;
+  letter-spacing: 0;
+  margin: 0;
 }
 
 
@@ -64,10 +97,52 @@ body {
   min-height: 100vh;
 }
 .glass {
-  background: rgba(30, 30, 32, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-list {
+  overflow: hidden;
+  border: 1px solid var(--color-border-base);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+}
+
+.settings-row {
+  display: flex;
+  min-height: 4.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border-base);
+}
+
+.settings-row:last-child {
+  border-bottom: 0;
+}
+
+.settings-label {
+  color: var(--color-text-primary);
+  font-size: 0.925rem;
+  font-weight: 600;
+}
+
+.settings-hint {
+  margin-top: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 639px) {
+  .settings-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

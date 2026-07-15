@@ -2,15 +2,15 @@
   <div class="space-y-4">
     <div class="flex items-center gap-2 mb-2">
       <ArrowUp class="w-4 h-4 text-brand-pink" />
-      <h3 class="font-bold text-text-primary">出站节点 (Outbounds)</h3>
+      <h3 class="font-bold text-text-primary">{{ t('profiles.outbounds') }}</h3>
     </div>
 
     <div v-if="!templateData" class="text-sm text-text-muted bg-bg-elevated/40 border border-border-base rounded-xl p-4 text-center">
-      请先选择配置模板
+      {{ t('profiles.chooseTemplateFirst') }}
     </div>
 
     <div v-else-if="selectorGroups.length === 0" class="text-sm text-text-muted bg-bg-elevated/40 border border-border-base rounded-xl p-4 text-center">
-      该模板中没有 type 为 selector 的出站分组
+      {{ t('profiles.noSelector') }}
     </div>
 
     <div
@@ -27,24 +27,27 @@
           <!-- Edit Mode -->
           <template v-if="isEditing(group.tag)">
             <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex items-center gap-2">
-              <Select
+              <PrimeSelect
                 v-model="getTempFilters(group.tag)[0].action"
-                :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
-                :ariaLabel="`${group.tag} 筛选方式`"
+                :options="filterOptions"
+                option-label="label"
+                option-value="value"
+                :aria-label="`${group.tag} ${t('profiles.filterMode')}`"
                 class="w-28 shrink-0"
               />
-              <Input v-model="getTempFilters(group.tag)[0].keyword" placeholder="关键词，多个用逗号隔开" class="flex-1" />
+              <InputText v-model="getTempFilters(group.tag)[0].keyword" :placeholder="t('profiles.keyword')" class="flex-1" fluid />
             </div>
             
-            <ToolbarButton
+            <Button
               @click="confirmEdit(group.tag)"
-              :icon="Check"
-              label="确认"
-              variant="emphasis"
-              size="card"
+              outlined
+              :aria-label="t('common.confirm')"
               :disabled="!getTempFilters(group.tag)[0].keyword.trim()"
               class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
-            />
+            >
+              <Check :size="18" aria-hidden="true" />
+              <span class="hidden md:inline">{{ t('common.confirm') }}</span>
+            </Button>
           </template>
 
           <!-- Confirmed Mode -->
@@ -61,30 +64,35 @@
                   +{{ matchedNodesByTag[group.tag].length - 10 }}
                 </span>
               </template>
-              <span v-else-if="getRule(group.tag)" class="text-sm text-text-muted italic">无匹配节点</span>
-              <span v-else class="text-sm text-text-muted italic">未配置规则</span>
+              <span v-else-if="getRule(group.tag)" class="text-sm text-text-muted italic">{{ t('profiles.noMatches') }}</span>
+              <span v-else class="text-sm text-text-muted italic">{{ t('profiles.noRule') }}</span>
             </div>
 
             <!-- Actions -->
-            <ToolbarButton
+            <Button
               @click="clearRule(group.tag)"
-              :icon="Trash2"
-              label="删除"
-              variant="danger"
-              size="card"
+              severity="danger"
+              text
+              :aria-label="t('common.delete')"
               class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
-            />
+            >
+              <Trash2 :size="18" aria-hidden="true" />
+              <span class="hidden md:inline">{{ t('common.delete') }}</span>
+            </Button>
           </template>
 
           <template v-else>
             <!-- Insert Button -->
-            <ToolbarButton
+            <Button
               @click="startEdit(group.tag)"
-              :icon="Plus"
-              label="插入节点"
-              size="card"
+              severity="secondary"
+              text
+              :aria-label="t('profiles.insertNodes')"
               class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
-            />
+            >
+              <Plus :size="18" aria-hidden="true" />
+              <span class="hidden md:inline">{{ t('profiles.insertNodes') }}</span>
+            </Button>
           </template>
 
       </div>
@@ -94,15 +102,22 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { ArrowUp, Plus, Trash2, Check } from 'lucide-vue-next';
-import Input from '../ui/Input.vue';
-import Select from '../ui/Select.vue';
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import PrimeSelect from 'primevue/select';
 import NodeMicroCard from '../ui/NodeMicroCard.vue';
-import ToolbarButton from '../ui/ToolbarButton.vue';
 import type { Profile } from '../../types';
 
+const { t } = useI18n();
+const filterOptions = computed(() => [
+  { label: t('profiles.filterInclude'), value: 'include' },
+  { label: t('profiles.filterExclude'), value: 'exclude' },
+]);
+
+const profile = defineModel<Profile>('profile', { required: true });
 const props = defineProps<{
-  profile: Profile;
   templateData: any;
   nodesData: any;
 }>();
@@ -118,13 +133,13 @@ const editingState = ref<Record<string, boolean>>({});
 const tempFilters = ref<Record<string, any[]>>({});
 
 // Initialize empty rules array if missing
-if (!props.profile.rules) {
-  props.profile.rules = [];
+if (!profile.value.rules) {
+  profile.value.rules = [];
 }
 
 // Helper to get rule from profile
 function getRule(tag: string) {
-  return props.profile.rules?.find(r => r.group === tag);
+  return profile.value.rules?.find(r => r.group === tag);
 }
 
 // Check if a group is currently in edit mode
@@ -152,20 +167,20 @@ function startEdit(tag: string) {
 function confirmEdit(tag: string) {
   const filters = getTempFilters(tag).filter(f => f.keyword.trim() !== '');
   
-  if (!props.profile.rules) props.profile.rules = [];
+  if (!profile.value.rules) profile.value.rules = [];
   
-  const existingIndex = props.profile.rules.findIndex(r => r.group === tag);
+  const existingIndex = profile.value.rules.findIndex(r => r.group === tag);
   
   if (filters.length > 0) {
     if (existingIndex >= 0) {
-      props.profile.rules[existingIndex].filters = filters;
+      profile.value.rules[existingIndex].filters = filters;
     } else {
-      props.profile.rules.push({ group: tag, filters });
+      profile.value.rules.push({ group: tag, filters });
     }
   } else {
     // If empty filters, clear the rule
     if (existingIndex >= 0) {
-      props.profile.rules.splice(existingIndex, 1);
+      profile.value.rules.splice(existingIndex, 1);
     }
   }
   
@@ -173,10 +188,10 @@ function confirmEdit(tag: string) {
 }
 
 function clearRule(tag: string) {
-  if (!props.profile.rules) return;
-  const existingIndex = props.profile.rules.findIndex(r => r.group === tag);
+  if (!profile.value.rules) return;
+  const existingIndex = profile.value.rules.findIndex(r => r.group === tag);
   if (existingIndex >= 0) {
-    props.profile.rules.splice(existingIndex, 1);
+    profile.value.rules.splice(existingIndex, 1);
   }
   editingState.value[tag] = false; // Collapse
   tempFilters.value[tag] = [{ action: 'include', keyword: '' }]; // Reset temp

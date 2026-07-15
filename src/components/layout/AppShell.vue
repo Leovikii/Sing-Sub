@@ -1,129 +1,201 @@
 <template>
-  <div class="min-h-screen bg-bg-page">
-    <header
-      class="sticky top-0 z-40 h-16 border-b border-border-base bg-bg-surface md:h-24 md:transition-[margin] md:duration-200 md:ease-out"
-      :class="showNavigation ? (expanded ? 'md:ml-56' : 'md:ml-24') : ''"
+  <div class="min-h-screen bg-bg-page text-text-primary" @keydown.esc="closeMobileNavigation">
+    <aside
+      v-if="props.showNavigation"
+      :aria-hidden="!isDesktop && !mobileNavigationOpen"
+      class="sidebar-motion fixed inset-y-0 left-0 z-40 flex w-[min(86vw,16rem)] flex-col border-r border-border-base bg-bg-surface lg:w-64 lg:shadow-none"
+      :class="{
+        'sidebar-open': isDesktop || mobileNavigationOpen,
+        'sidebar-desktop': isDesktop,
+      }"
     >
-      <div class="flex h-full items-center justify-between px-5 md:px-8">
-        <h1 class="text-lg font-semibold text-text-primary md:text-2xl">{{ pageTitle }}</h1>
-        <button
-          v-if="user"
-          type="button"
-          class="flex min-h-11 min-w-11 items-center justify-center gap-3 rounded-lg text-text-primary transition-colors hover:text-brand-pink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink md:min-h-0 md:min-w-0"
-          @click="$emit('open-settings')"
+      <div class="flex h-16 items-center gap-3 border-b border-border-base px-5">
+        <img src="/favicon.svg" alt="" class="h-9 w-9" />
+        <span class="text-lg font-semibold">{{ t('common.appName') }}</span>
+        <Button
+          severity="secondary"
+          text
+          rounded
+          class="ml-auto lg:!hidden"
+          :aria-label="t('nav.closeMenu')"
+          v-tooltip.bottom="t('nav.closeMenu')"
+          @click="closeMobileNavigation"
         >
-          <span class="hidden text-sm font-medium md:inline">{{ user.login }}</span>
-          <img :src="user.avatar_url" :alt="user.login" class="h-9 w-9 rounded-full border-2 border-border-base md:h-10 md:w-10" />
-        </button>
+          <X :size="20" aria-hidden="true" />
+        </Button>
       </div>
+      <AppNavigation
+        :aria-label="mobileNavigationOpen ? t('nav.mobile') : t('nav.main')"
+        close-on-select
+        class="min-h-0 flex-1 overflow-y-auto p-3"
+        @selected="closeMobileNavigation"
+      />
+      <div class="border-t border-border-base p-3">
+        <Button
+          severity="secondary"
+          text
+          class="w-full justify-start"
+          :aria-label="t('nav.logout')"
+          @click="handleLogout"
+        >
+          <LogOut :size="18" aria-hidden="true" />
+          <span>{{ t('nav.logout') }}</span>
+        </Button>
+      </div>
+    </aside>
+
+    <Transition name="backdrop-fade">
+      <div
+        v-if="props.showNavigation && mobileNavigationOpen"
+        class="fixed inset-0 z-[35] bg-black/55 lg:hidden"
+        aria-hidden="true"
+        @click="closeMobileNavigation"
+      />
+    </Transition>
+
+    <header
+      class="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border-base bg-bg-surface/95 px-4 backdrop-blur lg:px-8"
+      :class="props.showNavigation ? 'lg:ml-64' : ''"
+    >
+      <Button
+        v-if="props.showNavigation"
+        severity="secondary"
+        text
+        rounded
+        class="lg:!hidden"
+        :aria-label="t('nav.openMenu')"
+        v-tooltip.bottom="t('nav.openMenu')"
+        @click="openMobileNavigation"
+      >
+        <Menu :size="20" aria-hidden="true" />
+      </Button>
+      <h1 class="min-w-0 flex-1 truncate text-lg font-semibold">{{ pageTitle }}</h1>
+      <Button
+        v-if="user && props.showNavigation"
+        severity="secondary"
+        text
+        rounded
+        :aria-label="t('nav.repository')"
+        v-tooltip.bottom="user?.login || t('nav.repository')"
+        @click="router.push('/settings/repository')"
+      >
+        <Avatar
+          v-if="user.avatar_url"
+          :image="user.avatar_url"
+          shape="circle"
+          :aria-label="user.login"
+        />
+        <User v-else :size="20" aria-hidden="true" />
+      </Button>
     </header>
 
-    <nav
-      v-if="showNavigation"
-      aria-label="主导航"
-      class="fixed inset-x-0 bottom-0 z-50 flex h-[calc(64px+env(safe-area-inset-bottom))] items-center justify-around gap-1 border-t border-border-base bg-bg-surface/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:inset-x-auto md:bottom-0 md:left-0 md:top-0 md:h-screen md:flex-col md:justify-start md:gap-2 md:border-r md:border-t-0 md:bg-bg-surface md:px-3 md:py-0 md:backdrop-blur-none md:transition-[width,box-shadow] md:duration-200 md:ease-out"
-      :class="[
-        isPanelExpanded ? 'md:w-56' : 'md:w-24',
-        isPanelExpanded && !expanded ? 'md:shadow-[12px_0_32px_rgba(0,0,0,0.24)]' : 'md:shadow-none'
-      ]"
-      @mouseenter="isHoverExpanded = true"
-      @mouseleave="isHoverExpanded = false"
-    >
-      <div class="hidden h-24 shrink-0 items-center justify-start overflow-hidden border-b border-border-base md:flex md:w-full">
-        <div class="flex h-24 w-[72px] shrink-0 items-center justify-center">
-          <img src="/favicon.svg" alt="Sing Sub" class="h-11 w-11 shrink-0" />
-        </div>
-        <span v-if="showLabels" class="whitespace-nowrap text-xl font-semibold text-text-primary">
-          Sing Sub
-        </span>
-      </div>
-
-      <div class="contents md:mt-4 md:flex md:w-full md:flex-col md:gap-2">
-        <AppNavigationItem label="配置" :icon="Settings2" :active="activeTab === 'config'" :show-label="showLabels" @select="$emit('update:activeTab', 'config')" />
-        <AppNavigationItem label="组件" :icon="Box" :active="activeTab === 'assets'" :show-label="showLabels" @select="$emit('update:activeTab', 'assets')" />
-      </div>
-
-      <div class="flex flex-1 justify-center md:mt-auto md:w-full md:flex-none">
-        <AppNavigationItem label="设置" :icon="User" :active="activeTab === 'settings'" :show-label="showLabels" @select="$emit('update:activeTab', 'settings')" />
-      </div>
-      <button
-        type="button"
-        class="hidden h-12 w-full items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg-elevated hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-pink md:inline-flex"
-        :title="expanded ? '折叠侧栏' : '展开侧栏'"
-        :aria-label="expanded ? '折叠侧栏' : '展开侧栏'"
-        @click="togglePanel"
-      >
-        <PanelLeft :size="18" aria-hidden="true" />
-      </button>
-    </nav>
-
-    <main
-      class="min-h-[calc(100dvh-4rem)] pb-[calc(80px+env(safe-area-inset-bottom))] md:min-h-[calc(100dvh-6rem)] md:pb-0 md:transition-[margin] md:duration-200 md:ease-out"
-      :class="showNavigation ? (expanded ? 'md:ml-56' : 'md:ml-24') : ''"
-    >
+    <main :class="props.showNavigation ? 'lg:ml-64' : ''" class="min-h-[calc(100dvh-4rem)]">
       <slot />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
-import { Box, PanelLeft, Settings2, User } from 'lucide-vue-next';
-import AppNavigationItem from './AppNavigationItem.vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import { usePrimeVue } from 'primevue/config';
+import Avatar from 'primevue/avatar';
+import Button from 'primevue/button';
+import { LogOut, Menu, User, X } from 'lucide-vue-next';
+import { primeVueLocales } from '../../i18n/primevue';
+import { usePreferencesStore } from '../../stores/preferences';
+import AppNavigation from './AppNavigation.vue';
 import type { GithubUser } from '../../types';
 
 const props = defineProps<{
   user: GithubUser | null;
-  activeTab: 'config' | 'assets' | 'settings';
-  expanded: boolean;
   showNavigation: boolean;
 }>();
 
 const emit = defineEmits<{
-  'open-settings': [];
-  'update:activeTab': [value: 'config' | 'assets' | 'settings'];
-  'update:expanded': [value: boolean];
+  logout: [];
 }>();
 
-const titles = { config: '配置', assets: '组件', settings: '设置' } as const;
-const pageTitle = computed(() => props.showNavigation ? titles[props.activeTab] : 'Sing Sub');
-const isHoverExpanded = ref(false);
-const isPanelExpanded = ref(props.expanded);
-const showLabels = ref(props.expanded);
-const targetExpanded = computed(() => props.expanded || isHoverExpanded.value);
-let labelTimer: ReturnType<typeof window.setTimeout> | null = null;
+const route = useRoute();
+const router = useRouter();
+const { t } = useI18n();
+const primevue = usePrimeVue();
+const preferences = usePreferencesStore();
+const mobileNavigationOpen = ref(false);
+const isDesktop = ref(typeof window === 'undefined' || window.matchMedia('(min-width: 1024px)').matches);
+const pageTitle = computed(() => t(String(route.meta.titleKey || 'common.appName')));
+let mediaQuery: MediaQueryList | null = null;
 
-function clearTransitionWork() {
-  if (labelTimer !== null) {
-    window.clearTimeout(labelTimer);
-    labelTimer = null;
-  }
+function updateViewport() {
+  isDesktop.value = mediaQuery?.matches ?? false;
+  if (isDesktop.value) closeMobileNavigation();
 }
 
-function expandPanel() {
-  clearTransitionWork();
-  isPanelExpanded.value = true;
-  labelTimer = window.setTimeout(() => {
-    showLabels.value = true;
-    labelTimer = null;
-  }, 100);
+function openMobileNavigation() {
+  mobileNavigationOpen.value = true;
 }
 
-function collapsePanel() {
-  clearTransitionWork();
-  showLabels.value = false;
-  isPanelExpanded.value = false;
+function closeMobileNavigation() {
+  mobileNavigationOpen.value = false;
 }
 
-function togglePanel() {
-  isHoverExpanded.value = false;
-  emit('update:expanded', !props.expanded);
+function handleLogout() {
+  closeMobileNavigation();
+  emit('logout');
 }
 
-watch(targetExpanded, (shouldExpand) => {
-  if (shouldExpand) expandPanel();
-  else collapsePanel();
+watch(() => route.fullPath, closeMobileNavigation);
+
+onMounted(() => {
+  mediaQuery = window.matchMedia('(min-width: 1024px)');
+  mediaQuery.addEventListener('change', updateViewport);
+  updateViewport();
 });
 
-onUnmounted(clearTransitionWork);
+onUnmounted(() => {
+  mediaQuery?.removeEventListener('change', updateViewport);
+});
+
+watch(() => preferences.locale, (locale) => {
+  primevue.config.locale = primeVueLocales[locale];
+}, { immediate: true });
 </script>
+
+<style scoped>
+.sidebar-motion {
+  pointer-events: none;
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 200ms ease-out, visibility 0s linear 200ms;
+}
+
+.sidebar-motion.sidebar-open {
+  pointer-events: auto;
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 200ms ease-out, visibility 0s linear 0s;
+}
+
+.sidebar-motion.sidebar-open:not(.sidebar-desktop) {
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+
+.backdrop-fade-enter-active,
+.backdrop-fade-leave-active {
+  transition: opacity 180ms ease;
+}
+
+.backdrop-fade-enter-from,
+.backdrop-fade-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-motion,
+  .backdrop-fade-enter-active,
+  .backdrop-fade-leave-active {
+    transition: none !important;
+  }
+}
+</style>

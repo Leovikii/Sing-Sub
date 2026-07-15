@@ -1,140 +1,106 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div
-        v-if="isOpen"
-        class="fixed inset-0 z-[60] flex items-end justify-center bg-bg-page/85 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:items-center md:p-6"
-        @click.self="handleBackdropClick"
-        @keydown.esc="handleEscapeKey"
-      >
-        <div
-          role="dialog"
-          aria-modal="true"
-          :aria-label="title || '编辑窗口'"
-          tabindex="-1"
-          ref="dialogRef"
-          class="modal-panel relative flex h-full max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border-base bg-bg-surface shadow-xl outline-none md:h-[88dvh] md:max-h-[56rem] md:max-w-4xl md:rounded-2xl"
-          @keydown.tab="handleTabKey"
-        >
-          <!-- Header -->
-          <div class="flex items-center justify-between gap-2 p-3 md:p-4 border-b border-border-base bg-bg-code-toolbar shrink-0 z-10">
-            <div class="flex flex-col min-w-0 flex-1">
-              <slot name="title">
-                <!-- Filename area -->
-                <div class="flex items-baseline min-w-0">
-                  <div
-                    class="relative inline-flex min-w-[2ch]"
-                    :class="editableTitle && viewMode !== 'preview' && extension ? 'max-w-[calc(100%-40px)]' : 'max-w-full'"
-                  >
-                    <span class="invisible overflow-hidden whitespace-pre pr-0.5 text-[15px] font-bold md:text-[16px]">{{ title || titlePlaceholder || 'untitled' }}</span>
-                    <input
-                      v-if="editableTitle && viewMode !== 'preview'"
-                      :value="title"
-                      @input="$emit('update:title', ($event.target as HTMLInputElement).value)"
-                      class="absolute inset-0 bg-transparent text-text-primary font-bold outline-none text-[15px] md:text-[16px] w-full truncate placeholder:text-text-subtle"
-                      :placeholder="titlePlaceholder || '输入名称'"
-                    />
-                    <span v-else class="absolute inset-0 text-text-primary font-bold text-[15px] md:text-[16px] truncate">{{ title || 'untitled' }}</span>
-                  </div>
-                  <span
-                    v-if="editableTitle && viewMode !== 'preview' && extension"
-                    class="ml-0.5 shrink-0 select-none font-mono text-[11px] text-text-muted"
-                  >{{ extension }}</span>
-                </div>
-
-                <!-- Note area -->
-                <div v-if="editableNote !== false || (viewMode === 'preview' && note)" class="flex items-center min-w-0 mt-0.5">
-                  <span class="text-text-muted font-medium text-[12px] shrink-0 mr-1.5 select-none">备注</span>
-                  <input
-                    v-if="editableNote !== false && viewMode !== 'preview'"
-                    :value="note"
-                    @input="$emit('update:note', ($event.target as HTMLInputElement).value)"
-                    class="bg-transparent text-text-muted hover:text-text-primary focus:text-text-primary font-medium outline-none text-[12px] min-w-[60px] flex-1 truncate transition-colors placeholder:text-text-subtle"
-                    placeholder="未添加..."
-                  />
-                  <span v-else class="text-text-muted font-medium text-[12px] min-w-[60px] flex-1 truncate">{{ note || '未添加' }}</span>
-                </div>
-              </slot>
-            </div>
-            
-            <div class="flex items-center gap-1.5 md:gap-2 shrink-0">
-              <slot name="header-actions"></slot>
-
-              <ToolbarButton
-                v-if="showSave"
-                :icon="Save"
-                :label="saveText"
-                variant="primary"
-                :disabled="viewMode === 'preview' || !isDirty || isSaving || saveDisabled"
-                :loading="isSaving"
-                :class="viewMode === 'preview' ? 'invisible pointer-events-none' : ''"
-                @click="$emit('save')"
+  <Dialog
+    :visible="isOpen"
+    modal
+    :draggable="false"
+    :closable="false"
+    :dismissable-mask="false"
+    :close-on-escape="false"
+    class="editor-dialog"
+    :pt="{
+      root: { class: '!flex !flex-col !overflow-hidden w-[min(96vw,64rem)] h-[min(88dvh,56rem)] max-h-[56rem] max-sm:!m-0 max-sm:!h-dvh max-sm:!max-h-dvh max-sm:!w-screen max-sm:!rounded-none' },
+      header: { class: '!relative !z-10 !shrink-0 !border-b !border-border-base !bg-bg-surface !p-3 sm:!p-4' },
+      content: { class: '!relative !z-0 !flex !min-h-0 !flex-1 !flex-col !overflow-hidden !p-0' },
+    }"
+    @update:visible="onDialogVisible"
+  >
+    <template #header>
+      <div class="editor-header-grid min-w-0 flex-1">
+        <div class="editor-title min-w-0">
+          <slot name="title">
+            <div class="flex min-w-0 items-center gap-1">
+              <InputText
+                v-if="editableTitle && viewMode !== 'preview'"
+                :model-value="title"
+                :placeholder="titlePlaceholder || 'untitled'"
+                class="min-w-0 flex-1 font-semibold"
+                @update:model-value="$emit('update:title', $event || '')"
               />
-
-              <!-- Keep the mode switch at the trailing edge of the action group. -->
-              <SegmentedControl
-                v-if="showViewToggle"
-                :modelValue="viewMode ?? 'edit'"
-                @update:modelValue="$emit('update:viewMode', $event as 'preview' | 'edit')"
-                :options="viewModeOptions"
-              />
-              <PopoverMenu
-                v-model:isOpen="showUnsavedConfirm"
-                wrapperClass="relative flex"
-                contentClass="right-0 top-full mt-2 w-[220px] p-3 rounded-xl bg-bg-elevated/95 backdrop-blur-xl border border-white/10 shadow-lg origin-top-right flex flex-col gap-2"
-              >
-                <template #trigger="{ toggle, isOpen }">
-                  <ToolbarButton
-                    :icon="X"
-                    variant="danger"
-                    :active="isOpen"
-                    title="关闭"
-                    @click="handleCloseClick(toggle)"
-                  />
-                </template>
-
-                <template #content="{ close }">
-                  <div class="flex items-center gap-1.5 text-danger">
-                    <AlertTriangle :size="14" />
-                    <span class="text-[13px] font-bold">未保存的修改</span>
-                  </div>
-                  <span class="text-text-muted text-[12px] leading-relaxed">如果关闭，您刚刚修改的内容将会丢失。</span>
-                  <div class="flex items-center gap-2 mt-1">
-                    <button @click.stop="close" class="flex-1 px-0 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-text-primary text-[12px] font-medium transition-colors cursor-pointer">取消</button>
-                    <button @click.stop="handleConfirmClose" class="flex-1 px-0 py-1.5 rounded-lg bg-danger/15 hover:bg-danger/25 text-danger text-[12px] font-medium transition-colors cursor-pointer">放弃修改</button>
-                  </div>
-                </template>
-              </PopoverMenu>
+              <span v-else class="truncate text-base font-semibold">{{ title || 'untitled' }}</span>
+              <code v-if="editableTitle && viewMode !== 'preview' && extension" class="shrink-0 text-xs text-text-muted">{{ extension }}</code>
             </div>
-          </div>
+          </slot>
+        </div>
 
-          <!-- Body -->
-          <div class="flex-1 overflow-hidden relative flex flex-col min-h-[50vh]">
-            <slot></slot>
-          </div>
+        <div v-if="editableNote !== false || note" class="editor-note min-w-0">
+          <InputText
+            v-if="editableNote !== false && viewMode !== 'preview'"
+            :model-value="note"
+            :placeholder="t('common.note')"
+            :aria-label="t('common.note')"
+            class="w-full"
+            @update:model-value="$emit('update:note', $event || '')"
+          />
+          <span v-else class="block truncate text-sm text-text-muted">{{ note || t('common.noNote') }}</span>
+        </div>
+
+        <div class="editor-actions flex shrink-0 items-center justify-end gap-2">
+          <slot name="header-actions" />
+          <SelectButton
+            v-if="showViewToggle"
+            :model-value="viewMode || 'edit'"
+            :options="viewModeOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            class="shrink-0"
+            @update:model-value="$emit('update:viewMode', $event as 'preview' | 'edit')"
+          >
+            <template #option="{ option }">
+              <component :is="option.icon" :size="15" aria-hidden="true" />
+              <span>{{ option.label }}</span>
+            </template>
+          </SelectButton>
+
+          <Button
+            v-if="showSave && viewMode !== 'preview'"
+            :loading="isSaving"
+            :disabled="!isDirty || isSaving || saveDisabled"
+            :aria-label="saveText || t('common.save')"
+            @click="$emit('save')"
+          >
+            <Save :size="17" aria-hidden="true" />
+            <span class="hidden sm:inline">{{ saveText || t('common.save') }}</span>
+          </Button>
+          <Button
+            severity="secondary"
+            text
+            rounded
+            :aria-label="t('common.close')"
+            v-tooltip.bottom="t('common.close')"
+            @click="requestClose"
+          >
+            <X :size="19" aria-hidden="true" />
+          </Button>
         </div>
       </div>
-    </Transition>
-  </Teleport>
+    </template>
+
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <slot />
+    </div>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
-import { X, Save, Eye, Pencil, AlertTriangle } from 'lucide-vue-next';
-import { nextTick, onUnmounted, ref, watch } from 'vue';
-import PopoverMenu from './PopoverMenu.vue';
-import SegmentedControl from './SegmentedControl.vue';
-import ToolbarButton from './ToolbarButton.vue';
-
-const showUnsavedConfirm = ref(false);
-const dialogRef = ref<HTMLElement | null>(null);
-let previouslyFocused: HTMLElement | null = null;
-let backgroundRoot: HTMLElement | null = null;
-let backgroundWasInert = false;
-
-const viewModeOptions = [
-  { value: 'preview', label: '预览', icon: Eye },
-  { value: 'edit', label: '编辑', icon: Pencil },
-];
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useConfirm } from 'primevue/useconfirm';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
+import InputText from 'primevue/inputtext';
+import SelectButton from 'primevue/selectbutton';
+import { Eye, Pencil, Save, X } from 'lucide-vue-next';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -154,129 +120,73 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:isOpen', value: boolean): void;
-  (e: 'update:title', value: string): void;
-  (e: 'update:note', value: string): void;
-  (e: 'update:viewMode', value: 'preview' | 'edit'): void;
-  (e: 'save'): void;
-  (e: 'close'): void;
+  (event: 'update:isOpen', value: boolean): void;
+  (event: 'update:title', value: string): void;
+  (event: 'update:note', value: string): void;
+  (event: 'update:viewMode', value: 'preview' | 'edit'): void;
+  (event: 'save'): void;
+  (event: 'close'): void;
 }>();
 
-function handleCloseClick(toggleFn: () => void) {
-  if (props.isDirty) {
-    toggleFn();
-  } else {
-    handleConfirmClose();
-  }
-}
+const { t } = useI18n();
+const confirm = useConfirm();
+const viewModeOptions = computed(() => [
+  { value: 'edit', label: t('common.edit'), icon: Pencil },
+  { value: 'preview', label: t('common.preview'), icon: Eye },
+]);
 
-function handleConfirmClose() {
-  showUnsavedConfirm.value = false;
+function close() {
   emit('close');
   emit('update:isOpen', false);
 }
 
-function handleBackdropClick() {
-  if (props.isDirty) {
-    showUnsavedConfirm.value = true;
-  } else {
-    handleConfirmClose();
-  }
-}
-
-function handleEscapeKey() {
-  if (showUnsavedConfirm.value) {
-    showUnsavedConfirm.value = false;
+function requestClose() {
+  if (!props.isDirty) {
+    close();
     return;
   }
-  handleBackdropClick();
+  confirm.require({
+    header: t('common.unsavedTitle'),
+    message: t('common.unsavedMessage'),
+    rejectLabel: t('common.cancel'),
+    acceptLabel: t('common.discard'),
+    acceptClass: 'p-button-danger',
+    accept: close,
+  });
 }
 
-function getFocusableElements() {
-  if (!dialogRef.value) return [];
-  const selector = [
-    'button:not([disabled])',
-    'input:not([disabled])',
-    'textarea:not([disabled])',
-    'select:not([disabled])',
-    'a[href]',
-    '[tabindex]:not([tabindex="-1"])',
-  ].join(',');
-  return Array.from(dialogRef.value.querySelectorAll<HTMLElement>(selector))
-    .filter(element => !element.hidden && element.getAttribute('aria-hidden') !== 'true' && element.getClientRects().length > 0);
+function onDialogVisible(visible: boolean) {
+  if (!visible) requestClose();
 }
-
-function handleTabKey(event: KeyboardEvent) {
-  const focusable = getFocusableElements();
-  if (focusable.length === 0) {
-    event.preventDefault();
-    dialogRef.value?.focus();
-    return;
-  }
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
-function setBackgroundInert(inert: boolean) {
-  if (inert) {
-    backgroundRoot = document.getElementById('app');
-    backgroundWasInert = backgroundRoot?.inert ?? false;
-    if (backgroundRoot) backgroundRoot.inert = true;
-  } else if (backgroundRoot) {
-    backgroundRoot.inert = backgroundWasInert;
-    backgroundRoot = null;
-  }
-}
-
-watch(() => props.isOpen, (open) => {
-  if (open) {
-    previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setBackgroundInert(true);
-    nextTick(() => {
-      dialogRef.value?.focus();
-    });
-  } else {
-    setBackgroundInert(false);
-    const focusTarget = previouslyFocused;
-    previouslyFocused = null;
-    nextTick(() => {
-      if (focusTarget?.isConnected) focusTarget.focus();
-    });
-  }
-});
-
-onUnmounted(() => setBackgroundInert(false));
 </script>
 
 <style scoped>
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.25s ease;
+.editor-header-grid {
+  display: grid;
+  grid-template-areas: "title note actions";
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 18rem) auto;
+  align-items: center;
+  gap: 0.5rem;
 }
-.modal-enter-active .modal-panel,
-.modal-leave-active .modal-panel {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+.editor-title {
+  grid-area: title;
 }
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
+
+.editor-note {
+  grid-area: note;
 }
-.modal-enter-from .modal-panel,
-.modal-leave-to .modal-panel {
-  transform: translateY(15px) scale(0.99);
+
+.editor-actions {
+  grid-area: actions;
 }
-@media (max-width: 768px) {
-  .modal-enter-from .modal-panel,
-  .modal-leave-to .modal-panel {
-    transform: translateY(100%);
-    opacity: 0;
+
+@media (max-width: 640px) {
+  .editor-header-grid {
+    grid-template-areas:
+      "title actions"
+      "note note";
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 </style>
