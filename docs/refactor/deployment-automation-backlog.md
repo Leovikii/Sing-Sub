@@ -29,7 +29,10 @@ Release Action 只负责生成可信发布物，不接触任何用户 Cloudflare
 2. 选择 Cloudflare account、Worker 名称、R2 bucket 和 workers.dev/custom domain/Route；
 3. 交互输入管理员口令，在本机内存生成两个独立 signing secret；
 4. 创建或确认 R2、上传 Secrets、执行 dry-run、显式确认后部署；
-5. 访问 health/bootstrap endpoint，记录 Worker version ID 和本地非敏感 deployment manifest。
+5. 访问 health/bootstrap endpoint，记录 Worker version ID 和本地非敏感 deployment manifest；
+6. 打开 WebUI，以管理员口令创建空 `primary` workspace；GitHub 仓库、PAT、sync 和 SRS 均在部署后按需连接，不进入默认初始化主流程。
+
+该简化流程已由 ADR-045 接受，但当前 Beta 代码仍保留 WebUI 首次登录时的可选 GitHub 导入；只有部署助手、fresh-account smoke 和迁移说明齐备后才修改初始化实现。
 
 更新流程：
 

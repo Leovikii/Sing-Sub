@@ -14,5 +14,5 @@ export interface AuthTokenService {
   issueSession(claims: SessionTokenClaims): Promise<string>;
   verifySession(token: string, expectedAuthVersion: number): Promise<SessionTokenClaims | null>;
   issueSubscription(claims: SubscriptionTokenClaims): Promise<string>;
-  verifySubscription(token: string, expectedTokenVersion: number): Promise<SubscriptionTokenClaims | null>;
+  verifySubscription(token: string, expected: SubscriptionTokenClaims): Promise<SubscriptionTokenClaims | null>;
 }

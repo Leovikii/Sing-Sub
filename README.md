@@ -24,7 +24,7 @@ Browser -> Cloudflare Worker -> private R2 workspace/revisions/artifacts
 - Public source rule set: `/rules/{ruleset}.json`
 - Optional compiled rule set: `/rules/{ruleset}.srs`
 
-The JSON token is a bearer credential and must not be shared. SRS links intentionally contain no JSON subscription token.
+The private configuration token uses the compact `s2.<22-char-tag>` format. It remains a bearer credential and must not be shared. SRS links intentionally contain no JSON subscription token.
 
 ## Prerequisites
 

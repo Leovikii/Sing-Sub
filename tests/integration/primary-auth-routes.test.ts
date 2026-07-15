@@ -79,6 +79,7 @@ describe('primary workspace auth routes', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Set-Cookie')).toContain('__Host-sing-sub-session=');
     expect(fetchMock).not.toHaveBeenCalled();
+    expect((await data(response) as { subToken: string }).subToken).toMatch(/^s2\.[a-zA-Z0-9_-]{22}$/);
     await expect(new R2WorkspaceStore(bucket).read('primary')).resolves.toMatchObject({
       snapshot: {
         settings: { userLogin: 'Administrator', authVersion: 1, tokenVersion: 1 },
@@ -293,6 +294,12 @@ describe('primary workspace auth routes', () => {
     const loginData = await data(login) as { subToken: string };
     const cookie = login.headers.get('Set-Cookie')!.split(';')[0];
     const subscriptionUrl = `https://example.com/sub/${loginData.subToken}/default.json`;
+
+    const legacyTokenResponse = await worker.fetch(new Request(
+      'https://example.com/sub/v1.legacy.payload/default.json',
+      { headers: { 'User-Agent': 'sing-box/1.12' } },
+    ), env);
+    expect(legacyTokenResponse.status).toBe(404);
 
     const first = await worker.fetch(new Request(subscriptionUrl, {
       headers: { 'User-Agent': 'sing-box/1.12' },

@@ -26,7 +26,7 @@ Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org
 - 公开规则集 JSON：`/rules/{ruleset}.json`
 - 可选 SRS：`/rules/{ruleset}.srs`
 
-配置订阅 Token 是 bearer credential，不应公开。规则集 JSON/SRS 链接不包含配置订阅 Token。
+私有配置订阅使用紧凑的 `s2.<22-char-tag>` Token。它仍是 bearer credential，不应公开；规则集 JSON/SRS 链接不包含配置订阅 Token。
 
 ## 前置条件
 

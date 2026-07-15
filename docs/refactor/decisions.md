@@ -44,6 +44,8 @@
 | ADR-038 | ACCEPTED | GitHub sync 使用安全方向同步 | 保留 base/local/remote 防误覆盖，但第一版不自动逐文件合并；冲突时只允许显式整侧覆盖。 |
 | ADR-042 | ACCEPTED | 重构完成后进入 Beta 稳定阶段，设置 `3.0.0` 发布门禁 | 部署产品化、补丁机制和前端反馈仍需要真实使用验证，不能把架构完成等同于正式版完成。 |
 | ADR-043 | PROPOSED | 用 target adapter 取代日常通用 patch DSL | Momo 适配是明确目标；typed adapter 比任意 JSON 操作符更容易理解、校验和测试。 |
+| ADR-044 | ACCEPTED | 私有订阅直接切换为 25 字符确定性短 Token | 单 workspace 不需要在 URL 重复携带 claims；128-bit HMAC tag 保留轮换和隔离能力并显著缩短链接。 |
+| ADR-045 | ACCEPTED | Beta 初始化目标由本地部署助手承担 Secret 与 Cloudflare 资源配置 | WebUI 默认只初始化空 workspace，GitHub 后连；本轮只记录方案，不修改现有初始化实现。 |
 
 ## ADR-002：PrimeVue 版本政策
 
@@ -210,6 +212,27 @@
 - 候选方向是保留一份基础模板与节点集，由 Profile 选择 `native`、`momo` 等 target；target 使用 typed options 和确定性 adapter 生成最终配置。
 - 在接受该 ADR 前，需要收集一份可运行的 Momo 基础配置、现有 patch 及期望产物，明确哪些字段固定转换、哪些允许用户配置、adapter 在节点注入前后哪个阶段执行。
 - 迁移期间不得直接破坏已有 Profile；完成样例测试与迁移设计后，再决定是否移除 patch 资源页、`patchUrl` 和通用 DSL。
+
+## ADR-044：确定性短订阅 Token
+
+状态：ACCEPTED
+日期：2026-07-15
+
+- 私有配置订阅 Token 直接切换为 `s2.<22-char-tag>`，总长 25 字符；tag 是 HMAC-SHA-256 的前 128 bits。
+- HMAC 输入绑定 `sing-sub:subscription-token:v2` domain、workspace ID、workspace `tokenVersion` 和 `subscription` purpose。Token 本身不携带 JSON payload、workspace 名称或版本号明文。
+- 固定 `primary` workspace 允许 Worker 读取 current revision 后重算期望 tag；不需要 KV token index、随机 token 存储或额外 R2 private metadata。
+- 设置页轮换继续递增 `tokenVersion`；Secret 轮换同样使旧链接失效。相同 Secret 与 claims 确定性产生相同 Token。
+- 不兼容旧 `v1.payload.signature` 格式。部署该版本后所有旧私有配置链接立即失效，用户必须从 WebUI 重新复制。
+
+## ADR-045：Beta 初始化简化目标
+
+状态：ACCEPTED
+日期：2026-07-15
+
+- 普通用户未来从 Release 启动本地 Node CLI/薄 PowerShell 助手，由助手完成 Wrangler OAuth、account/Worker/R2/domain 选择、管理员口令输入、两个 signing secret 的本机内存生成与上传、dry-run 和显式部署。
+- 部署后 WebUI 默认只以管理员口令创建空 `primary` workspace；GitHub 导入、sync 和 SRS 连接进入仓库设置，不再作为首次初始化主流程。
+- 助手不得把管理员口令或 signing secret 写入仓库、命令参数、日志或非敏感 deployment manifest。
+- 本 ADR 只确认 Phase 9 目标流程；本次短 Token 优化不修改现有 `handleLogin`、初始化表单或 GitHub 可选导入代码。
 
 ## ADR-027：免费额度策略
 

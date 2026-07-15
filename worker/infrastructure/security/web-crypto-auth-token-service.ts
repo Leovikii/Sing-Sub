@@ -6,6 +6,10 @@ import type {
 import { canonicalJson } from '../../domain/revisions/canonical-json';
 
 const TOKEN_VERSION = 'v1';
+const SUBSCRIPTION_TOKEN_VERSION = 's2';
+const SUBSCRIPTION_TOKEN_TAG_BYTES = 16;
+const SUBSCRIPTION_TOKEN_PATTERN = /^s2\.([a-zA-Z0-9_-]{22})$/;
+const SUBSCRIPTION_TOKEN_DOMAIN = 'sing-sub:subscription-token:v2';
 const MINIMUM_SECRET_BYTES = 32;
 const MAX_TOKEN_LENGTH = 4096;
 const SAFE_WORKSPACE_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
@@ -32,6 +36,15 @@ function fromBase64Url(value: string): Uint8Array | null {
   } catch {
     return null;
   }
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  let difference = 0;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    difference |= left[index] ^ right[index];
+  }
+  return difference === 0;
 }
 
 function isExactObject(value: unknown, keys: string[]): value is Record<string, unknown> {
@@ -85,13 +98,20 @@ export class WebCryptoAuthTokenService implements AuthTokenService {
   issueSubscription(claims: SubscriptionTokenClaims): Promise<string> {
     const parsed = parseSubscriptionClaims(claims);
     if (!parsed) throw new Error('Invalid subscription token claims');
-    return this.sign(parsed, this.subscriptionKey);
+    return this.issueShortSubscriptionToken(parsed);
   }
 
-  async verifySubscription(token: string, expectedTokenVersion: number): Promise<SubscriptionTokenClaims | null> {
-    const claims = parseSubscriptionClaims(await this.verify(token, this.subscriptionKey));
-    if (!claims || claims.tokenVersion !== expectedTokenVersion) return null;
-    return claims;
+  async verifySubscription(
+    token: string,
+    expected: SubscriptionTokenClaims,
+  ): Promise<SubscriptionTokenClaims | null> {
+    const claims = parseSubscriptionClaims(expected);
+    const match = SUBSCRIPTION_TOKEN_PATTERN.exec(token);
+    if (!claims || !match) return null;
+    const actual = fromBase64Url(match[1]);
+    if (!actual || actual.byteLength !== SUBSCRIPTION_TOKEN_TAG_BYTES) return null;
+    const expectedToken = await this.subscriptionTag(claims);
+    return equalBytes(actual, expectedToken) ? claims : null;
   }
 
   private validateSecret(secret: string, label: string): Uint8Array {
@@ -109,6 +129,25 @@ export class WebCryptoAuthTokenService implements AuthTokenService {
     const message = `${TOKEN_VERSION}.${payload}`;
     const signature = await crypto.subtle.sign('HMAC', await keyPromise, encoder.encode(message));
     return `${message}.${toBase64Url(new Uint8Array(signature))}`;
+  }
+
+  private async issueShortSubscriptionToken(claims: SubscriptionTokenClaims): Promise<string> {
+    return `${SUBSCRIPTION_TOKEN_VERSION}.${toBase64Url(await this.subscriptionTag(claims))}`;
+  }
+
+  private async subscriptionTag(claims: SubscriptionTokenClaims): Promise<Uint8Array> {
+    const message = [
+      SUBSCRIPTION_TOKEN_DOMAIN,
+      claims.workspaceId,
+      claims.tokenVersion,
+      claims.purpose,
+    ].join(':');
+    const signature = await crypto.subtle.sign(
+      'HMAC',
+      await this.subscriptionKey,
+      encoder.encode(message),
+    );
+    return new Uint8Array(signature).slice(0, SUBSCRIPTION_TOKEN_TAG_BYTES);
   }
 
   private async verify(token: string, keyPromise: Promise<CryptoKey>): Promise<unknown | null> {

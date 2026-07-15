@@ -43,7 +43,8 @@
 ## 5. 会话与缓存
 
 - 会话使用短期 HttpOnly 签名 Cookie，不建立持久 session store。
-- 私有 JSON 订阅 token 使用 HMAC 签名 payload，不建立 KV token index。
+- 私有 JSON 订阅使用 `s2.<128-bit HMAC tag>` 短 Token；签名输入绑定 domain、固定 workspace、token version 与用途，不携带 payload，不建立 KV token index。
+- 订阅 Token 格式切换默认不保留旧 bearer credential 兼容；变更必须在 Release note 中明确旧链接立即失效，并验证设置页轮换和新链接复制流程。
 - 公开 source ruleset 使用 `/rules/{ruleset}.json`，始终从 current revision 生成去除 `_sing_sub` 的 JSON。
 - 公开 SRS 使用 `/rules/{ruleset}.srs`，仅在 active artifact 存在时提供；两者均不得携带或验证私有配置订阅 token。
 - 公开 ruleset router 只接受一个安全 ruleset ID path segment；禁止实现 token parameter、token parser、token redirect 或 subscription-auth import。

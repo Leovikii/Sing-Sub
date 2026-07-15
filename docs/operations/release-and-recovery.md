@@ -8,6 +8,7 @@
 - 运行时只需要 `WORKSPACE_BUCKET` R2 binding 和三个 Worker secrets。
 - Workers observability 与 Turnstile 暂不启用。
 - Profile 外部 HTTP/HTTPS 模板是明确移除的兼容项；旧数据必须先把模板导入 `sing-sub/templates/` 并更新 Profile 引用，不能依赖旧 URL 读取旁路。
+- 私有配置订阅 Token 已直接切换为 `s2.<22-char-tag>`；旧 `v1.payload.signature` 链接不兼容，部署后必须从 WebUI 重新复制订阅链接。
 - 规则集公开 URL 导入不受上述变化影响，仍使用独立的 SSRF、大小、重定向和超时限制。
 
 ## 发布前检查
