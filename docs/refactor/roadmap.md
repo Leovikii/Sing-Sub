@@ -176,7 +176,7 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 引入 Pinia：session/profiles/assets/rulesets/sync stores；Toast 保持短期 UI 状态，不建立历史通知中心。
 - 引入 Vue Router：connect/profiles/resources/:kind/sync/settings/:section。
 - App shell 接入 RouterView，使用一份侧栏 DOM 实现桌面常驻与窄屏 off-canvas，清空 `App.vue` 业务状态。
-- 导航固定为配置、资源（节点集/模板/补丁/规则集）、同步、设置（通用/订阅/仓库/关于）；规则集属于资源但使用专属子路由和页面。
+- 导航固定为配置、资源（节点集/模板/适配器/规则集）、同步、设置（通用/订阅/仓库/关于）；规则集属于资源但使用专属子路由和页面。
 - 建立少量项目语义组件，不复制 PrimeVue primitives。
 - 删除旧全局刷新按钮、`/api/rebuild`、`?refresh=1` 与“从 GitHub 同步组件”文案；多设备冲突改为明确 reload/discard 流程。
 
@@ -225,25 +225,42 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 日志/API 不泄露私钥、PAT、Cookie 或 token。
 - `progress.md` 无未完成必需任务，恢复演练通过。
 
-## Phase 9：独立 Release 分发与受控升级（低优先级）
+## Phase 9：Beta 稳定与产品化（IN_PROGRESS）
 
-目标：核心重构稳定后，让普通用户无需 fork 或维护源码仓库即可完成首次部署和后续升级，同时禁止发现新版本后自动覆盖生产。
+目标：在重构完成的 `3.0.0-beta.1` 基础上完成真实使用反馈、部署产品化、适配器机制优化和前端收束；本阶段结束前不发布 `3.0.0` 正式版。
 
-任务：
+### A. 普通用户部署与升级
 
-- 提供随 Release 分发的幂等 setup 命令，检查 Wrangler 登录、创建或选择 R2 bucket、配置 binding 和部署目标。
-- 交互输入管理员口令；自动生成并上传两个独立 signing secret，不把值写入仓库或日志。
-- 明确配置 workers.dev、自定义域名或 Route，部署后执行 bootstrap health check。
-- 区分 `setup`、`update`、`rollback`；update 先执行 verify/dry-run，再由用户确认发布。
-- 新 Release 只生成更新提示，不自动部署；维护仓库和用户本地的 deploy 均保持显式触发。
-- 增加 Release CI：tag 后验证并发布源码归档、release manifest、checksum、兼容范围和升级说明，不接触用户 Cloudflare 账户。
-- 提供 Windows 部署助手，输入必要信息后调用 Wrangler 完成首次部署；可检查、下载并校验稳定 Release，再经用户确认发布更新。
-- 记录新旧 Worker version ID，支持代码版本回滚；R2 schema migration 与代码回滚保持独立。
-- 编写独立 Release 从零部署 smoke test、失败恢复和 secret 轮换文档。
+- 提供随 Release 分发的幂等 setup/update/rollback 流程，普通用户无需 fork、Git checkout 或维护源码仓库。
+- Release CI 发布源码归档、manifest、checksum、兼容范围和升级说明，不接触用户 Cloudflare 凭据。
+- Windows 部署助手或 Node CLI 负责 Wrangler 登录、R2/binding/Secret 初始化、dry-run、health check 和显式部署确认。
+- 生产更新必须区分首次安装、更新和回滚；发现新版本不得自动覆盖用户 Worker。
+- 记录 Worker version、应用版本和 workspace schema 兼容关系，保留代码回滚与 R2 数据恢复的独立边界。
 
-详细设想与安全边界见 `deployment-automation-backlog.md`。
+### B. Profile replacement adapter（完成）
 
-验收：普通用户下载 Release 后不需要 fork、Git 或源码合并，也不需要理解 Worker ID、R2 binding 或 signing secret 生成细节即可完成部署；任何生产更新都有显式确认、发布物校验、健康检查和可见版本 ID。
+- 已用 replacement-only adapter 取代通用 patch DSL；Profile 只引用可选 `adapterUrl`。
+- 已删除 `profile.overrides`、`patchUrl`、`smartMerge` 与所有 `$` 操作符，构建器只执行严格路径整体替换和唯一数组匹配替换。
+- 新 workspace 初始化创建可编辑 Momo 预设；adapter 在节点注入前执行，路径/匹配不明确时构建失败。
+- Beta 采用 workspace schema v2；生产切换由 ADR-046 的临时登录迁移器把 active v1 revision 一次性发布为 v2，验证后删除迁移器，不把兼容读取带入正式版。
+- 目标是维护一份基础模板和节点集，按目标生成适配配置，不复制维护多套完整模板。
+
+### C. 前端 Beta 收束
+
+- 根据 Beta 使用反馈修复布局、交互、移动端、动画、i18n、可访问性和性能问题。
+- 优先复用 PrimeVue 原生能力；不为局部视觉问题重新引入基础组件或大型动画依赖。
+- 补齐长耗时操作、错误、空状态、冲突和未保存 draft 的可见状态，并保持 API/store/feature 边界。
+- UI 改动必须覆盖 desktop/mobile 和中英文关键流程，避免在正式版前引入大规模信息架构变更。
+
+### D. Beta 验收与正式版门禁
+
+- 收集并关闭 P0/P1 bug，P2 必须有明确延后记录；不得存在数据丢失、静默覆盖或凭据泄露风险。
+- 完成新用户空 R2 部署、已有数据迁移、可选 GitHub sync、无 GitHub 模式和 SRS 可选模式的回归矩阵。
+- 完成 Release 从零部署、升级、回滚、R2 restore 和生产只读检查演练。
+- 完整 `verify`、Worker dry-run、desktop/mobile E2E、版本/依赖/文档/许可证扫描通过。
+- 只有所有必需项完成后，才把版本从 `3.0.0-beta.*` 更新为 `3.0.0` 并创建正式 Release。
+
+详细部署设想见 `deployment-automation-backlog.md`；replacement adapter 方案见 ADR-043。
 
 ## PR 切分规则
 

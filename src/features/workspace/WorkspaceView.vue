@@ -41,7 +41,7 @@
                 :index="pIndex"
                 :availableNodes="availableAssets.nodes.map(asset => asset.path)"
                 :availableTemplates="availableAssets.templates.map(asset => asset.path)"
-                :availablePatches="availableAssets.patches.map(asset => asset.path)"
+                :availableAdapters="availableAssets.adapters.map(asset => asset.path)"
                 :copyStatus="!!copyStatus[pIndex]"
                 :expanded="expandedIndex === pIndex"
                 :isDraft="draftProfile === profile"
@@ -168,9 +168,9 @@ const isSyncRoute = computed(() => route.name === 'sync');
 const settingsSection = computed(() => String(route.name || '').startsWith('settings-')
   ? String(route.name).slice('settings-'.length)
   : null);
-const assetType = computed<'node' | 'template' | 'patch' | 'ruleset'>(() => {
+const assetType = computed<'node' | 'template' | 'adapter' | 'ruleset'>(() => {
   if (route.name === 'resource-templates') return 'template';
-  if (route.name === 'resource-patches') return 'patch';
+  if (route.name === 'resource-adapters') return 'adapter';
   if (route.name === 'resource-rulesets') return 'ruleset';
   return 'node';
 });
@@ -209,7 +209,7 @@ const filteredAssets = computed(() => {
   const type = assetType.value;
   const arr = type === 'node' ? availableAssets.value.nodes 
             : type === 'template' ? availableAssets.value.templates 
-            : type === 'patch' ? availableAssets.value.patches
+            : type === 'adapter' ? availableAssets.value.adapters
             : availableAssets.value.rulesets;
   return arr.filter((n: any) => !deletedAssets.value.includes(n.path || n));
 });
@@ -247,7 +247,7 @@ async function refreshAssets(excludedPaths: Iterable<string> = []): Promise<numb
     availableAssets.value = {
       nodes: data.nodes.filter((item: any) => !excluded.has(item.path || item)),
       templates: data.templates.filter((item: any) => !excluded.has(item.path || item)),
-      patches: data.patches.filter((item: any) => !excluded.has(item.path || item)),
+      adapters: data.adapters.filter((item: any) => !excluded.has(item.path || item)),
       rulesets: data.rulesets.filter((item: any) => !excluded.has(item.path || item)),
     };
     assetsLoaded.value = true;
@@ -255,7 +255,7 @@ async function refreshAssets(excludedPaths: Iterable<string> = []): Promise<numb
     return pruneStaleReferences();
   } catch {
     if (!assetsLoaded.value) {
-      availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+      availableAssets.value = { nodes: [], templates: [], adapters: [], rulesets: [] };
     }
     return false;
   } finally {
@@ -277,7 +277,7 @@ function pruneStaleReferences() {
   if (!stateData.value?.profiles) return 0;
   const nodePaths = new Set(availableAssets.value.nodes.map((n: any) => n.path || n));
   const templatePaths = new Set(availableAssets.value.templates.map((t: any) => t.path || t));
-  const patchPaths = new Set(availableAssets.value.patches.map((p: any) => p.path || p));
+  const adapterPaths = new Set(availableAssets.value.adapters.map((p: any) => p.path || p));
   let removedCount = 0;
 
   for (const profile of stateData.value.profiles) {
@@ -289,8 +289,8 @@ function pruneStaleReferences() {
       profile.templateUrl = '';
       removedCount++;
     }
-    if (profile.patchUrl && !patchPaths.has(profile.patchUrl)) {
-      profile.patchUrl = '';
+    if (profile.adapterUrl && !adapterPaths.has(profile.adapterUrl)) {
+      profile.adapterUrl = '';
       removedCount++;
     }
   }
@@ -321,9 +321,9 @@ watch(() => route.path, () => {
   if (isResourceRoute.value || isProfilesRoute.value) void ensureAssetsLoaded();
 });
 
-function handleAssetSaved(file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'patch' | 'ruleset'; revision: string }) {
+function handleAssetSaved(file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'adapter' | 'ruleset'; revision: string }) {
   workspaceRevision.value = file.revision;
-  const list = availableAssets.value[file.type === 'node' ? 'nodes' : file.type === 'template' ? 'templates' : file.type === 'patch' ? 'patches' : 'rulesets'];
+  const list = availableAssets.value[file.type === 'node' ? 'nodes' : file.type === 'template' ? 'templates' : file.type === 'adapter' ? 'adapters' : 'rulesets'];
   const oldIndex = file.oldPath ? list.findIndex((item: any) => (item.path || item) === file.oldPath) : -1;
   if (oldIndex >= 0) list.splice(oldIndex, 1);
   const existing = list.find((item: any) => (item.path || item) === file.path);
@@ -371,7 +371,7 @@ async function handleSetup() {
     setupRequired.value = data.setupRequired;
     assetsLoaded.value = false;
     assetsLastCheckedAt.value = 0;
-    availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    availableAssets.value = { nodes: [], templates: [], adapters: [], rulesets: [] };
     if (data.state) {
       workspaceRevision.value = data.revision || result.revision;
       setStateData(data.state);
@@ -397,7 +397,7 @@ async function handleSaveSettings(newSettings: { rotateSubscriptionToken: boolea
     workspaceRevision.value = result.revision;
     assetsLoaded.value = false;
     assetsLastCheckedAt.value = 0;
-    availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+    availableAssets.value = { nodes: [], templates: [], adapters: [], rulesets: [] };
     const data = await bootstrap();
     if (data.state) setStateData(data.state);
     if (result.warning) {
@@ -428,7 +428,7 @@ async function confirmDisconnect() {
   stateData.value = null;
   assetsLoaded.value = false;
   assetsLastCheckedAt.value = 0;
-  availableAssets.value = { nodes: [], templates: [], patches: [], rulesets: [] };
+  availableAssets.value = { nodes: [], templates: [], adapters: [], rulesets: [] };
   await router.replace('/connect');
 }
 

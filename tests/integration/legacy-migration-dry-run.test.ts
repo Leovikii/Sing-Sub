@@ -15,7 +15,7 @@ const settings: GithubImportSettings = {
 const profile = {
   name: 'default',
   templateUrl: 'sing-sub/templates/default.json',
-  patchUrl: 'sing-sub/patches/default.json',
+  adapterUrl: 'sing-sub/adapters/default.json',
   nodesPath: 'sing-sub/nodes/default.json',
   rules: [],
   inboundRules: [],
@@ -27,7 +27,11 @@ function source(overrides: Partial<LegacyGithubSource> = {}): LegacyGithubSource
     ['sing-sub/configs/default.json', JSON.stringify(profile)],
     ['sing-sub/nodes/default.json', '[]'],
     ['sing-sub/templates/default.json', '{}'],
-    ['sing-sub/patches/default.json', '{}'],
+    ['sing-sub/adapters/default.json', JSON.stringify({
+      schemaVersion: 1,
+      name: 'default',
+      replacements: [{ path: ['inbounds'], value: [] }],
+    })],
     ['sing-sub/rulesets/private.json', JSON.stringify({
       version: 2,
       rules: [],
@@ -56,7 +60,7 @@ describe('dryRunLegacyMigration', () => {
     expect(result).toMatchObject({
       valid: true,
       fileCount: 5,
-      counts: { profiles: 1, nodes: 1, templates: 1, patches: 1, rulesets: 1 },
+      counts: { profiles: 1, nodes: 1, templates: 1, adapters: 1, rulesets: 1 },
       issues: [],
       normalized: {
         profiles: [{ name: 'default' }],

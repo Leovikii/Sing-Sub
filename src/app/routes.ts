@@ -15,7 +15,7 @@ export const routes: RouteRecordRaw[] = [
   workspaceRoute('/profiles', 'profiles', 'nav.profiles'),
   workspaceRoute('/resources/nodes', 'resource-nodes', 'nav.nodes'),
   workspaceRoute('/resources/templates', 'resource-templates', 'nav.templates'),
-  workspaceRoute('/resources/patches', 'resource-patches', 'nav.patches'),
+  workspaceRoute('/resources/adapters', 'resource-adapters', 'nav.adapters'),
   workspaceRoute('/resources/rulesets', 'resource-rulesets', 'nav.rulesets'),
   workspaceRoute('/sync', 'sync', 'nav.sync'),
   workspaceRoute('/settings/general', 'settings-general', 'nav.general'),

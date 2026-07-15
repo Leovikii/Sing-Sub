@@ -1,4 +1,5 @@
 import {
+  adapterPresetSchema,
   jsonAssetSchema,
   profileSchema,
   type JsonAsset,
@@ -67,7 +68,7 @@ export async function importSyncTree(input: SyncFile[]): Promise<ImportedSyncTre
   }
   const profiles: Profile[] = [];
   const assets: WorkspaceSnapshot['assets'] = {
-    nodes: {}, templates: {}, patches: {}, rulesets: {},
+    nodes: {}, templates: {}, adapters: {}, rulesets: {},
   };
   const paths = new Set<string>();
   const identities = new Set<string>();
@@ -105,13 +106,19 @@ export async function importSyncTree(input: SyncFile[]): Promise<ImportedSyncTre
     }
 
     if (!json || typeof json !== 'object' ||
-        ((managed.kind === 'templates' || managed.kind === 'patches' || managed.kind === 'rulesets') &&
+        ((managed.kind === 'templates' || managed.kind === 'adapters' || managed.kind === 'rulesets') &&
           Array.isArray(json))) {
       throw new SyncTreeValidationError('INVALID_SCHEMA', file.path, 'Asset JSON root is invalid');
     }
     if (managed.kind === 'rulesets') {
       const rulesetError = validateRulesetSource(file.content);
       if (rulesetError) throw new SyncTreeValidationError('INVALID_SCHEMA', file.path, rulesetError);
+    }
+    if (managed.kind === 'adapters') {
+      const adapter = adapterPresetSchema.safeParse(json);
+      if (!adapter.success || adapter.data.name !== managed.entityId) {
+        throw new SyncTreeValidationError('INVALID_SCHEMA', file.path, 'Adapter preset schema or name is invalid');
+      }
     }
     const asset = jsonAssetSchema.safeParse({
       path: file.path,
@@ -126,7 +133,7 @@ export async function importSyncTree(input: SyncFile[]): Promise<ImportedSyncTre
 
   profiles.sort((left, right) => left.order - right.order || left.name.localeCompare(right.name));
   for (const profile of profiles) {
-    const references = [profile.nodesPath, profile.templateUrl, profile.patchUrl];
+    const references = [profile.nodesPath, profile.templateUrl, profile.adapterUrl];
     for (const reference of references) {
       if (!reference || /^https?:\/\//i.test(reference) || reference === 'custom') continue;
       if (!paths.has(reference.toLowerCase())) {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceSnapshot } from '../../shared';
+import { MOMO_ADAPTER_PRESET, type WorkspaceSnapshot } from '../../shared';
 import {
   handleBootstrap,
   handleLogin,
@@ -14,7 +14,7 @@ import worker from '../../worker/index';
 
 function snapshot(): WorkspaceSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: 'primary',
     revisionId: 'revision-1',
     previousRevisionId: null,
@@ -29,7 +29,7 @@ function snapshot(): WorkspaceSnapshot {
       tokenVersion: 1,
     },
     profiles: [],
-    assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
     builds: {},
     sync: { status: 'never' },
   };
@@ -79,11 +79,23 @@ describe('primary workspace auth routes', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Set-Cookie')).toContain('__Host-sing-sub-session=');
     expect(fetchMock).not.toHaveBeenCalled();
+    expect((await data(response) as { subToken: string }).subToken).toMatch(/^s2\.[a-zA-Z0-9_-]{22}$/);
     await expect(new R2WorkspaceStore(bucket).read('primary')).resolves.toMatchObject({
       snapshot: {
         settings: { userLogin: 'Administrator', authVersion: 1, tokenVersion: 1 },
         profiles: [],
-        assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+        assets: {
+          nodes: {},
+          templates: {},
+          adapters: {
+            momo: {
+              path: 'sing-sub/adapters/momo.json',
+              note: 'OpenWrt Momo',
+              content: MOMO_ADAPTER_PRESET,
+            },
+          },
+          rulesets: {},
+        },
       },
     });
     await expect(new R2PrivateMetadataStore(bucket).read('primary')).resolves.toBeNull();
@@ -263,6 +275,45 @@ describe('primary workspace auth routes', () => {
     expect(missing.status).toBe(404);
   });
 
+  it('validates adapter assets before publishing them', async () => {
+    const bucket = new InMemoryR2Bucket();
+    await new R2WorkspaceStore(bucket).create({ workspaceId: 'primary', snapshot: snapshot() });
+    const env = environment(bucket);
+    const login = await handleLogin(new Request('https://example.com/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ adminPassword: 'correct-password' }),
+    }), env);
+    const cookie = login.headers.get('Set-Cookie')!.split(';')[0];
+    const invalid = await worker.fetch(new Request('https://example.com/api/file', {
+      method: 'PUT',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: 'sing-sub/adapters/custom.json',
+        content: JSON.stringify({ schemaVersion: 1, name: 'other', replacements: [] }),
+        expectedRevision: 'revision-1',
+      }),
+    }), env);
+    expect(invalid.status).toBe(400);
+
+    const saved = await worker.fetch(new Request('https://example.com/api/file', {
+      method: 'PUT',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: 'sing-sub/adapters/custom.json',
+        content: JSON.stringify({
+          schemaVersion: 1,
+          name: 'custom',
+          replacements: [{ path: ['inbounds'], value: [] }],
+        }),
+        expectedRevision: 'revision-1',
+      }),
+    }), env);
+    expect(saved.status).toBe(200);
+    await expect(new R2WorkspaceStore(bucket).read('primary')).resolves.toMatchObject({
+      snapshot: { assets: { adapters: { custom: { content: { name: 'custom' } } } } },
+    });
+  });
+
   it('builds subscriptions from the current revision, bypasses stale cache, and invalidates rotated tokens', async () => {
     const bucket = new InMemoryR2Bucket();
     const configured = snapshot();
@@ -293,6 +344,12 @@ describe('primary workspace auth routes', () => {
     const loginData = await data(login) as { subToken: string };
     const cookie = login.headers.get('Set-Cookie')!.split(';')[0];
     const subscriptionUrl = `https://example.com/sub/${loginData.subToken}/default.json`;
+
+    const legacyTokenResponse = await worker.fetch(new Request(
+      'https://example.com/sub/v1.legacy.payload/default.json',
+      { headers: { 'User-Agent': 'sing-box/1.12' } },
+    ), env);
+    expect(legacyTokenResponse.status).toBe(404);
 
     const first = await worker.fetch(new Request(subscriptionUrl, {
       headers: { 'User-Agent': 'sing-box/1.12' },

@@ -6,11 +6,10 @@ import type { Profile } from '../../shared';
 const profile: Profile = {
   name: 'default',
   templateUrl: 'sing-sub/templates/default.json',
-  patchUrl: 'sing-sub/patches/default.json',
+  adapterUrl: 'sing-sub/adapters/default.json',
   nodesPath: 'sing-sub/nodes/default.json',
   rules: [{ group: 'proxy', filters: [{ action: 'include', keyword: 'HK' }] }],
   inboundRules: [{ tag: 'tun', filters: [{ action: 'exclude', keyword: 'blocked' }] }],
-  overrides: { log: { level: 'warn' } },
   order: 0,
 };
 
@@ -18,7 +17,7 @@ describe('profile builder', () => {
   it('preserves template key order and selected node source order', async () => {
     const orderedProfile: Profile = {
       ...profile,
-      patchUrl: '',
+      adapterUrl: '',
       rules: [{ group: 'proxy', filters: [{ action: 'include', keyword: 'node' }] }],
       inboundRules: [
         { tag: 'tun', filters: [{ action: 'include', keyword: 'inbound-a' }] },
@@ -60,12 +59,12 @@ describe('profile builder', () => {
     ]);
   });
 
-  it('applies overrides and patches before inserting filtered nodes', async () => {
+  it('applies strict adapter replacements before inserting filtered nodes', async () => {
     const template = {
       log: { level: 'info' },
       inbounds: [{ type: 'tun', tag: 'tun' }],
       outbounds: [{ type: 'selector', tag: 'proxy', outbounds: ['direct'] }],
-      route: { rules: [{ action: 'sniff' }] },
+      route: { rules: [{ action: 'sniff' }, { action: 'hijack-dns', protocol: 'dns' }] },
     };
     const nodes = {
       inbounds: [
@@ -79,20 +78,57 @@ describe('profile builder', () => {
     };
     const resources = {
       loadTemplate: async () => template,
-      loadRepoJson: async (path: string) => path.includes('/patches/')
-        ? { route: { final: 'proxy' } }
+      loadRepoJson: async (path: string) => path.includes('/adapters/')
+        ? {
+            schemaVersion: 1,
+            name: 'default',
+            replacements: [
+              { path: ['inbounds'], value: [{ type: 'tun', tag: 'tun' }] },
+              {
+                path: ['route', 'rules'],
+                match: { action: 'hijack-dns' },
+                value: { inbound: 'dns-in', action: 'hijack-dns' },
+              },
+            ],
+          }
         : nodes,
     };
 
     const result = JSON.parse(await buildProfile(profile, resources));
 
-    expect(result.log.level).toBe('warn');
-    expect(result.route).toEqual({ rules: [{ action: 'sniff' }], final: 'proxy' });
+    expect(result.log.level).toBe('info');
+    expect(result.route.rules).toEqual([
+      { action: 'sniff' },
+      { inbound: 'dns-in', action: 'hijack-dns' },
+    ]);
     expect(result.inbounds.map((item: { tag: string }) => item.tag)).toEqual(['tun', 'lan']);
     expect(result.outbounds[0].outbounds).toEqual(['direct', 'HK-1']);
     expect(result.outbounds.map((item: { tag: string }) => item.tag)).toEqual(['proxy', 'HK-1']);
     expect(template.log.level).toBe('info');
     expect(nodes.outbounds).toHaveLength(2);
+  });
+
+  it('rejects adapter replacements with missing or ambiguous matches', async () => {
+    const invalidProfile = { ...profile, nodesPath: '' };
+    const resources = {
+      loadTemplate: async () => ({
+        inbounds: [],
+        route: { rules: [{ action: 'hijack-dns' }, { action: 'hijack-dns' }] },
+      }),
+      loadRepoJson: async (path: string) => path.includes('/adapters/')
+        ? {
+            schemaVersion: 1,
+            name: 'default',
+            replacements: [{
+              path: ['route', 'rules'],
+              match: { action: 'hijack-dns' },
+              value: { inbound: 'dns-in', action: 'hijack-dns' },
+            }],
+          }
+        : null,
+    };
+
+    await expect(buildProfile(invalidProfile, resources)).rejects.toThrow('expected one match');
   });
 
   it('normalizes only same-origin legacy tokenized ruleset URLs', () => {

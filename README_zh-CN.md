@@ -26,7 +26,7 @@ Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org
 - 公开规则集 JSON：`/rules/{ruleset}.json`
 - 可选 SRS：`/rules/{ruleset}.srs`
 
-配置订阅 Token 是 bearer credential，不应公开。规则集 JSON/SRS 链接不包含配置订阅 Token。
+私有配置订阅使用紧凑的 `s2.<22-char-tag>` Token。它仍是 bearer credential，不应公开；规则集 JSON/SRS 链接不包含配置订阅 Token。
 
 ## 前置条件
 
@@ -72,7 +72,7 @@ npm run deploy
 - 启用 SRS 后，Worker 会自动向已连接的私有仓库安装版本化编译 workflow；用户不需要手动创建 Actions Secret 或 Variable。
 - 普通发布用户使用本地 Wrangler 部署，不要求 fork、GitHub Actions 或数据仓库。
 
-独立 Release 包、Windows 部署助手和受控升级流程记录在低优先级 Phase 9。
+核心重构已经完成。`3.0.0-beta.1` 进入 Phase 9 Beta 稳定阶段，统一处理独立 Release 部署、受控升级、目标化配置派生和前端体验收束。普通用户不要求 fork；只有 Beta 发布门禁全部通过后才发布 `3.0.0` 正式版。
 
 ## 开发
 
@@ -82,7 +82,7 @@ npm run verify
 npm run preview
 ```
 
-补丁语法见 [WIKI_zh-CN.md](WIKI_zh-CN.md)。架构、决策和进度见 [docs/refactor](docs/refactor/README.md)，发布与恢复说明见 [docs/operations/release-and-recovery.md](docs/operations/release-and-recovery.md)。
+适配器语法见 [WIKI_zh-CN.md](WIKI_zh-CN.md)。架构、决策和进度见 [docs/refactor](docs/refactor/README.md)，发布与恢复说明见 [docs/operations/release-and-recovery.md](docs/operations/release-and-recovery.md)。
 
 ## 许可证
 

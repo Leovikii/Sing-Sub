@@ -10,7 +10,8 @@ import { createPrimaryWorkspaceServices } from '../composition/primary-workspace
 import { PRIMARY_WORKSPACE_ID } from '../domain/workspace/primary-workspace';
 import { GithubLegacySourceReader } from '../infrastructure/github/github-legacy-source-reader';
 import { dryRunLegacyMigration } from '../infrastructure/legacy/legacy-migration-dry-run';
-import { WorkspaceNotFoundError } from '../infrastructure/r2/r2-workspace-errors';
+import { isWorkspaceV1, upgradeWorkspaceV1 } from '../infrastructure/r2/r2-workspace-v1-upgrade';
+import { WorkspaceNotFoundError, WorkspaceStorageCorruptError } from '../infrastructure/r2/r2-workspace-errors';
 import {
   clearSessionCookieHeader,
   sessionCookieHeader,
@@ -18,6 +19,7 @@ import {
 import { fetchRepository, fetchUser, type RepoSession } from '../lib/github';
 import { getPrimaryWorkspaceAuth } from '../http/authenticate';
 import { errorResponse, jsonResponse } from '../lib/security';
+import { logEvent, requestIdFor } from '../lib/logging';
 import type { Env } from '../types';
 
 const SESSION_MAX_AGE_SECONDS = 86400 * 30;
@@ -32,6 +34,8 @@ async function workspaceExists(env: Env): Promise<boolean> {
     return true;
   } catch (error) {
     if (error instanceof WorkspaceNotFoundError) return false;
+    if (error instanceof WorkspaceStorageCorruptError &&
+        await isWorkspaceV1(env.WORKSPACE_BUCKET, PRIMARY_WORKSPACE_ID)) return true;
     throw error;
   }
 }
@@ -55,6 +59,19 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
   const services = createPrimaryWorkspaceServices(env);
   if (!await services.adminAuthenticator.verify(parsed.data.adminPassword)) {
     return errorResponse('Invalid administrator credentials', 401, 'NOT_AUTHENTICATED');
+  }
+
+  const upgrade = await upgradeWorkspaceV1(
+    env.WORKSPACE_BUCKET,
+    PRIMARY_WORKSPACE_ID,
+    new Date().toISOString(),
+  );
+  if (upgrade === 'upgraded') {
+    logEvent('log', {
+      operation: 'workspace.v1-upgrade',
+      requestId: requestIdFor(request),
+      status: 'completed',
+    });
   }
 
   if (!await workspaceExists(env)) {

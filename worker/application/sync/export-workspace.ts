@@ -37,7 +37,7 @@ export async function exportSyncBusinessFiles(source: SyncBusinessSource): Promi
   for (const profile of source.profiles) {
     entries.push({ path: encodeSyncPath('configs', profile.name), content: canonicalPrettyJson(profile) });
   }
-  for (const kind of ['nodes', 'templates', 'patches', 'rulesets'] as const) {
+  for (const kind of ['nodes', 'templates', 'adapters', 'rulesets'] as const) {
     for (const [entityId, asset] of Object.entries(source.assets[kind])) {
       entries.push({ path: encodeSyncPath(kind, entityId), content: canonicalPrettyJson(asset.content) });
     }
@@ -60,7 +60,7 @@ export async function exportWorkspaceForSync(
 ): Promise<WorkspaceSyncExport> {
   const business = await exportSyncBusinessFiles(snapshot);
   const manifest = syncManifestSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     format: 'sing-sub-editable-sync',
     workspaceId: snapshot.workspaceId,
     workspaceRevision: snapshot.revisionId,

@@ -38,8 +38,14 @@ describe('WebCryptoAuthTokenService', () => {
     const claims = { workspaceId: 'workspace-1', tokenVersion: 2, purpose: 'subscription' as const };
     const token = await service.issueSubscription(claims);
 
-    await expect(service.verifySubscription(token, 2)).resolves.toEqual(claims);
-    await expect(service.verifySubscription(token, 3)).resolves.toBeNull();
+    expect(token).toMatch(/^s2\.[a-zA-Z0-9_-]{22}$/);
+    expect(token).toHaveLength(25);
+    await expect(service.verifySubscription(token, claims)).resolves.toEqual(claims);
+    await expect(service.verifySubscription(token, { ...claims, tokenVersion: 3 })).resolves.toBeNull();
+    await expect(service.issueSubscription(claims)).resolves.toBe(token);
+    await expect(service.issueSubscription({ ...claims, workspaceId: 'workspace-2' })).resolves.not.toBe(token);
+    const tampered = `${token.slice(0, -1)}${token.endsWith('a') ? 'b' : 'a'}`;
+    await expect(service.verifySubscription(tampered, claims)).resolves.toBeNull();
   });
 
   it('uses separate signing domains for sessions and subscriptions', async () => {
@@ -57,7 +63,9 @@ describe('WebCryptoAuthTokenService', () => {
     const service = new WebCryptoAuthTokenService(secrets, () => now);
 
     await expect(service.verifySession('not-a-token', 1)).resolves.toBeNull();
-    await expect(service.verifySubscription('v1.bad.signature', 1)).resolves.toBeNull();
+    await expect(service.verifySubscription('v1.bad.signature', {
+      workspaceId: 'workspace-1', tokenVersion: 1, purpose: 'subscription',
+    })).resolves.toBeNull();
   });
 
   it('requires at least 32 bytes of secret material', () => {

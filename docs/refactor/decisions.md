@@ -42,6 +42,11 @@
 | ADR-036 | ACCEPTED | 订阅按 current revision 动态构建，Cache 仅做加速 | 避免持久化最终配置、手动重建与失效扇出；保存后通过新 revision 自动绕过旧 cache。 |
 | ADR-037 | ACCEPTED | SRS 使用短期 job ticket 自动 provision | 不要求用户配置 GitHub Action Secret/Variable；ticket 只授权单一、短期 build callback。 |
 | ADR-038 | ACCEPTED | GitHub sync 使用安全方向同步 | 保留 base/local/remote 防误覆盖，但第一版不自动逐文件合并；冲突时只允许显式整侧覆盖。 |
+| ADR-042 | ACCEPTED | 重构完成后进入 Beta 稳定阶段，设置 `3.0.0` 发布门禁 | 部署产品化、适配器机制和前端反馈仍需要真实使用验证，不能把架构完成等同于正式版完成。 |
+| ADR-043 | ACCEPTED | 用可编辑 replacement adapter 取代通用 patch DSL | 初始化创建 Momo 预设；构建器只支持严格路径替换和唯一数组匹配替换。 |
+| ADR-044 | ACCEPTED | 私有订阅直接切换为 25 字符确定性短 Token | 单 workspace 不需要在 URL 重复携带 claims；128-bit HMAC tag 保留轮换和隔离能力并显著缩短链接。 |
+| ADR-045 | ACCEPTED | Beta 初始化目标由本地部署助手承担 Secret 与 Cloudflare 资源配置 | WebUI 默认只初始化空 workspace，GitHub 后连；本轮只记录方案，不修改现有初始化实现。 |
+| ADR-046 | ACCEPTED | 用正确管理员登录触发一次性 R2 schema v1→v2 升级 | CAS 原子切换 active root；v2 自动 no-op，生产验证后删除临时代码。 |
 
 ## ADR-002：PrimeVue 版本政策
 
@@ -118,7 +123,7 @@
 
 ## ADR-036：动态订阅与无通用刷新
 
-- 私有配置订阅请求从 current workspace revision 动态加载模板、节点、patch 和 profile 规则后构建最终 JSON；最终配置不写入 R2、GitHub 或其他持久化缓存。
+- 私有配置订阅请求从 current workspace revision 动态加载模板、节点、adapter 和 profile 规则后构建最终 JSON；最终配置不写入 R2、GitHub 或其他持久化缓存。
 - Workers Cache API 仅缓存可丢弃的最终响应，cache identity 必须包含 workspace revision 与 profile。任何内部数据保存发布新 revision 后，下一次请求自动使用新 key，不需要用户重建或清除缓存。
 - Profile 模板只来自 workspace revision，预览与订阅都使用明确的 revision 信号；外部模板不属于当前能力范围。
 - WebUI 不保留通用“刷新/重建”按钮、`?refresh=1` 或隐式 GitHub pull。浏览器重新加载已经足以读取 current R2 state。
@@ -162,7 +167,7 @@
 日期：2026-07-15
 
 - WebUI 只渲染一套侧栏：桌面常驻，窄屏时同一侧栏以 off-canvas 方式展开/收起；不再用第二个 Drawer 容器重复导航视觉。
-- 一级入口为配置、资源、同步、设置。资源包含节点集、模板、补丁和规则集；规则集仍属于资源语义，但因公开 JSON/SRS 与构建生命周期使用独立子路由和专属页面。
+- 一级入口为配置、资源、同步、设置。资源包含节点集、模板、适配器和规则集；规则集仍属于资源语义，但因公开 JSON/SRS 与构建生命周期使用独立子路由和专属页面。
 - 设置子项固定为通用、订阅、仓库、关于。仓库页管理连接、PAT、默认分支与 SRS 全局开关；同步页管理 diff、push、pull 和冲突决策。
 - Profile 保留卡片/列表打开 Dialog 的低成本交互，编辑/预览切换保留；预览基于未保存 draft 动态构建。废弃设计稿中的页面内展开编辑区。
 - 顶栏标题是页面唯一标题。语义相同的操作必须共享图标、尺寸、variant 和 tooltip；不建立历史通知中心。
@@ -188,6 +193,62 @@
 - 每个请求生成不可由客户端指定的 UUID request ID，并通过 `X-Request-ID` 返回。Worker 日志使用结构化 JSON 和字段白名单，订阅 token、job id 路径参数化，禁止记录认证头、Cookie、PAT、ticket、请求体和私有 JSON。
 - 外部模板兼容立即删除，不提供迁移读取旁路。规则集公开 URL 导入仍保留既有 SSRF、大小、重定向和超时限制，两者不得混用。
 - R2 retention/budget 默认值保持不变；先完成本地恢复演练，再做生产只读检查，生产部署和数据写入必须另行授权。
+
+## ADR-042：Beta 稳定阶段与正式版门禁
+
+状态：ACCEPTED
+日期：2026-07-15
+
+- Phase 0-8 的架构重构已经完成，当前版本保持 `3.0.0-beta.1` 并进入 Phase 9 Beta 稳定与产品化。
+- Beta 阶段统一承接普通用户部署/升级方案、Profile 适配器机制优化、前端反馈和生产回归，不再把这些工作标记为低优先级尾项。
+- `3.0.0` 不是单纯修改版本号；只有部署/升级/回滚演练、P0/P1 bug、正式版文档、完整验证和兼容矩阵全部通过后才可发布。
+- Beta 中的数据结构或行为修改必须提供迁移与回滚路径；现有 R2 revision、GitHub sync、SRS 和签名认证边界继续作为不可降低的基线。
+
+## ADR-043：可编辑 replacement adapter
+
+状态：ACCEPTED
+日期：2026-07-16
+
+- Profile 只保留 `templateUrl`、可选 `adapterUrl`、`nodesPath` 与节点筛选规则；删除 `overrides`、`patchUrl`、`smartMerge` 和 `$set/$append/$prepend/$remove/$replace`。
+- adapter 是普通、可编辑、可同步的 workspace JSON 资源，路径为 `sing-sub/adapters/{name}.json`。新 workspace 初始化时创建 `momo` 预设，用户可修改、复制或新增其他 adapter；Worker 不包含 Momo 专用分支。
+- adapter schema v1 只有 `replacements`。每条 replacement 使用字符串数组 `path` 指向已存在字段；没有 `match` 时整体替换字段，有 `match` 时目标必须为数组并恰好命中一个浅层 primitive 字段子集，然后整体替换该元素。
+- 路径缺失、目标类型错误、零匹配或多匹配均中止构建并返回明确错误。adapter 不合并、不追加、不删除、不创建缺失字段，不支持条件、通配符、表达式或脚本。
+- adapter 在 inbound/outbound 节点注入前执行。Momo 预设整体替换 `inbounds`，并在 `route.rules` 中按 `action: hijack-dns` 查找后整体替换为绑定 `dns-in` 的规则。
+- workspace snapshot 升级为 schema v2，旧 patches/Profile schema 与旧 GitHub 路径不属于长期兼容范围。生产已有 v1 workspace 使用 ADR-046 的临时一次性升级器过渡；正式版运行时不保留 v1 读取或转换代码。
+
+## ADR-046：管理员登录触发的一次性 R2 schema 升级
+
+状态：ACCEPTED
+日期：2026-07-16
+
+- 未登录 bootstrap 只识别合法 active v1 workspace 并继续显示普通登录，不修改 R2。只有 Worker Secret 校验通过的管理员登录才允许迁移。
+- 升级器校验 head、active revision identity 与 canonical content hash；随后写入 immutable v2 revision，并以 head ETag 条件更新完成原子可见切换。失败不覆盖现有 head。
+- v2 revision 作为新的 root，不把不可由 v2 store 读取的 v1 revision 放入 active/previous 链；旧对象留在 R2 作为短期人工回退材料。
+- 节点、模板、Profile、规则集、settings、build/SRS pointer、migration metadata 与 private GitHub credentials 保留。旧 patches 和 overrides 丢弃；有 `patchUrl` 的 Profile 映射到 Momo adapter，无 `patchUrl` 的 Profile 不增加 adapter。
+- GitHub sync base 重置为 `never`，避免 v2 同步逻辑读取旧 v1 base revision。迁移请求不自动访问或写入 GitHub。
+- 旧远端 Profile schema 无法校验时，同步状态固定为 conflict，只允许用户显式执行 R2 overwrite push，禁止 pull；该通用保护不解析旧 patch DSL，push 后远端受管文件自然升级为 v2。
+- active workspace 已为 v2 时升级器只读检查后 no-op。生产验证通过后删除临时 schema、登录接线与测试，正式版不得携带 v1 解析路径。
+
+## ADR-044：确定性短订阅 Token
+
+状态：ACCEPTED
+日期：2026-07-15
+
+- 私有配置订阅 Token 直接切换为 `s2.<22-char-tag>`，总长 25 字符；tag 是 HMAC-SHA-256 的前 128 bits。
+- HMAC 输入绑定 `sing-sub:subscription-token:v2` domain、workspace ID、workspace `tokenVersion` 和 `subscription` purpose。Token 本身不携带 JSON payload、workspace 名称或版本号明文。
+- 固定 `primary` workspace 允许 Worker 读取 current revision 后重算期望 tag；不需要 KV token index、随机 token 存储或额外 R2 private metadata。
+- 设置页轮换继续递增 `tokenVersion`；Secret 轮换同样使旧链接失效。相同 Secret 与 claims 确定性产生相同 Token。
+- 不兼容旧 `v1.payload.signature` 格式。部署该版本后所有旧私有配置链接立即失效，用户必须从 WebUI 重新复制。
+
+## ADR-045：Beta 初始化简化目标
+
+状态：ACCEPTED
+日期：2026-07-15
+
+- 普通用户未来从 Release 启动本地 Node CLI/薄 PowerShell 助手，由助手完成 Wrangler OAuth、account/Worker/R2/domain 选择、管理员口令输入、两个 signing secret 的本机内存生成与上传、dry-run 和显式部署。
+- 部署后 WebUI 默认只以管理员口令创建空 `primary` workspace；GitHub 导入、sync 和 SRS 连接进入仓库设置，不再作为首次初始化主流程。
+- 助手不得把管理员口令或 signing secret 写入仓库、命令参数、日志或非敏感 deployment manifest。
+- 本 ADR 只确认 Phase 9 目标流程；本次短 Token 优化不修改现有 `handleLogin`、初始化表单或 GitHub 可选导入代码。
 
 ## ADR-027：免费额度策略
 

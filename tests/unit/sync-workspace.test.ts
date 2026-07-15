@@ -16,10 +16,11 @@ import {
   SyncConflictError,
 } from '../../worker/application/sync/sync-workspace';
 import { InMemoryWorkspaceStore } from '../fakes/in-memory-workspace-store';
+import { sha256Hex } from '../../worker/domain/revisions/canonical-json';
 
 function snapshot(note = 'base'): WorkspaceSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: 'primary',
     revisionId: 'revision-1',
     previousRevisionId: null,
@@ -30,7 +31,7 @@ function snapshot(note = 'base'): WorkspaceSnapshot {
     profiles: [{
       name: 'default', note, templateUrl: '', nodesPath: '', rules: [], inboundRules: [], order: 0,
     }],
-    assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
     builds: {},
     sync: { status: 'never' },
   };
@@ -64,6 +65,49 @@ const connection: SyncRepositoryConnection = {
 };
 
 describe('safe directional GitHub sync', () => {
+  it('only allows an explicit R2 overwrite when the remote tree has a legacy profile schema', async () => {
+    const store = new InMemoryWorkspaceStore('primary', snapshot());
+    const gateway = new FakeSyncGateway();
+    const legacyProfile = JSON.stringify({
+      name: 'default',
+      templateUrl: '',
+      patchUrl: 'sing-sub/patches/momo.json',
+      nodesPath: '',
+      rules: [],
+      inboundRules: [],
+      order: 0,
+    });
+    gateway.files = [{
+      path: 'sing-sub/configs/default.json',
+      content: legacyProfile,
+      contentHash: await sha256Hex(legacyProfile),
+    }];
+    const dependencies = { workspaceStore: store, gateway, connection };
+
+    await expect(getWorkspaceSyncStatus(dependencies, 'primary')).resolves.toMatchObject({
+      connected: true,
+      status: 'conflict',
+      requiresResolution: true,
+      canPush: false,
+      canPull: false,
+    });
+    await expect(pushWorkspaceToGithub(dependencies, {
+      workspaceId: 'primary', expectedRevision: 'revision-1', overwrite: false,
+    })).rejects.toMatchObject<Partial<SyncConflictError>>({ status: 'conflict', direction: 'push' });
+    await expect(pullWorkspaceFromGithub(dependencies, {
+      workspaceId: 'primary', expectedRevision: 'revision-1', overwrite: true,
+    })).rejects.toMatchObject({ code: 'INVALID_SCHEMA' });
+
+    const pushed = await pushWorkspaceToGithub(dependencies, {
+      workspaceId: 'primary', expectedRevision: 'revision-1', overwrite: true,
+    });
+    expect(pushed.action).toBe('pushed');
+    expect(gateway.pushCalls).toHaveLength(1);
+    expect(gateway.pushCalls[0].files.find(file => file.path === 'sing-sub/configs/default.json')?.content)
+      .not.toContain('patchUrl');
+    expect(gateway.pushCalls[0].files.some(file => file.path === SYNC_MANIFEST_PATH)).toBe(true);
+  });
+
   it('requires an explicit side on a different first sync', async () => {
     const store = new InMemoryWorkspaceStore('primary', snapshot());
     const gateway = new FakeSyncGateway();

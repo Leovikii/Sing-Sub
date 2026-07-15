@@ -47,7 +47,7 @@
       <!-- Visual Editor -->
       <div v-if="viewMode === 'edit'" class="flex-1 overflow-auto flex flex-col min-h-0">
         <div class="p-5 sm:p-6 space-y-6 flex-1 min-h-0">
-          <ProfileTemplateConfig v-model:profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" :availablePatches="availablePatches" />
+          <ProfileTemplateConfig v-model:profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" :availableAdapters="availableAdapters" />
           <ProfileInbounds v-model:profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
           <ProfileOutbounds v-model:profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
         </div>
@@ -88,7 +88,7 @@ const props = defineProps<{
   index: number;
   availableNodes?: string[];
   availableTemplates?: string[];
-  availablePatches?: string[];
+  availableAdapters?: string[];
   copyStatus: boolean;
   expanded?: boolean;
   isDraft?: boolean;

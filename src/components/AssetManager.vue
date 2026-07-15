@@ -7,9 +7,9 @@
         :key="file.path"
         :title="getBasename(file.path).replace(/\.json$/, '')"
         :note="file.note"
-        :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'patch' ? Puzzle : Shield)"
-        :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'patch' ? 'PATCH' : 'RULESET')"
-        :tagStyle="type === 'node' ? 'bg-brand-pink/10 text-brand-pink border border-brand-pink/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : type === 'patch' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20')"
+        :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'adapter' ? Puzzle : Shield)"
+        :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'adapter' ? 'ADAPTER' : 'RULESET')"
+        :tagStyle="type === 'node' ? 'bg-brand-pink/10 text-brand-pink border border-brand-pink/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : type === 'adapter' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20')"
         :menuItems="fileMenuItems"
         @click="editFile(file, 'preview')"
         @edit="editFile(file)"
@@ -141,7 +141,7 @@ const { builds: rulesetBuilds, retryingId: retryingRuleset } = storeToRefs(rules
 const props = defineProps<{
   files: any[];
   loading?: boolean;
-  type: 'node' | 'template' | 'patch' | 'ruleset';
+  type: 'node' | 'template' | 'adapter' | 'ruleset';
   globalBusy?: boolean;
   revision: string | null;
 }>();
@@ -150,7 +150,7 @@ const emit = defineEmits<{
   'refresh': [force?: boolean];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
   'delete': [file: any];
-  'saved': [file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'patch' | 'ruleset'; revision: string }];
+  'saved': [file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'adapter' | 'ruleset'; revision: string }];
   'conflict': [resolve: (action: 'reload' | 'overwrite' | 'cancel') => void];
 }>();
 
@@ -204,7 +204,7 @@ const emptyMessage = computed(() => t(typeEmptyKey[props.type]));
 const typeEmptyKey = {
   node: 'assets.nodesEmpty',
   template: 'assets.templatesEmpty',
-  patch: 'assets.patchesEmpty',
+  adapter: 'assets.adaptersEmpty',
   ruleset: 'assets.rulesetsEmpty',
 } as const;
 
@@ -365,17 +365,20 @@ async function saveFileCode() {
       if (Object.keys(metadata).length === 0) delete parsed._sing_sub;
       else parsed._sing_sub = metadata;
     }
-  } else if (localFileNote.value) {
-    parsed.note = localFileNote.value;
   } else {
-    delete parsed.note;
+    if (props.type === 'adapter') parsed.name = localFileName.value;
+    if (localFileNote.value) {
+    parsed.note = localFileNote.value;
+    } else {
+      delete parsed.note;
+    }
   }
   editorContent.value = JSON.stringify(parsed, null, 2);
 
   isSaving.value = true;
 
   try {
-    const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : props.type === 'patch' ? 'patches' : 'rulesets');
+    const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : props.type === 'adapter' ? 'adapters' : 'rulesets');
     const newPath = `sing-sub/${dir}/${localFileName.value}.json`;
     const isRename = newPath !== editingFile.value.path && !editingFile.value.isNew;
 
@@ -435,7 +438,7 @@ async function saveFileCode() {
 }
 
 function createFile() {
-  const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : props.type === 'patch' ? 'patches' : 'rulesets');
+  const dir = props.type === 'node' ? 'nodes' : (props.type === 'template' ? 'templates' : props.type === 'adapter' ? 'adapters' : 'rulesets');
   viewMode.value = 'edit';
   editingFile.value = {
     path: `sing-sub/${dir}/untitled.json`,
@@ -444,9 +447,11 @@ function createFile() {
   localFileName.value = '';
   localFileNote.value = '';
   originalFileNote.value = '';
-  editorContent.value = props.type === 'ruleset' 
+  editorContent.value = props.type === 'ruleset'
     ? '{\n  "version": 2,\n  "rules": [],\n  "_sing_sub": {\n    "sources": []\n  }\n}'
-    : '{\n  "inbounds": [],\n  "outbounds": []\n}';
+    : props.type === 'adapter'
+      ? '{\n  "schemaVersion": 1,\n  "name": "untitled",\n  "replacements": [\n    {\n      "path": ["inbounds"],\n      "value": []\n    }\n  ]\n}'
+      : '{\n  "inbounds": [],\n  "outbounds": []\n}';
   originalContent.value = editorContent.value;
   fileSha.value = null;
   isEditorDirty.value = false;

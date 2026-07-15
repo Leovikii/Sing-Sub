@@ -8,7 +8,7 @@ import { InMemoryR2Bucket } from '../fakes/in-memory-r2-bucket';
 
 function snapshot(): WorkspaceSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: 'primary',
     revisionId: 'revision-1',
     previousRevisionId: null,
@@ -17,7 +17,7 @@ function snapshot(): WorkspaceSnapshot {
       userLogin: 'Administrator', userAvatar: '', authVersion: 1, tokenVersion: 1,
     },
     profiles: [],
-    assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
     builds: {},
     sync: { status: 'never' },
   };

@@ -14,7 +14,7 @@ const now = '2026-07-14T12:00:00.000Z';
 
 function snapshot(revisionId: string, previousRevisionId: string | null): WorkspaceSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: 'workspace-1',
     revisionId,
     previousRevisionId,
@@ -29,7 +29,7 @@ function snapshot(revisionId: string, previousRevisionId: string | null): Worksp
       tokenVersion: 1,
     },
     profiles: [],
-    assets: { nodes: {}, templates: {}, patches: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
     builds: {},
     sync: { status: 'never' },
   };

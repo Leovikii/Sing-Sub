@@ -2,7 +2,7 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { AssetSnapshot } from '../../shared';
 
-const emptyAssets = (): AssetSnapshot => ({ nodes: [], templates: [], patches: [], rulesets: [] });
+const emptyAssets = (): AssetSnapshot => ({ nodes: [], templates: [], adapters: [], rulesets: [] });
 
 export const useAssetsStore = defineStore('assets', () => {
   const items = ref<AssetSnapshot>(emptyAssets());

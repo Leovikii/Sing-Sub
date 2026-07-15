@@ -17,7 +17,7 @@ export interface NormalizedLegacyWorkspace {
   assets: {
     nodes: Record<string, JsonAsset>;
     templates: Record<string, JsonAsset>;
-    patches: Record<string, JsonAsset>;
+    adapters: Record<string, JsonAsset>;
     rulesets: Record<string, JsonAsset>;
   };
 }

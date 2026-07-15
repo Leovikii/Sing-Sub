@@ -5,7 +5,7 @@ describe('managed asset paths', () => {
   it.each([
     'sing-sub/nodes/home.json',
     'sing-sub/templates/default.json',
-    'sing-sub/patches/mobile-v2.json',
+    'sing-sub/adapters/mobile-v2.json',
     'sing-sub/rulesets/private_domains.json',
   ])('accepts %s', (path) => {
     expect(parseManagedAssetPath(path)).not.toBeNull();

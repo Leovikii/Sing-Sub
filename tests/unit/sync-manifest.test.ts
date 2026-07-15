@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { syncManifestSchema, type WorkspaceSnapshot } from '../../shared';
+import { MOMO_ADAPTER_PRESET, syncManifestSchema, type WorkspaceSnapshot } from '../../shared';
 import { exportWorkspaceForSync, SYNC_MANIFEST_PATH } from '../../worker/application/sync/export-workspace';
 import { encodeSyncPath, parseSyncPath } from '../../worker/domain/sync/sync-path';
 import { sha256Hex } from '../../worker/domain/revisions/canonical-json';
 
 function snapshot(): WorkspaceSnapshot {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: 'primary',
     revisionId: 'revision-7',
     previousRevisionId: 'revision-6',
@@ -29,7 +29,9 @@ function snapshot(): WorkspaceSnapshot {
       templates: {
         default: { path: 'sing-sub/templates/default.json', content: { log: { level: 'info' } } },
       },
-      patches: {},
+      adapters: {
+        momo: { path: 'sing-sub/adapters/momo.json', content: MOMO_ADAPTER_PRESET },
+      },
       rulesets: {
         direct: { path: 'sing-sub/rulesets/direct.json', content: { version: 2, rules: [] } },
       },
@@ -69,13 +71,14 @@ describe('workspace sync export', () => {
 
     expect(first).toEqual(second);
     expect(first.files.map(file => file.path)).toEqual([
+      'sing-sub/adapters/momo.json',
       'sing-sub/configs/default.json',
       'sing-sub/rulesets/direct.json',
       'sing-sub/templates/default.json',
       SYNC_MANIFEST_PATH,
     ]);
     expect(syncManifestSchema.parse(first.manifest)).toEqual(first.manifest);
-    expect(first.manifest.files).toHaveLength(3);
+    expect(first.manifest.files).toHaveLength(4);
     expect(first.manifest.contentHash).toBe(first.contentHash);
     expect(first.manifestHash).toBe(await sha256Hex(first.files.at(-1)!.content));
     expect(first.files[0].content).toContain('\n  "');

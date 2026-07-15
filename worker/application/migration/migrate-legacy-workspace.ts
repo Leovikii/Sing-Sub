@@ -1,4 +1,9 @@
-import { privateCredentialsSchema, workspaceSnapshotSchema, type WorkspaceSnapshot } from '../../../shared';
+import {
+  MOMO_ADAPTER_PRESET,
+  privateCredentialsSchema,
+  workspaceSnapshotSchema,
+  type WorkspaceSnapshot,
+} from '../../../shared';
 import type { NormalizedLegacyWorkspace } from './legacy-migration-model';
 import type { PrivateMetadataStore } from '../ports/private-metadata-store';
 import type { WorkspaceStore } from '../ports/workspace-store';
@@ -42,7 +47,7 @@ export async function migrateLegacyWorkspace(
 ): Promise<MigrateLegacyWorkspaceResult> {
   const { source, settings, profiles, assets } = command.normalized;
   const importedSnapshot = workspaceSnapshotSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspaceId: command.workspaceId,
     revisionId: command.revisionId,
     previousRevisionId: null,
@@ -57,7 +62,17 @@ export async function migrateLegacyWorkspace(
       tokenVersion: 1,
     },
     profiles,
-    assets,
+    assets: Object.keys(assets.adapters).length > 0 ? assets : {
+      ...assets,
+      adapters: {
+        momo: {
+          path: 'sing-sub/adapters/momo.json',
+          note: 'OpenWrt Momo',
+          content: MOMO_ADAPTER_PRESET,
+          updatedAt: command.migratedAt,
+        },
+      },
+    },
     builds: {},
     sync: { status: 'never' },
     migration: {

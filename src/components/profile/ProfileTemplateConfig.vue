@@ -16,16 +16,16 @@
     </div>
     
     <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-text-primary">{{ t('profiles.patch') }} <span class="text-text-muted font-normal text-xs">({{ t('profiles.optional') }})</span></label>
+      <label class="w-32 shrink-0 font-medium text-text-primary">{{ t('profiles.adapter') }} <span class="text-text-muted font-normal text-xs">({{ t('profiles.optional') }})</span></label>
       <div class="flex-1 min-w-0">
         <PrimeSelect
-          :modelValue="profile.patchUrl || ''"
-          @update:modelValue="profile.patchUrl = $event"
-          :options="patchOptions"
+          :modelValue="profile.adapterUrl || ''"
+          @update:modelValue="profile.adapterUrl = $event"
+          :options="adapterOptions"
           option-label="label"
           option-value="value"
           :placeholder="t('profiles.none')"
-          :ariaLabel="t('profiles.patch')"
+          :ariaLabel="t('profiles.adapter')"
         />
       </div>
     </div>
@@ -58,7 +58,7 @@ const profile = defineModel<Profile>('profile', { required: true });
 const props = defineProps<{
   availableNodes?: string[];
   availableTemplates?: string[];
-  availablePatches?: string[];
+  availableAdapters?: string[];
 }>();
 
 const nodeOptions = computed(() => {
@@ -71,11 +71,11 @@ const nodeOptions = computed(() => {
   });
 });
 
-const patchOptions = computed(() => {
-  const opts = (props.availablePatches || []).map(p => {
+const adapterOptions = computed(() => {
+  const opts = (props.availableAdapters || []).map(p => {
     const path = typeof p === 'string' ? p : (p as any).path || '';
     return {
-      label: path.replace('sing-sub/patches/', ''),
+      label: path.replace('sing-sub/adapters/', ''),
       value: path,
     };
   });

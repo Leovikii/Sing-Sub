@@ -9,10 +9,11 @@ export async function authenticateSubscriptionAccess(
   tokenService: AuthTokenService,
 ): Promise<WorkspaceRead<WorkspaceSnapshot> | null> {
   const workspace = await workspaceStore.read(PRIMARY_WORKSPACE_ID);
-  const claims = await tokenService.verifySubscription(
-    token,
-    workspace.snapshot.settings.tokenVersion,
-  );
+  const claims = await tokenService.verifySubscription(token, {
+    workspaceId: PRIMARY_WORKSPACE_ID,
+    tokenVersion: workspace.snapshot.settings.tokenVersion,
+    purpose: 'subscription',
+  });
   return claims?.workspaceId === PRIMARY_WORKSPACE_ID && claims.purpose === 'subscription'
     ? workspace
     : null;

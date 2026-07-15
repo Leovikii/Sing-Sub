@@ -43,7 +43,8 @@
 ## 5. 会话与缓存
 
 - 会话使用短期 HttpOnly 签名 Cookie，不建立持久 session store。
-- 私有 JSON 订阅 token 使用 HMAC 签名 payload，不建立 KV token index。
+- 私有 JSON 订阅使用 `s2.<128-bit HMAC tag>` 短 Token；签名输入绑定 domain、固定 workspace、token version 与用途，不携带 payload，不建立 KV token index。
+- 订阅 Token 格式切换默认不保留旧 bearer credential 兼容；变更必须在 Release note 中明确旧链接立即失效，并验证设置页轮换和新链接复制流程。
 - 公开 source ruleset 使用 `/rules/{ruleset}.json`，始终从 current revision 生成去除 `_sing_sub` 的 JSON。
 - 公开 SRS 使用 `/rules/{ruleset}.srs`，仅在 active artifact 存在时提供；两者均不得携带或验证私有配置订阅 token。
 - 公开 ruleset router 只接受一个安全 ruleset ID path segment；禁止实现 token parameter、token parser、token redirect 或 subscription-auth import。
@@ -100,6 +101,7 @@
 - Release 的首次初始化、日常升级和回滚必须是不同操作，不能由 main push 或发现新版本隐式完成。
 - 普通用户部署不得要求 fork；维护仓库 Release Action 不能获得或代理用户 Cloudflare 凭据。
 - SRS compiler 属于连接私有仓库后的可选能力，维护者与 Release 用户使用同一机制。
+- `3.0.0-beta.*` 阶段允许基于真实使用反馈优化产品能力，但不得降低数据、鉴权、同步和恢复边界；部署方案、前端 Beta 收束和 P0/P1 回归全部完成前不得发布 `3.0.0`。
 - 未连接 GitHub 或未配置 compiler 时，WebUI、R2 CRUD、私有 JSON 配置订阅、ruleset 编辑及公开 JSON ruleset 订阅必须完整可用。
 
 ## 9. 快照与加密
@@ -160,7 +162,7 @@ interface ApiFailure {
 - AbortController 或 sequence token 用于取消/忽略陈旧请求。
 - conflict 不通过递归 save 处理。
 - 不实现通用 refresh/rebuild/force-refresh UI 或 API。订阅由 current revision 动态构建，revision-aware Cache API 只做加速。
-- Profile 最终 JSON 保留模板字段和数组顺序；override/patch 只覆盖原位置或在没有对应字段时追加，筛选节点保持节点源顺序并在同一锚点按规则顺序稳定插入。
+- Profile 最终 JSON 保留模板字段和数组顺序；adapter 只整体替换已存在路径或恰好一个数组匹配项，随后筛选节点保持节点源顺序并在同一锚点按规则顺序稳定插入。
 - 浏览器重新加载已足以读取 current R2 state；未保存草稿的多设备变化使用显式 reload/discard 确认，不以刷新按钮静默覆盖。
 - GitHub pull/push、规则来源更新和 SRS retry 必须分别命名、确认并展示独立状态，不能收敛为“刷新”。
 
@@ -209,17 +211,17 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 
 ## 16. Router、导航与页面
 
-- 使用 Vue Router：`/connect`、`/profiles`、`/resources/nodes`、`/resources/templates`、`/resources/patches`、`/resources/rulesets`、`/sync`、`/settings/general`、`/settings/subscription`、`/settings/repository`、`/settings/about`。
+- 使用 Vue Router：`/connect`、`/profiles`、`/resources/nodes`、`/resources/templates`、`/resources/adapters`、`/resources/rulesets`、`/sync`、`/settings/general`、`/settings/subscription`、`/settings/repository`、`/settings/about`。
 - session guard 只决定访问与跳转，不执行保存或同步。
 - URL 作为页面与资产类型状态来源，替代 `App.vue` tab switch。
 - 桌面使用常驻侧栏；窄屏让同一侧栏 off-canvas 展开/收起，不另建第二套 Drawer 样式。侧栏移动端必须保持挂载，通过 transform/visibility 和 Vue Transition 完成进出场，关闭状态设置 `aria-hidden` 与 `pointer-events: none`。`资源` 和 `设置` 是可展开导航组，不在内容区重复一套资源切换控件。
-- 资源定义为可独立命名、保存、编辑，并被 Profile 引用或公开分发的 workspace 数据；节点集、模板、补丁和规则集均属于资源。规则集因 JSON/SRS 发布与构建生命周期使用独立子路由和专属组件。
+- 资源定义为可独立命名、保存、编辑，并被 Profile 引用或公开分发的 workspace 数据；节点集、模板、适配器和规则集均属于资源。规则集因 JSON/SRS 发布与构建生命周期使用独立子路由和专属组件。
 - `同步` 是独立操作页，负责 status/diff/push/pull/conflict；`设置/仓库` 只负责连接、更换 PAT、断开仓库、默认分支和 SRS 全局开关。
 - 设置分为 `通用`、`订阅`、`仓库`、`关于`；退出登录位于侧栏底部，不创建账户设置分类。
 - 顶栏只显示一次当前路由标题，内容区不得重复同名 H1/H2 和说明性副标题。
 - Profile 保留列表/卡片打开 Dialog 的交互。编辑使用结构化表单，预览从当前未保存 draft 实时生成最终 JSON；切换模式不丢弃 draft，保存只属于编辑模式。
 - Profile 的模板选择只引用 workspace 内的模板资产；编辑器、schema、预览构建和模板 API 均不得接受外部 URL。未来若重新支持必须在模板资源页建立独立导入流程，并通过新的 ADR 重新启用。
-- 节点集、模板和补丁不保留无价值的只读 JSON/编辑切换；CodeMirror 直接承担编辑与校验。规则集页面按需展示公开 JSON/SRS、构建状态和编辑入口。
+- 节点集、模板和适配器不保留无价值的只读 JSON/编辑切换；CodeMirror 直接承担编辑与校验。规则集页面按需展示公开 JSON/SRS、构建状态和编辑入口。
 
 ## 17. 错误与可观测性
 
