@@ -147,13 +147,18 @@ export async function buildProfile(
     const inboundsArray = normalizeArray<Inbound>(nodesData, 'inbounds');
     const templateInbounds = Array.isArray(template.inbounds) ? template.inbounds : [];
     if (profile.inboundRules && profile.inboundRules.length > 0) {
+      const insertionCursors = new Map<string, number>();
       profile.inboundRules.forEach(rule => {
         if (!rule.tag || !rule.filters) return;
         const matched = applyFilters(inboundsArray, rule.filters);
         if (matched.length > 0) {
-          const idx = templateInbounds.findIndex((i: any) => i.tag === rule.tag);
+          const idx = insertionCursors.has(rule.tag)
+            ? insertionCursors.get(rule.tag)!
+            : templateInbounds.findIndex((i: any) => i.tag === rule.tag);
           if (idx !== -1) {
-            templateInbounds.splice(idx + 1, 0, ...matched);
+            const insertionAt = idx + 1;
+            templateInbounds.splice(insertionAt, 0, ...matched);
+            insertionCursors.set(rule.tag, insertionAt + matched.length - 1);
           } else {
             templateInbounds.push(...matched);
           }

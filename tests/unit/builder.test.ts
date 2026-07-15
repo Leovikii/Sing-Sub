@@ -15,6 +15,51 @@ const profile: Profile = {
 };
 
 describe('profile builder', () => {
+  it('preserves template key order and selected node source order', async () => {
+    const orderedProfile: Profile = {
+      ...profile,
+      patchUrl: '',
+      rules: [{ group: 'proxy', filters: [{ action: 'include', keyword: 'node' }] }],
+      inboundRules: [
+        { tag: 'tun', filters: [{ action: 'include', keyword: 'inbound-a' }] },
+        { tag: 'tun', filters: [{ action: 'include', keyword: 'inbound-b' }] },
+      ],
+    };
+    const template = {
+      experimental: { cache_file: 'cache.db' },
+      log: { level: 'info' },
+      inbounds: [{ type: 'tun', tag: 'tun' }],
+      outbounds: [{ type: 'selector', tag: 'proxy', outbounds: ['direct'] }],
+      route: { final: 'proxy' },
+    };
+    const nodes = {
+      inbounds: [
+        { type: 'mixed', tag: 'inbound-a' },
+        { type: 'mixed', tag: 'inbound-b' },
+      ],
+      outbounds: [
+        { type: 'vmess', tag: 'node-z' },
+        { type: 'vmess', tag: 'node-a' },
+      ],
+    };
+
+    const result = await buildProfile(orderedProfile, {
+      loadTemplate: async () => template,
+      loadRepoJson: async () => nodes,
+    });
+
+    expect(Object.keys(JSON.parse(result))).toEqual([
+      'experimental', 'log', 'inbounds', 'outbounds', 'route',
+    ]);
+    const parsed = JSON.parse(result);
+    expect(parsed.outbounds.map((item: { tag: string }) => item.tag)).toEqual([
+      'proxy', 'node-z', 'node-a',
+    ]);
+    expect(parsed.inbounds.map((item: { tag: string }) => item.tag)).toEqual([
+      'tun', 'inbound-a', 'inbound-b',
+    ]);
+  });
+
   it('applies overrides and patches before inserting filtered nodes', async () => {
     const template = {
       log: { level: 'info' },
