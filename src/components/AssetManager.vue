@@ -16,15 +16,49 @@
         @action="(act) => handleFileAction(act, file)"
       >
         <template #actions>
-          <ToolbarButton
+          <Tag
             v-if="type === 'ruleset'"
-            @click.stop="copyRulesetLink(file)"
-            :icon="copiedRulesetPath === file.path ? Check : Link2"
-            :label="copiedRulesetPath === file.path ? '已复制' : '订阅'"
-            variant="emphasis"
-            size="card"
-            mobileLabel
+            :value="rulesetStatusLabel(file)"
+            :severity="rulesetStatusSeverity(file)"
           />
+          <Button
+            v-if="type === 'ruleset' && rulesetBuild(file)?.status === 'failed'"
+            severity="danger"
+            text
+            rounded
+            :loading="retryingRuleset === rulesetId(file)"
+            :aria-label="t('rulesets.retryBuild')"
+            v-tooltip.top="t('rulesets.retryBuild')"
+            @click.stop="retryRuleset(file)"
+          >
+            <RotateCcw :size="18" aria-hidden="true" />
+          </Button>
+          <Button
+            v-if="type === 'ruleset'"
+            severity="secondary"
+            text
+            size="small"
+            @click.stop="copyRulesetLink(file, 'json')"
+            :aria-label="copiedRulesetPath === `${file.path}:json` ? t('common.copied') : t('assets.copyJson')"
+            v-tooltip.top="copiedRulesetPath === `${file.path}:json` ? t('common.copied') : t('assets.copyJson')"
+          >
+            <Check v-if="copiedRulesetPath === `${file.path}:json`" :size="17" aria-hidden="true" />
+            <Link2 v-else :size="18" aria-hidden="true" />
+            <span class="hidden sm:inline">JSON</span>
+          </Button>
+          <Button
+            v-if="type === 'ruleset' && rulesetBuild(file)?.formats.binary"
+            severity="secondary"
+            text
+            size="small"
+            @click.stop="copyRulesetLink(file, 'srs')"
+            :aria-label="copiedRulesetPath === `${file.path}:srs` ? t('common.copied') : t('assets.copySrs')"
+            v-tooltip.top="copiedRulesetPath === `${file.path}:srs` ? t('common.copied') : t('assets.copySrs')"
+          >
+            <Check v-if="copiedRulesetPath === `${file.path}:srs`" :size="17" aria-hidden="true" />
+            <Link2 v-else :size="18" aria-hidden="true" />
+            <span class="hidden sm:inline">SRS</span>
+          </Button>
         </template>
       </FileCard>
     </div>
@@ -36,7 +70,7 @@
     </div>
 
     <div v-else-if="files.length === 0" class="text-center py-20 text-text-muted">
-      {{ type === 'node' ? '暂无节点文件，仓库初始化可能正在进行中。' : (type === 'template' ? '暂无模板文件。' : (type === 'patch' ? '暂无补丁文件。' : '暂无规则集文件。')) }}
+      {{ emptyMessage }}
     </div>
 
     <!-- Editor Modal -->
@@ -45,7 +79,7 @@
       @update:isOpen="(val) => { if (!val) closeEditor(); }"
       :title="localFileName"
       @update:title="localFileName = $event"
-      titlePlaceholder="输入文件名称"
+      :titlePlaceholder="t('assets.fileName')"
       :note="localFileNote"
       @update:note="localFileNote = $event"
       :viewMode="viewMode"
@@ -57,7 +91,7 @@
       :isSaving="isSaving || globalBusy"
       :showSave="true"
       :saveDisabled="!isSaveReady"
-      saveText="保存"
+      :saveText="t('common.save')"
       :showViewToggle="true"
       @save="saveFileCode"
       @close="closeEditor"
@@ -66,7 +100,7 @@
         v-if="viewMode === 'preview'"
         :content="editorContent"
         :loading="isLoading"
-        loadingText="读取中..."
+        :loadingText="t('assets.reading')"
         class="min-h-[60vh]"
       />
       <component
@@ -86,28 +120,37 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
-import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check, Loader2 } from 'lucide-vue-next';
+import { storeToRefs } from 'pinia';
+import { useI18n } from 'vue-i18n';
+import Button from 'primevue/button';
+import Tag from 'primevue/tag';
+import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check, Loader2, RotateCcw } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
-import ToolbarButton from './ui/ToolbarButton.vue';
 import CodePreview from './ui/CodePreview.vue';
+import { useApi, ApiError } from '../composables/useApi';
+import { useRulesetsStore } from '../stores/rulesets';
 
 const CodeEditor = defineAsyncComponent(() => import('./ui/CodeEditor.vue'));
 const RuleSetEditor = defineAsyncComponent(() => import('./ui/RuleSetEditor.vue'));
+const { t } = useI18n();
+const { getFile, putFile } = useApi();
+const rulesetsStore = useRulesetsStore();
+const { builds: rulesetBuilds, retryingId: retryingRuleset } = storeToRefs(rulesetsStore);
 
 const props = defineProps<{
   files: any[];
   loading?: boolean;
   type: 'node' | 'template' | 'patch' | 'ruleset';
   globalBusy?: boolean;
-  subToken?: string;
+  revision: string | null;
 }>();
 
 const emit = defineEmits<{
   'refresh': [force?: boolean];
   'status': [type: 'success' | 'warning' | 'error', message: string, duration?: number];
   'delete': [file: any];
-  'saved': [file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'patch' | 'ruleset' }];
+  'saved': [file: { path: string; oldPath?: string; note: string; type: 'node' | 'template' | 'patch' | 'ruleset'; revision: string }];
   'conflict': [resolve: (action: 'reload' | 'overwrite' | 'cancel') => void];
 }>();
 
@@ -154,9 +197,59 @@ const isSaveReady = computed(() => isValidJson.value && hasValidFileName.value);
 
 
 
-const fileMenuItems = [
-  { label: '删除文件', action: 'remove', icon: Trash2, danger: true },
-];
+const fileMenuItems = computed(() => [
+  { label: t('assets.removeFile'), action: 'remove', icon: Trash2, danger: true },
+]);
+const emptyMessage = computed(() => t(typeEmptyKey[props.type]));
+const typeEmptyKey = {
+  node: 'assets.nodesEmpty',
+  template: 'assets.templatesEmpty',
+  patch: 'assets.patchesEmpty',
+  ruleset: 'assets.rulesetsEmpty',
+} as const;
+
+function rulesetId(file: { path: string }) {
+  return getBasename(file.path).replace(/\.json$/, '');
+}
+
+function rulesetBuild(file: { path: string }) {
+  return rulesetBuilds.value[rulesetId(file)];
+}
+
+function rulesetStatusLabel(file: { path: string }) {
+  const status = rulesetBuild(file)?.status || 'none';
+  return status === 'none' ? t('rulesets.jsonOnly') : t(`rulesets.${status}`);
+}
+
+function rulesetStatusSeverity(file: { path: string }) {
+  const status = rulesetBuild(file)?.status;
+  if (status === 'ready') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'pending' || status === 'dispatching' || status === 'compiling') return 'warn';
+  return 'secondary';
+}
+
+async function loadRulesetBuild(file: { path: string }) {
+  const id = rulesetId(file);
+  try {
+    await rulesetsStore.load(id);
+  } catch {
+    // JSON distribution remains available when build status cannot be read.
+  }
+}
+
+async function retryRuleset(file: { path: string }) {
+  const id = rulesetId(file);
+  try {
+    await rulesetsStore.retry(id);
+  } catch (error: any) {
+    emit('status', 'error', `${t('rulesets.retryBuild')}: ${error.message}`);
+  }
+}
+
+watch(() => [props.type, ...props.files.map(file => file.path)], () => {
+  if (props.type === 'ruleset') void rulesetsStore.loadMany(props.files.map(rulesetId));
+}, { immediate: true });
 
 function handleFileAction(action: string, file: any) {
   if (action === 'remove') {
@@ -191,18 +284,18 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
   isEditorDirty.value = false;
 
   try {
-    const res = await fetch(`/api/file?path=${encodeURIComponent(file.path)}`);
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({})) as { error?: string; code?: string };
-      if (res.status === 404 && error.code === 'ASSET_NOT_FOUND') {
+    let data;
+    try {
+      data = await getFile(file.path);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404 && error.code === 'ASSET_NOT_FOUND') {
         closeEditor();
-        emit('status', 'warning', '文件已在仓库中删除，组件列表已刷新', 5000);
+        emit('status', 'warning', t('assets.reloadNotice'), 5000);
         emit('refresh', true);
         return;
       }
-      throw new Error(error.error || 'Failed to load file');
+      throw error;
     }
-    const data = await res.json();
     if (seq !== editFileSeq) return; // A newer editFile() call superseded this one
 
     originalContent.value = data.content;
@@ -223,7 +316,7 @@ async function editFile(file: any, mode: 'preview' | 'edit' = 'edit') {
 
   } catch (e: any) {
     if (seq !== editFileSeq) return;
-    emit('status', 'error', '加载失败: ' + e.message);
+    emit('status', 'error', `${t('assets.loadFailed')}: ${e.message}`);
   } finally {
     if (seq === editFileSeq) isLoading.value = false;
   }
@@ -242,11 +335,11 @@ function resolveConflict(): Promise<'reload' | 'overwrite' | 'cancel'> {
 async function saveFileCode() {
   if (props.type === 'ruleset') editorComponentRef.value?.flushPendingChange?.();
   if (!isValidJson.value) {
-    emit('status', 'error', '请修复 JSON 语法错误后再保存');
+    emit('status', 'error', t('assets.invalidJson'));
     return;
   }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(localFileName.value)) {
-    emit('status', 'error', '文件名只能包含字母、数字、点、下划线和连字符，且不能为空');
+    emit('status', 'error', t('assets.invalidName'));
     return;
   }
 
@@ -254,7 +347,7 @@ async function saveFileCode() {
   try {
     parsed = JSON.parse(editorContent.value);
   } catch (e: any) {
-    emit('status', 'error', 'JSON 语法错误: ' + e.message);
+    emit('status', 'error', `${t('assets.invalidJson')} ${e.message}`);
     return;
   }
 
@@ -286,40 +379,34 @@ async function saveFileCode() {
     const newPath = `sing-sub/${dir}/${localFileName.value}.json`;
     const isRename = newPath !== editingFile.value.path && !editingFile.value.isNew;
 
-    const res = await fetch('/api/file', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    let data;
+    const expectedRevision = fileSha.value || props.revision;
+    if (!expectedRevision) throw new Error(t('workspace.revisionMissing'));
+    try {
+      data = await putFile({
         path: newPath,
         content: editorContent.value,
+        expectedRevision,
         sha: isRename ? null : fileSha.value,
         oldPath: isRename ? editingFile.value.path : undefined,
         message: `${editingFile.value.isNew ? 'Create' : (isRename ? 'Rename' : 'Update')} ${localFileName.value}.json`
-      })
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 409) {
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
         const action = await resolveConflict();
         isSaving.value = false;
         if (action === 'reload') {
           await editFile(editingFile.value);
-          emit('status', 'warning', '已重新加载最新版本，请检查改动是否需要重新应用', 5000);
+          emit('status', 'warning', t('workspace.reloadNotice'), 5000);
         } else if (action === 'overwrite') {
-          const latest = await fetch(`/api/file?path=${encodeURIComponent(editingFile.value.path)}`);
-          if (latest.ok) {
-            const latestData = await latest.json();
-            fileSha.value = latestData.sha;
-          }
+          const latest = await getFile(editingFile.value.path);
+          fileSha.value = latest.sha;
           return saveFileCode();
         }
         return;
       }
-      throw new Error(data.error || '保存失败');
+      throw error;
     }
-
-    const data = await res.json().catch(() => ({}));
 
     isEditorDirty.value = false;
     originalContent.value = editorContent.value;
@@ -329,17 +416,19 @@ async function saveFileCode() {
       oldPath: isRename ? editingFile.value.path : undefined,
       note: localFileNote.value,
       type: props.type,
+      revision: data.revision,
     });
     if (data.warning) {
       emit('status', 'warning', data.warning, 5000);
     } else if (props.type === 'ruleset') {
-      emit('status', 'success', '规则集已保存，SRS 正在编译', 5000);
+      emit('status', 'success', t('assets.saved'), 5000);
+      void loadRulesetBuild({ path: newPath });
     } else {
-      emit('status', 'success', '保存成功');
+      emit('status', 'success', t('assets.saved'));
     }
     editingFile.value = null;
   } catch (e: any) {
-    emit('status', 'error', '保存失败: ' + e.message);
+    emit('status', 'error', `${t('assets.saveFailed')}: ${e.message}`);
   } finally {
     isSaving.value = false;
   }
@@ -365,16 +454,16 @@ function createFile() {
   ruleSetContentValid.value = true;
 }
 
-async function copyRulesetLink(file: any) {
-  if (!props.subToken) return;
+async function copyRulesetLink(file: any, format: 'json' | 'srs') {
   const name = getBasename(file.path).replace(/\.json$/, '');
-  const url = `${window.location.origin}/rules/${props.subToken}/${encodeURIComponent(name)}.srs`;
+  const url = `${window.location.origin}/rules/${encodeURIComponent(name)}.${format}`;
+  const copyKey = `${file.path}:${format}`;
   try {
     await navigator.clipboard.writeText(url);
-    copiedRulesetPath.value = file.path;
-    window.setTimeout(() => { if (copiedRulesetPath.value === file.path) copiedRulesetPath.value = ''; }, 2000);
+    copiedRulesetPath.value = copyKey;
+    window.setTimeout(() => { if (copiedRulesetPath.value === copyKey) copiedRulesetPath.value = ''; }, 2000);
   } catch {
-    emit('status', 'error', '复制失败');
+    emit('status', 'error', t('assets.copyFailed'));
   }
 }
 

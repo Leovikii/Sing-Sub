@@ -2,7 +2,7 @@
   <div class="space-y-4">
     <div class="flex items-center gap-2 mb-2">
       <ArrowDown class="w-4 h-4 text-brand-pink" />
-      <h3 class="font-bold text-text-primary">入站节点 (Inbounds)</h3>
+      <h3 class="font-bold text-text-primary">{{ t('profiles.inbounds') }}</h3>
     </div>
 
     <div
@@ -11,30 +11,33 @@
       <div class="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-start gap-y-3 gap-x-4">
         <!-- Left: Tag -->
         <div class="w-auto md:w-32 shrink-0 font-medium text-text-primary truncate order-1">
-          入站节点
+          {{ t('profiles.inbounds') }}
         </div>
 
           <!-- Edit Mode -->
           <template v-if="isEditing">
             <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex items-center gap-2">
-              <Select
+              <PrimeSelect
                 v-model="tempFilter.action"
-                :options="[{label:'包含', value:'include'}, {label:'排除', value:'exclude'}]"
-                ariaLabel="入站节点筛选方式"
+                :options="filterOptions"
+                option-label="label"
+                option-value="value"
+                :aria-label="`${t('profiles.inbounds')} ${t('profiles.filterMode')}`"
                 class="w-28 shrink-0"
               />
-              <Input v-model="tempFilter.keyword" placeholder="关键词，多个用逗号隔开" class="flex-1" />
+              <InputText v-model="tempFilter.keyword" :placeholder="t('profiles.keyword')" class="flex-1" fluid />
             </div>
             
-            <ToolbarButton
+            <Button
               @click="confirmEdit"
-              :icon="Check"
-              label="确认"
-              variant="emphasis"
-              size="card"
+              outlined
+              :aria-label="t('common.confirm')"
               :disabled="!tempFilter.keyword.trim()"
               class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
-            />
+            >
+              <Check :size="18" aria-hidden="true" />
+              <span class="hidden md:inline">{{ t('common.confirm') }}</span>
+            </Button>
           </template>
 
           <!-- Confirmed Mode -->
@@ -51,30 +54,35 @@
                   +{{ matchedNodes.length - 10 }}
                 </span>
               </template>
-              <span v-else class="text-sm text-text-muted italic">无匹配节点</span>
+              <span v-else class="text-sm text-text-muted italic">{{ t('profiles.noMatches') }}</span>
             </div>
 
             <!-- Actions -->
-            <ToolbarButton
+            <Button
               @click="clearRule"
-              :icon="Trash2"
-              label="删除"
-              variant="danger"
-              size="card"
+              severity="danger"
+              text
+              :aria-label="t('common.delete')"
               class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
-            />
+            >
+              <Trash2 :size="18" aria-hidden="true" />
+              <span class="hidden md:inline">{{ t('common.delete') }}</span>
+            </Button>
           </template>
 
           <!-- Empty Mode -->
           <template v-else>
             <!-- Insert Button -->
-            <ToolbarButton
+            <Button
               @click="startEdit"
-              :icon="Plus"
-              label="插入节点"
-              size="card"
+              severity="secondary"
+              text
+              :aria-label="t('profiles.insertNodes')"
               class="order-2 ml-auto shrink-0 md:order-3 md:ml-0"
-            />
+            >
+              <Plus :size="18" aria-hidden="true" />
+              <span class="hidden md:inline">{{ t('profiles.insertNodes') }}</span>
+            </Button>
           </template>
 
       </div>
@@ -84,15 +92,22 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { ArrowDown, Plus, Trash2, Check } from 'lucide-vue-next';
-import Input from '../ui/Input.vue';
-import Select from '../ui/Select.vue';
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import PrimeSelect from 'primevue/select';
 import NodeMicroCard from '../ui/NodeMicroCard.vue';
-import ToolbarButton from '../ui/ToolbarButton.vue';
 import type { Profile, FilterAction } from '../../types';
 
+const { t } = useI18n();
+const filterOptions = computed(() => [
+  { label: t('profiles.filterInclude'), value: 'include' },
+  { label: t('profiles.filterExclude'), value: 'exclude' },
+]);
+
+const profile = defineModel<Profile>('profile', { required: true });
 const props = defineProps<{
-  profile: Profile;
   templateData: any;
   nodesData: any;
 }>();
@@ -102,13 +117,13 @@ const isEditing = ref(false);
 const tempFilter = ref<FilterAction>({ action: 'include', keyword: '' });
 
 // Initialize empty rules array if missing
-if (!props.profile.inboundRules) {
-  props.profile.inboundRules = [];
+if (!profile.value.inboundRules) {
+  profile.value.inboundRules = [];
 }
 
 const rule = computed(() => {
-  return props.profile.inboundRules && props.profile.inboundRules.length > 0 
-    ? props.profile.inboundRules[0] 
+  return profile.value.inboundRules && profile.value.inboundRules.length > 0
+    ? profile.value.inboundRules[0]
     : null;
 });
 
@@ -126,20 +141,20 @@ function startEdit() {
 function confirmEdit() {
   if (!tempFilter.value.keyword.trim()) return;
   
-  if (!props.profile.inboundRules) props.profile.inboundRules = [];
+  if (!profile.value.inboundRules) profile.value.inboundRules = [];
   
-  if (props.profile.inboundRules.length === 0) {
-    props.profile.inboundRules.push({ tag: 'global-inbounds', filters: [tempFilter.value] });
+  if (profile.value.inboundRules.length === 0) {
+    profile.value.inboundRules.push({ tag: 'global-inbounds', filters: [tempFilter.value] });
   } else {
-    props.profile.inboundRules[0].filters = [tempFilter.value];
+    profile.value.inboundRules[0].filters = [tempFilter.value];
   }
   
   isEditing.value = false;
 }
 
 function clearRule() {
-  if (props.profile.inboundRules) {
-    props.profile.inboundRules = [];
+  if (profile.value.inboundRules) {
+    profile.value.inboundRules = [];
   }
   isEditing.value = false;
   tempFilter.value = { action: 'include', keyword: '' };

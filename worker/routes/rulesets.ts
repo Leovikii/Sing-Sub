@@ -1,25 +1,37 @@
-import type { Env } from '../types';
-import { requireAuth } from '../lib/auth';
-import { isManagedAssetPath, isRulesetPath } from '../lib/assets';
-import { COMPILE_SRS_WORKFLOW_CONTENT, COMPILE_SRS_WORKFLOW_PATH } from '../lib/compile-srs-workflow';
-import { createRulesetDocument, fetchPublicRuleset, parseImportedRules, parseRulesetImportUrl, readResponseTextLimited, readRulesetMetadata, validateRulesetSource } from '../lib/rulesets';
-import { commitMultiFiles, deleteFileContent, fetchFileContent, GithubApiError, putFileContent, type GitTreeItem } from '../lib/github';
-import { toRepoSession } from '../lib/helpers';
+import { putFileRequestSchema, type JsonAsset } from '../../shared';
+import { deleteAsset, saveAsset } from '../application/commands/assets/mutate-asset';
+import { saveRulesetSource } from '../application/commands/rulesets/save-ruleset-source';
+import { dispatchSrsBuild } from '../application/srs/manage-srs-build';
+import { createPrimaryWorkspaceServices } from '../composition/primary-workspace-services';
+import {
+  createOptionalCompilerDispatcher,
+  createSrsBuildStores,
+  createSrsJobTicketService,
+} from '../composition/srs-compiler-services';
+import { parseManagedAssetPath } from '../domain/assets/managed-asset-path';
+import { requirePrimaryWorkspaceAuth } from '../http/authenticate';
+import {
+  createRulesetDocument,
+  fetchPublicRuleset,
+  parseImportedRules,
+  parseRulesetImportUrl,
+  readResponseTextLimited,
+  readRulesetMetadata,
+  validateRulesetSource,
+} from '../lib/rulesets';
 import { errorResponse, jsonResponse } from '../lib/security';
-import { invalidateAssetSnapshot } from '../lib/dashboard';
+import { logEvent, requestIdFor } from '../lib/logging';
+import type { Env } from '../types';
 
-function validateAssetJson(path: string, content: string): string | null {
-  let document: unknown;
-  try {
-    document = JSON.parse(content);
-  } catch (error) {
-    return `JSON 语法错误: ${error instanceof Error ? error.message : '无法解析内容'}`;
+function noteFromJson(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const metadata = record._sing_sub;
+  if (metadata && typeof metadata === 'object' && !Array.isArray(metadata) &&
+      typeof (metadata as Record<string, unknown>).note === 'string') {
+    return (metadata as Record<string, unknown>).note as string;
   }
-  if (!document || typeof document !== 'object') return 'JSON 根节点必须是对象或数组';
-  if ((path.startsWith('sing-sub/templates/') || path.startsWith('sing-sub/patches/')) && Array.isArray(document)) {
-    return '模板和补丁的 JSON 根节点必须是对象';
-  }
-  return null;
+  return typeof record.note === 'string' ? record.note : undefined;
 }
 
 async function refreshRulesetSources(content: string): Promise<string> {
@@ -32,8 +44,8 @@ async function refreshRulesetSources(content: string): Promise<string> {
       const bucket = parseImportedRules(await readResponseTextLimited(response));
       if (!Object.values(bucket).some(values => values.length)) throw new Error('source contains no supported rules');
       refreshed.push({ source: { ...source, last_updated: new Date().toISOString() }, bucket });
-    } catch (error: any) {
-      throw new Error(`Source ${index + 1} (${source.url}) failed: ${error.message}`);
+    } catch (error) {
+      throw new Error(`Source ${index + 1} (${source.url}) failed`, { cause: error });
     }
   }
   return createRulesetDocument(
@@ -42,147 +54,109 @@ async function refreshRulesetSources(content: string): Promise<string> {
   );
 }
 
-export async function handlePutFile(request: Request, env: Env): Promise<Response> {
-  const auth = await requireAuth(request, env);
-  if (auth instanceof Response) return auth;
-
-  const { path, content, sha, oldPath } = await request.json() as { path: string; content: string; sha?: string; oldPath?: string };
-  if (!path || content === undefined) return errorResponse('Missing path or content', 400);
-  if (!isManagedAssetPath(path) || (oldPath && !isManagedAssetPath(oldPath))) {
-    return errorResponse('Unsupported file path', 400);
-  }
-
-  const session = toRepoSession(auth.settings);
-  if (!isRulesetPath(path)) {
-    const validationError = validateAssetJson(path, content);
-    if (validationError) return errorResponse(validationError, 400);
-    return putAssetFile(path, content, sha, oldPath, session, env);
-  }
-
-  const validationError = validateRulesetSource(content);
-  if (validationError) return errorResponse(validationError, 400);
-  let preparedContent: string;
-  try {
-    preparedContent = await refreshRulesetSources(content);
-  } catch (error: any) {
-    return errorResponse(error.message || 'Rule-set source validation failed', 400);
-  }
-  const isRename = !!oldPath && oldPath !== path;
-  const fileName = path.split('/').pop()!;
-  const compiledPath = `sing-sub/rulesets/compiled/${fileName.replace(/\.json$/, '')}.srs`;
-  const oldCompiledPath = isRename && oldPath && isRulesetPath(oldPath)
-    ? `sing-sub/rulesets/compiled/${oldPath.split('/').pop()!.replace(/\.json$/, '')}.srs`
-    : null;
-
-  try {
-    const [workflowFile, currentFile, compiledFile, oldCompiledFile] = await Promise.all([
-      fetchFileContent(COMPILE_SRS_WORKFLOW_PATH, session),
-      sha ? fetchFileContent(path, session) : Promise.resolve(null),
-      fetchFileContent(compiledPath, session),
-      oldCompiledPath && oldCompiledPath !== compiledPath ? fetchFileContent(oldCompiledPath, session) : Promise.resolve(null),
-    ]);
-    if (sha && (!currentFile || currentFile.sha !== sha)) return errorResponse('File was modified; reload it before saving', 409);
-
-    const workflowNeedsSync = !workflowFile || workflowFile.content !== COMPILE_SRS_WORKFLOW_CONTENT;
-    const treeItems: GitTreeItem[] = [{ path, mode: '100644', type: 'blob', content: preparedContent }];
-    const deletedPaths = new Set<string>();
-    const addDeletion = (candidate: string, exists: boolean) => {
-      if (exists && !deletedPaths.has(candidate)) {
-        deletedPaths.add(candidate);
-        treeItems.push({ path: candidate, mode: '100644', type: 'blob', sha: null });
-      }
-    };
-    if (isRename) addDeletion(oldPath!, true);
-    if (workflowNeedsSync) treeItems.push({ path: COMPILE_SRS_WORKFLOW_PATH, mode: '100644', type: 'blob', content: COMPILE_SRS_WORKFLOW_CONTENT });
-    addDeletion(compiledPath, !!compiledFile);
-    if (oldCompiledPath) addDeletion(oldCompiledPath, !!oldCompiledFile);
-
-    const actionMessage = isRename
-      ? `ruleset: rename ${oldPath!.split('/').pop()} to ${fileName}`
-      : `ruleset: ${sha ? 'update' : 'create'} ${fileName}`;
-    await commitMultiFiles(session, treeItems, actionMessage);
-    await invalidateAssetSnapshot(env, session);
-  } catch (error) {
-    if (error instanceof GithubApiError && error.status === 409) return errorResponse('File was modified; reload it before saving', 409);
-    throw error;
-  }
-  return jsonResponse({ success: true, content: preparedContent });
-}
-
-async function putAssetFile(
-  path: string,
-  content: string,
-  sha: string | undefined,
-  oldPath: string | undefined,
-  session: ReturnType<typeof toRepoSession>,
+export async function handlePutFile(
+  request: Request,
   env: Env,
+  context?: Pick<ExecutionContext, 'waitUntil'>,
 ): Promise<Response> {
-  const isRename = !!oldPath && oldPath !== path;
-  const fileName = path.split('/').pop()!;
-  const scope = path.startsWith('sing-sub/nodes/') ? 'node'
-    : path.startsWith('sing-sub/templates/') ? 'template'
-      : path.startsWith('sing-sub/patches/') ? 'patch' : 'asset';
-  const actionMessage = isRename
-    ? `${scope}: rename ${oldPath!.split('/').pop()} to ${fileName}`
-    : `${scope}: ${sha ? 'update' : 'create'} ${fileName}`;
-  try {
-    if (isRename) {
-      const treeItems: GitTreeItem[] = [
-        { path, mode: '100644', type: 'blob', content },
-        { path: oldPath!, mode: '100644', type: 'blob', sha: null },
-      ];
-      if (isRulesetPath(oldPath!)) {
-        const oldBasename = oldPath!.split('/').pop()!.replace(/\.json$/, '');
-        const compiledPath = `sing-sub/rulesets/compiled/${oldBasename}.srs`;
-        if (await fetchFileContent(compiledPath, session)) {
-          treeItems.push({ path: compiledPath, mode: '100644', type: 'blob', sha: null });
-        }
-      }
-      await commitMultiFiles(session, treeItems, actionMessage);
-    } else {
-      await putFileContent(path, session, content, sha || null, actionMessage);
-    }
-    await invalidateAssetSnapshot(env, session);
-  } catch (error) {
-    if (error instanceof GithubApiError && error.status === 409) return errorResponse('文件已被修改，请重新加载后再试', 409);
-    throw error;
+  const auth = await requirePrimaryWorkspaceAuth(request, env);
+  if (auth instanceof Response) return auth;
+  const parsed = putFileRequestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return errorResponse('Invalid asset request', 400, 'VALIDATION_FAILED');
+  const target = parseManagedAssetPath(parsed.data.path);
+  const oldTarget = parsed.data.oldPath ? parseManagedAssetPath(parsed.data.oldPath) : target;
+  if (!target || !oldTarget || target.kind !== oldTarget.kind) {
+    return errorResponse('Unsupported asset path', 400, 'VALIDATION_FAILED');
   }
-  return jsonResponse({ success: true });
+
+  let preparedContent = parsed.data.content;
+  if (target.kind === 'rulesets') {
+    const validationError = validateRulesetSource(preparedContent);
+    if (validationError) return errorResponse(validationError, 400, 'VALIDATION_FAILED');
+    try {
+      preparedContent = await refreshRulesetSources(preparedContent);
+    } catch (error) {
+      return errorResponse(error instanceof Error ? error.message : 'Ruleset refresh failed', 400, 'VALIDATION_FAILED');
+    }
+  }
+  let content: unknown;
+  try {
+    content = JSON.parse(preparedContent);
+  } catch {
+    return errorResponse('Asset is not valid JSON', 400, 'VALIDATION_FAILED');
+  }
+  if (!content || typeof content !== 'object' ||
+      ((target.kind === 'templates' || target.kind === 'patches' || target.kind === 'rulesets') && Array.isArray(content))) {
+    return errorResponse('Asset JSON root is invalid', 400, 'VALIDATION_FAILED');
+  }
+
+  const createdAt = new Date().toISOString();
+  const baseCommand = {
+    workspaceId: auth.workspaceId,
+    expectedRevision: parsed.data.expectedRevision,
+    revisionId: crypto.randomUUID(),
+    createdAt,
+    path: parsed.data.path,
+    oldPath: parsed.data.oldPath,
+    asset: {
+      path: parsed.data.path,
+      content: content as JsonAsset['content'],
+      note: noteFromJson(content),
+      updatedAt: createdAt,
+    },
+  };
+  if (target.kind === 'rulesets') {
+    const compiler = await createOptionalCompilerDispatcher(env, auth.workspaceId);
+    const result = await saveRulesetSource(
+      createPrimaryWorkspaceServices(env).workspaceStore,
+      createSrsBuildStores(env).jobStore,
+      { ...baseCommand, compilerEnabled: Boolean(compiler) },
+    );
+    if (result.job && compiler) {
+      const dispatch = dispatchSrsBuild(
+        {
+          ...createSrsBuildStores(env),
+          dispatcher: compiler,
+          ticketService: createSrsJobTicketService(env),
+          workerUrl: new URL(request.url).origin,
+        },
+        auth.workspaceId,
+        result.job.jobId,
+      ).then(status => {
+        logEvent('log', { operation: 'srs.dispatch', requestId: requestIdFor(request), jobId: result.job?.jobId, status });
+      });
+      if (context) context.waitUntil(dispatch);
+      else await dispatch;
+    }
+    return jsonResponse({
+      success: true,
+      revision: result.revision,
+      content: preparedContent,
+      build: result.build,
+    });
+  }
+  const result = await saveAsset(createPrimaryWorkspaceServices(env).workspaceStore, baseCommand);
+  return jsonResponse({
+    success: true,
+    revision: result.revision,
+  });
 }
 
 export async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
-  const auth = await requireAuth(request, env);
+  const auth = await requirePrimaryWorkspaceAuth(request, env);
   if (auth instanceof Response) return auth;
-
-  const path = new URL(request.url).searchParams.get('path');
-  if (!path) return errorResponse('Missing path parameter', 400);
-  if (!isManagedAssetPath(path)) return errorResponse('Unsupported file path', 400);
-
-  const session = toRepoSession(auth.settings);
-  const file = await fetchFileContent(path, session);
-  if (!file) {
-    await invalidateAssetSnapshot(env, session);
-    return errorResponse('File no longer exists', 404, 'ASSET_NOT_FOUND');
+  const url = new URL(request.url);
+  const path = url.searchParams.get('path');
+  const expectedRevision = url.searchParams.get('expectedRevision');
+  if (!path || !expectedRevision || !parseManagedAssetPath(path)) {
+    return errorResponse('Invalid asset delete request', 400, 'VALIDATION_FAILED');
   }
-
-  try {
-    if (!isRulesetPath(path)) {
-      const scope = path.startsWith('sing-sub/nodes/') ? 'node'
-        : path.startsWith('sing-sub/templates/') ? 'template'
-          : path.startsWith('sing-sub/patches/') ? 'patch' : 'asset';
-      await deleteFileContent(path, session, file.sha, `${scope}: delete ${path.split('/').pop()}`);
-    } else {
-      const basename = path.split('/').pop()!.replace(/\.json$/, '');
-      const compiledPath = `sing-sub/rulesets/compiled/${basename}.srs`;
-      const compiledFile = await fetchFileContent(compiledPath, session);
-      const treeItems: GitTreeItem[] = [{ path, mode: '100644', type: 'blob', sha: null }];
-      if (compiledFile) treeItems.push({ path: compiledPath, mode: '100644', type: 'blob', sha: null });
-      await commitMultiFiles(session, treeItems, `ruleset: delete ${basename}.json`);
-    }
-    await invalidateAssetSnapshot(env, session);
-  } catch (error) {
-    if (error instanceof GithubApiError && error.status === 409) return errorResponse('文件已被修改，请重新加载后再试', 409);
-    throw error;
-  }
-  return jsonResponse({ success: true });
+  const result = await deleteAsset(createPrimaryWorkspaceServices(env).workspaceStore, {
+    workspaceId: auth.workspaceId,
+    expectedRevision,
+    revisionId: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    path,
+  });
+  return jsonResponse({ success: true, revision: result.revision });
 }

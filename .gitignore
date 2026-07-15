@@ -8,9 +8,20 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.npm-cache
+.cache
+.vite
+coverage
+*.tsbuildinfo
+debug.log
+/.agents/
 dist
 dist-ssr
 *.local
+.dev.vars
+.env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*
@@ -24,4 +35,5 @@ dist-ssr
 *.sw?
 .wrangler
 .claude
-test
+test-results
+playwright-report

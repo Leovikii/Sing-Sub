@@ -1,106 +1,91 @@
 # Sing-Sub
 
-[简体中文](README_zh-CN.md)
+Sing-Sub is a self-hosted control plane for editing and distributing [sing-box](https://sing-box.sagernet.org/) configurations.
 
-Sing-Sub is a self-hosted control plane for managing and distributing [sing-box](https://sing-box.sagernet.org/) configurations. It stores configuration sources in GitHub, builds subscriptions at the edge with Cloudflare Workers, and provides a focused web interface for daily operations.
+Current pre-release: `v3.0.0-beta.1`
 
-## What It Does
+## Current Architecture
 
-- Manage multiple profiles, node sets, templates, patches, and rule sets.
-- Build profile JSON from templates, filtered nodes, and patches.
-- Serve sing-box subscriptions at /sub/{token}/{profile}.json.
-- Compile managed rule-set JSON into .srs through GitHub Actions and serve it at /rules/{token}/{ruleset}.srs.
-- Keep GitHub PATs server-side in Cloudflare KV; the browser receives only a secure session cookie.
-- Provide visual editors, JSON validation, conflict handling, and responsive desktop and mobile navigation.
+- Cloudflare R2 Standard is the only persistent application store.
+- The Worker serves the WebUI, authenticated APIs, private JSON subscriptions, and public SRS artifacts.
+- Browser sessions use signed `HttpOnly` cookies; no KV session store is required.
+- GitHub is optional for initial import and future backup/editable sync.
+- Rule-set JSON is always distributed directly from the current R2 revision. A connected private GitHub repository can optionally run the stateless SRS compiler and return binary artifacts to the Worker.
 
-## Architecture
+```text
+Browser -> Cloudflare Worker -> private R2 workspace/revisions/artifacts
+                              -> optional GitHub sync/backup
+                              -> GitHub Actions SRS compiler
+```
 
-~~~
-Browser UI -> Cloudflare Worker + KV -> GitHub configuration repository
-                                      -> GitHub Actions (rule-set compilation)
-~~~
+## URLs
 
-The Worker reads source files from GitHub and builds profile subscriptions on demand. Rule-set source files are compiled by a separate workflow because .srs is a binary sing-box artifact.
+- Private configuration: `/sub/{signedToken}/{profile}.json`
+- Public source rule set: `/rules/{ruleset}.json`
+- Optional compiled rule set: `/rules/{ruleset}.srs`
 
-## Repository Layout
-
-Use a private GitHub repository for your configuration data:
-
-~~~
-sing-sub/
-  configs/                 # Profile source files
-  nodes/                   # Node-set JSON files
-  templates/               # Template JSON files
-  patches/                 # Patch JSON files
-  rulesets/                # Rule-set source JSON files
-    compiled/              # Generated .srs artifacts
-~~~
-
-The compiled directory is maintained by the rule-set compilation workflow. Do not edit its .srs files manually.
+The JSON token is a bearer credential and must not be shared. SRS links intentionally contain no JSON subscription token.
 
 ## Prerequisites
 
 - Node.js 22
-- A Cloudflare account and KV namespace
-- A GitHub repository for configuration data
-- A GitHub PAT with repo and workflow permissions
-- A Cloudflare API token with permission to deploy Workers
+- A Cloudflare account with Workers and R2 enabled
+- Wrangler 4.x (installed by this project)
+- A private GitHub data repository and PAT only when importing or enabling optional sync
 
-## Deployment
+## Manual Deployment
 
-1. Create a KV namespace and set its ID in wrangler.toml.
-2. Add CLOUDFLARE_API_TOKEN to this repository's GitHub Actions secrets.
-3. Install dependencies and verify the application:
+Create the private R2 bucket declared in `wrangler.toml`:
 
-   ~~~bash
-   npm ci
-   npm run build
-   ~~~
+```powershell
+npx wrangler login
+npx wrangler r2 bucket create sing-sub-data
+```
 
-4. Merge to main. The deployment workflow builds the project and deploys the Worker.
+Configure three different Worker secrets through the interactive prompt:
 
-After deployment, open the dashboard and provide the GitHub owner/repo, PAT, and a subscription token. The application creates managed paths when they are first needed.
+```powershell
+npx wrangler secret put ADMIN_PASSWORD
+npx wrangler secret put SESSION_SIGNING_SECRET
+npx wrangler secret put SUBSCRIPTION_SIGNING_SECRET
+```
 
-## CI And Main-Branch Protection
+The two signing secrets must each contain at least 32 random bytes. Never commit or print these values.
 
-.github/workflows/ci.yml runs npm ci and npm run build for pull requests targeting main. It does not run for ordinary pushes to development branches.
+Verify and deploy:
 
-In the repository ruleset, add CI / typecheck as a required status check and enable Require branches to be up to date before merging:
+```powershell
+npm ci
+npm run verify
+npm run worker:dry-run
+npm run deploy
+```
 
-~~~
-Pull request to main -> CI passes -> merge allowed -> push to main -> deploy
-~~~
+`workers_dev` is currently disabled. Configure a Custom Domain or Route for the Worker in Cloudflare before opening the WebUI.
 
-The deployment workflow runs only after a commit reaches main and has access to the Cloudflare deployment secret. PR CI is read-only and receives no deployment credentials.
+On an empty R2 bucket, the WebUI creates a blank workspace with only the administrator password. GitHub import is optional. Once initialized, every device logs in with only the administrator password.
 
-## Rule Sets
+## GitHub Workflows
 
-The first rule-set save creates .github/workflows/compile-srs.yml in the configuration repository. That workflow:
+- `ci.yml` validates pull requests.
+- `deploy.yml` automatically deploys the maintainer-owned development deployment from `main` and can also be started manually. It requires the maintainer's `CLOUDFLARE_API_TOKEN`.
+- When SRS is enabled for a connected private repository, the Worker automatically provisions the versioned workflow template. It does not commit source or artifacts during normal compilation.
+- SRS provisioning uses the repository-scoped PAT already stored in private R2 metadata. Users do not create an Actions Secret or Variable; callbacks use a short-lived job ticket derived from the existing session signing secret.
+- Release users deploy locally with Wrangler and do not require Actions, a fork, or a GitHub repository.
 
-1. Compiles only added or changed rule-set JSON files, and removes the matching .srs artifact on deletion.
-2. On the scheduled refresh, downloads each due rule-set's HTTPS sources, validates them, and rebuilds only that rule set.
-3. Strips _sing_sub metadata before compiling the materialized version 2 rule-set JSON with the latest stable sing-box release.
-4. Commits changed sources and artifacts under sing-sub/rulesets/compiled/.
-
-Rule-set URLs return 404 until the corresponding .srs artifact has been compiled successfully.
-
-## Security
-
-- GitHub PATs are stored server-side in KV and are never returned to the browser.
-- Sessions use HttpOnly, Secure, and SameSite=Strict cookies.
-- Subscription and rule-set endpoints accept supported sing-box user agents only.
-- Treat the subscription token as a credential and rotate it from Settings if it is exposed.
+A standalone Release package, guided Windows deployment assistant, and controlled update flow are tracked as low-priority Phase 9 work after the core refactor. Ordinary users will not be required to fork the source repository.
 
 ## Development
 
-~~~bash
+```powershell
 npm run dev
-npm run build
+npm run verify
 npm run preview
-~~~
+```
 
-See [WIKI.md](WIKI.md) for patch syntax and detailed usage notes.
+Patch syntax is documented in [WIKI.md](WIKI.md). Refactor architecture, decisions, and progress are tracked in [docs/refactor](docs/refactor/README.md).
+Release compatibility, production checks, and recovery procedures are documented in [docs/operations/release-and-recovery.md](docs/operations/release-and-recovery.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)

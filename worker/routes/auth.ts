@@ -1,163 +1,151 @@
-import type { Env, UserSettings } from '../types';
+import type { LoginResult } from '../../shared';
+import { loginRequestSchema, updateSettingsRequestSchema } from '../../shared';
+import { loginPrimaryWorkspace } from '../application/auth/primary-workspace-auth';
+import { toPublicWorkspaceSettings } from '../application/auth/public-workspace-settings';
+import { initializeEmptyWorkspace } from '../application/commands/workspace/initialize-empty-workspace';
+import { updateWorkspaceSettings } from '../application/commands/settings/update-settings';
+import type { GithubImportSettings } from '../application/migration/legacy-migration-model';
+import { migrateLegacyWorkspace } from '../application/migration/migrate-legacy-workspace';
+import { createPrimaryWorkspaceServices } from '../composition/primary-workspace-services';
+import { PRIMARY_WORKSPACE_ID } from '../domain/workspace/primary-workspace';
+import { GithubLegacySourceReader } from '../infrastructure/github/github-legacy-source-reader';
+import { dryRunLegacyMigration } from '../infrastructure/legacy/legacy-migration-dry-run';
+import { WorkspaceNotFoundError } from '../infrastructure/r2/r2-workspace-errors';
 import {
-  getSessionData, getUserSettings, putUserSettings,
-  createSession, deleteSession, requireAuth,
-  sessionCookieHeader, clearSessionCookieHeader,
-} from '../lib/auth';
+  clearSessionCookieHeader,
+  sessionCookieHeader,
+} from '../infrastructure/security/session-cookie';
 import { fetchRepository, fetchUser, type RepoSession } from '../lib/github';
+import { getPrimaryWorkspaceAuth } from '../http/authenticate';
 import { errorResponse, jsonResponse } from '../lib/security';
-import { cleanupConfigCache, cleanupSubToken, generateHex, rebuildWithWarning } from '../lib/helpers';
-import { getProfileSnapshot, putProfileSnapshot } from '../lib/dashboard';
-import { fetchAllProfiles, toRepoSession } from '../lib/helpers';
+import type { Env } from '../types';
+
+const SESSION_MAX_AGE_SECONDS = 86400 * 30;
+
+async function publicSettings(workspace: Parameters<typeof toPublicWorkspaceSettings>[0], env: Env) {
+  return toPublicWorkspaceSettings(workspace, createPrimaryWorkspaceServices(env).tokenService);
+}
+
+async function workspaceExists(env: Env): Promise<boolean> {
+  try {
+    await createPrimaryWorkspaceServices(env).workspaceStore.read(PRIMARY_WORKSPACE_ID);
+    return true;
+  } catch (error) {
+    if (error instanceof WorkspaceNotFoundError) return false;
+    throw error;
+  }
+}
 
 export async function handleBootstrap(request: Request, env: Env): Promise<Response> {
-  const session = await getSessionData(request, env);
-  if (!session) return jsonResponse({ settings: null });
-
-  const settings = await getUserSettings(session.owner, session.repo, env);
-  if (!settings) return jsonResponse({ settings: null });
-
-  const repoSession = toRepoSession(settings);
-  let profiles = await getProfileSnapshot(env, repoSession);
-  if (!profiles) {
-    profiles = await fetchAllProfiles(repoSession);
-    await putProfileSnapshot(env, repoSession, profiles);
+  const workspace = await getPrimaryWorkspaceAuth(request, env);
+  if (!workspace) {
+    return jsonResponse({ settings: null, setupRequired: !await workspaceExists(env) });
   }
   return jsonResponse({
-    settings: {
-      owner: settings.owner,
-      repo: settings.repo,
-      subToken: settings.subToken,
-      userLogin: settings.userLogin,
-      userAvatar: settings.userAvatar,
-    },
-    state: { profiles },
+    settings: await publicSettings(workspace, env),
+    state: { profiles: workspace.snapshot.profiles },
+    revision: workspace.revision,
+    setupRequired: false,
   });
 }
 
 export async function handleLogin(request: Request, env: Env): Promise<Response> {
-  const { owner, repo, pat } = await request.json() as { owner: string; repo: string; pat: string };
-  if (!owner || !repo || !pat) return errorResponse('Missing required fields', 400);
-
-  const userRes = await fetchUser(pat);
-  if (!userRes.ok) return errorResponse('Invalid PAT', 401);
-  const userData = await userRes.json() as { login: string; avatar_url: string };
-
-  let repository: { default_branch: string };
-  try {
-    repository = await fetchRepository(owner, repo, pat);
-  } catch {
-    return errorResponse('Repository not found or not accessible', 404);
+  const parsed = loginRequestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return errorResponse('Invalid login request', 400, 'VALIDATION_FAILED');
+  const services = createPrimaryWorkspaceServices(env);
+  if (!await services.adminAuthenticator.verify(parsed.data.adminPassword)) {
+    return errorResponse('Invalid administrator credentials', 401, 'NOT_AUTHENTICATED');
   }
 
-  const existing = await getUserSettings(owner, repo, env);
-  const subToken = existing?.subToken || generateHex(16);
-  const settings: UserSettings = {
-    pat, owner, repo, subToken,
-    userLogin: userData.login,
-    userAvatar: userData.avatar_url,
-    defaultBranch: repository.default_branch,
-  };
-  await putUserSettings(settings, env);
-  if (!existing) await env.SESSIONS.put(`sub:${subToken}`, JSON.stringify({ owner, repo }));
+  if (!await workspaceExists(env)) {
+    const { owner, repo, pat } = parsed.data;
+    if (owner && repo && pat) {
+      const userResponse = await fetchUser(pat);
+      if (!userResponse.ok) return errorResponse('Invalid GitHub PAT', 401, 'NOT_AUTHENTICATED');
+      const user = await userResponse.json() as { login: string; avatar_url: string };
+      let repository: { default_branch: string };
+      try {
+        repository = await fetchRepository(owner, repo, pat);
+      } catch {
+        return errorResponse('Repository not found or not accessible', 404, 'NOT_FOUND');
+      }
 
-  const session: RepoSession = { owner, repo, pat, userLogin: userData.login, defaultBranch: repository.default_branch };
-  const { warning } = await rebuildWithWarning(session, subToken, env);
-  const sessionId = await createSession(owner, repo, env);
+      const settings: GithubImportSettings = {
+        pat,
+        owner,
+        repo,
+        userLogin: user.login,
+        userAvatar: user.avatar_url,
+        defaultBranch: repository.default_branch,
+      };
+      const session: RepoSession = { owner, repo, pat, defaultBranch: repository.default_branch };
+      const source = await new GithubLegacySourceReader(session).read();
+      const dryRun = dryRunLegacyMigration(source, settings);
+      if (!dryRun.valid || !dryRun.normalized) {
+        return errorResponse(
+          dryRun.issues.find(issue => issue.severity === 'error')?.message || 'GitHub import validation failed',
+          400,
+          'VALIDATION_FAILED',
+        );
+      }
+      await migrateLegacyWorkspace({
+        workspaceId: PRIMARY_WORKSPACE_ID,
+        revisionId: crypto.randomUUID(),
+        migratedAt: new Date().toISOString(),
+        normalized: dryRun.normalized,
+      }, services);
+    } else {
+      await initializeEmptyWorkspace(services.workspaceStore, {
+        workspaceId: PRIMARY_WORKSPACE_ID,
+        revisionId: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
 
-  return jsonResponse(
-    { owner, repo, subToken, userLogin: settings.userLogin, userAvatar: settings.userAvatar, warning },
-    200,
-    { 'Set-Cookie': sessionCookieHeader(sessionId) },
+  const now = Math.floor(Date.now() / 1000);
+  const login = await loginPrimaryWorkspace(
+    parsed.data.adminPassword,
+    now + SESSION_MAX_AGE_SECONDS,
+    services,
   );
+  if (!login) return errorResponse('Invalid administrator credentials', 401, 'NOT_AUTHENTICATED');
+  const result: LoginResult = {
+    ...await publicSettings(login.workspace, env),
+    revision: login.workspace.revision,
+  };
+  return jsonResponse(result, 200, {
+    'Set-Cookie': sessionCookieHeader(login.token, SESSION_MAX_AGE_SECONDS),
+  });
 }
 
-export async function handleLogout(request: Request, env: Env): Promise<Response> {
-  await deleteSession(request, env);
+export async function handleLogout(_request?: Request, _env?: Env): Promise<Response> {
   return jsonResponse({ ok: true }, 200, { 'Set-Cookie': clearSessionCookieHeader() });
 }
 
 export async function handleGetSettings(request: Request, env: Env): Promise<Response> {
-  const session = await getSessionData(request, env);
-  if (!session) return errorResponse('Not authenticated', 401);
-
-  const settings = await getUserSettings(session.owner, session.repo, env);
-  if (!settings) return jsonResponse(null);
-  return jsonResponse({
-    owner: settings.owner,
-    repo: settings.repo,
-    subToken: settings.subToken,
-    userLogin: settings.userLogin,
-    userAvatar: settings.userAvatar,
-  });
+  const workspace = await getPrimaryWorkspaceAuth(request, env);
+  if (!workspace) return errorResponse('Not authenticated', 401, 'NOT_AUTHENTICATED');
+  return jsonResponse(await publicSettings(workspace, env));
 }
 
 export async function handlePutSettings(request: Request, env: Env): Promise<Response> {
-  const auth = await requireAuth(request, env);
-  if (auth instanceof Response) return auth;
-
-  const { owner, repo, pat, subToken } = await request.json() as { owner: string; repo: string; pat: string; subToken: string };
-  if (!owner || !repo || !subToken) return errorResponse('Missing required fields', 400);
-  if (!/^[a-zA-Z0-9_-]+$/.test(subToken)) {
-    return errorResponse('subToken can only contain letters, numbers, hyphens and underscores', 400);
-  }
-
-  const effectivePat = pat || auth.settings.pat;
-  const userRes = await fetchUser(effectivePat);
-  if (!userRes.ok) return errorResponse('Invalid PAT', 401);
-  const userData = await userRes.json() as { login: string; avatar_url: string };
-  let repository: { default_branch: string };
-  try {
-    repository = await fetchRepository(owner, repo, effectivePat);
-  } catch {
-    return errorResponse('Repository not found or not accessible', 404);
-  }
-
-  const isRepoChange = owner !== auth.session.owner || repo !== auth.session.repo;
-  if (auth.settings.subToken !== subToken) {
-    const taken = await env.SESSIONS.get(`sub:${subToken}`);
-    if (taken) {
-      const takenData = JSON.parse(taken) as { owner: string; repo: string };
-      if (takenData.owner !== auth.session.owner || takenData.repo !== auth.session.repo) {
-        return errorResponse('subToken already taken', 409);
-      }
-    }
-    await cleanupSubToken(auth.settings.subToken, env);
-  }
-
-  if (isRepoChange) await cleanupConfigCache(subToken, env);
-
-  const settings: UserSettings = {
-    pat: effectivePat, owner, repo, subToken,
-    userLogin: userData.login,
-    userAvatar: userData.avatar_url,
-    defaultBranch: repository.default_branch,
+  const workspace = await getPrimaryWorkspaceAuth(request, env);
+  if (!workspace) return errorResponse('Not authenticated', 401, 'NOT_AUTHENTICATED');
+  const parsed = updateSettingsRequestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return errorResponse('Invalid settings request', 400, 'VALIDATION_FAILED');
+  const services = createPrimaryWorkspaceServices(env);
+  const result = await updateWorkspaceSettings(services.workspaceStore, {
+    workspaceId: workspace.workspaceId,
+    expectedRevision: parsed.data.expectedRevision,
+    revisionId: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    rotateSubscriptionToken: parsed.data.rotateSubscriptionToken,
+  });
+  const updated = await services.workspaceStore.read(workspace.workspaceId);
+  const response: LoginResult = {
+    ...await toPublicWorkspaceSettings(updated, services.tokenService),
+    revision: result.revision,
   };
-  if (isRepoChange) await env.SESSIONS.delete(`user:${auth.session.owner}/${auth.session.repo}`);
-  await putUserSettings(settings, env);
-  await env.SESSIONS.put(`sub:${subToken}`, JSON.stringify({ owner, repo }));
-
-  let cookieHeader: string | undefined;
-  if (isRepoChange) {
-    await deleteSession(request, env);
-    cookieHeader = sessionCookieHeader(await createSession(owner, repo, env));
-  }
-
-  const session: RepoSession = { owner, repo, pat: effectivePat, userLogin: userData.login, defaultBranch: repository.default_branch };
-  const { warning } = await rebuildWithWarning(session, subToken, env);
-  return jsonResponse(
-    { owner, repo, subToken, userLogin: settings.userLogin, userAvatar: settings.userAvatar, warning },
-    200,
-    cookieHeader ? { 'Set-Cookie': cookieHeader } : undefined,
-  );
-}
-
-export async function handleDeleteSettings(request: Request, env: Env): Promise<Response> {
-  const auth = await requireAuth(request, env);
-  if (auth instanceof Response) return auth;
-
-  await cleanupSubToken(auth.settings.subToken, env);
-  await env.SESSIONS.delete(`user:${auth.session.owner}/${auth.session.repo}`);
-  await deleteSession(request, env);
-  return jsonResponse({ ok: true }, 200, { 'Set-Cookie': clearSessionCookieHeader() });
+  return jsonResponse(response);
 }

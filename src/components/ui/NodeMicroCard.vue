@@ -19,6 +19,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   node: { type: string; tag: string; }
@@ -51,45 +54,45 @@ const protocolTiers: Record<string, ProtocolTier> = {
   urltest: 'structural',
 };
 
-const tierStyles: Record<ProtocolTier, { label: string; bg: string; text: string; border: string }> = {
+const tierStyles: Record<ProtocolTier, { labelKey: string; bg: string; text: string; border: string }> = {
   preferred: {
-    label: '优先',
+    labelKey: 'profiles.tierPreferred',
     bg: 'bg-emerald-500/10',
     text: 'text-emerald-400',
     border: 'border-emerald-500/20',
   },
   recommended: {
-    label: '推荐',
+    labelKey: 'profiles.tierRecommended',
     bg: 'bg-cyan-500/10',
     text: 'text-cyan-400',
     border: 'border-cyan-500/20',
   },
   acceptable: {
-    label: '可用',
+    labelKey: 'profiles.tierAcceptable',
     bg: 'bg-blue-500/10',
     text: 'text-blue-400',
     border: 'border-blue-500/20',
   },
   standard: {
-    label: '普通',
+    labelKey: 'profiles.tierStandard',
     bg: 'bg-zinc-500/10',
     text: 'text-zinc-300',
     border: 'border-zinc-500/20',
   },
   discouraged: {
-    label: '不推荐',
+    labelKey: 'profiles.tierDiscouraged',
     bg: 'bg-amber-500/10',
     text: 'text-amber-400',
     border: 'border-amber-500/20',
   },
   structural: {
-    label: '结构类型',
+    labelKey: 'profiles.tierStructural',
     bg: 'bg-violet-500/10',
     text: 'text-violet-300',
     border: 'border-violet-500/20',
   },
   unknown: {
-    label: '未分级',
+    labelKey: 'profiles.tierUnknown',
     bg: 'bg-zinc-500/10',
     text: 'text-zinc-400',
     border: 'border-zinc-500/20',
@@ -98,6 +101,7 @@ const tierStyles: Record<ProtocolTier, { label: string; bg: string; text: string
 
 const tierInfo = computed(() => {
   const type = props.node.type?.toLowerCase() || '';
-  return tierStyles[protocolTiers[type] || 'unknown'];
+  const style = tierStyles[protocolTiers[type] || 'unknown'];
+  return { ...style, label: t(style.labelKey) };
 });
 </script>

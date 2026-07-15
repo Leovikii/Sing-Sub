@@ -1,53 +1,45 @@
 <template>
   <div class="space-y-4">
     <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-text-primary">配置模板</label>
+      <label class="w-32 shrink-0 font-medium text-text-primary">{{ t('profiles.template') }}</label>
       <div class="flex-1 min-w-0">
-        <Select
-          v-if="!isCustomTemplate"
+        <PrimeSelect
           :modelValue="profile.templateUrl || ''"
-          @update:modelValue="onTemplateSelect"
+          @update:modelValue="profile.templateUrl = $event"
           :options="templateOptions"
-          placeholder="选择一个模板..."
-          ariaLabel="配置模板"
+          option-label="label"
+          option-value="value"
+          :placeholder="t('profiles.chooseTemplate')"
+          :ariaLabel="t('profiles.template')"
         />
-        <div v-else class="flex gap-2 items-center">
-          <Input v-model="profile.templateUrl" placeholder="https://..." class="flex-1" />
-          <ToolbarButton
-            :icon="Trash2"
-            label="删除自定义模板并返回选择"
-            variant="danger"
-            size="touch"
-            iconOnly
-            showTooltip
-            class="shrink-0"
-            @click="cancelCustomTemplate"
-          />
-        </div>
       </div>
     </div>
     
     <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-text-primary">配置补丁 <span class="text-text-muted font-normal text-xs">(可选)</span></label>
+      <label class="w-32 shrink-0 font-medium text-text-primary">{{ t('profiles.patch') }} <span class="text-text-muted font-normal text-xs">({{ t('profiles.optional') }})</span></label>
       <div class="flex-1 min-w-0">
-        <Select
+        <PrimeSelect
           :modelValue="profile.patchUrl || ''"
           @update:modelValue="profile.patchUrl = $event"
           :options="patchOptions"
-          placeholder="无"
-          ariaLabel="配置补丁"
+          option-label="label"
+          option-value="value"
+          :placeholder="t('profiles.none')"
+          :ariaLabel="t('profiles.patch')"
         />
       </div>
     </div>
     <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-text-primary">节点配置</label>
+      <label class="w-32 shrink-0 font-medium text-text-primary">{{ t('profiles.nodeSet') }}</label>
       <div class="flex-1 min-w-0">
-        <Select
+        <PrimeSelect
           :modelValue="profile.nodesPath || ''"
           @update:modelValue="profile.nodesPath = $event"
           :options="nodeOptions"
-          placeholder="选择一个节点文件..."
-          ariaLabel="节点配置"
+          option-label="label"
+          option-value="value"
+          :placeholder="t('profiles.chooseNodeSet')"
+          :ariaLabel="t('profiles.nodeSet')"
         />
       </div>
     </div>
@@ -56,14 +48,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Trash2 } from 'lucide-vue-next';
-import Input from '../ui/Input.vue';
-import Select from '../ui/Select.vue';
-import ToolbarButton from '../ui/ToolbarButton.vue';
+import { useI18n } from 'vue-i18n';
+import PrimeSelect from 'primevue/select';
 import type { Profile } from '../../types';
 
+const { t } = useI18n();
+
+const profile = defineModel<Profile>('profile', { required: true });
 const props = defineProps<{
-  profile: Profile;
   availableNodes?: string[];
   availableTemplates?: string[];
   availablePatches?: string[];
@@ -87,7 +79,7 @@ const patchOptions = computed(() => {
       value: path,
     };
   });
-  opts.unshift({ label: '无', value: '' });
+  opts.unshift({ label: t('profiles.none'), value: '' });
   return opts;
 });
 
@@ -99,24 +91,6 @@ const templateOptions = computed(() => {
       value: path,
     };
   });
-  opts.push({ label: '使用自定义直链...', value: 'custom' });
   return opts;
 });
-
-const isCustomTemplate = computed(() => {
-  if (!props.profile.templateUrl) return false;
-  return !templateOptions.value.some(o => o.value === props.profile.templateUrl) && props.profile.templateUrl !== 'custom';
-});
-
-function onTemplateSelect(val: string) {
-  if (val === 'custom') {
-    props.profile.templateUrl = 'https://';
-  } else {
-    props.profile.templateUrl = val;
-  }
-}
-
-function cancelCustomTemplate() {
-  props.profile.templateUrl = '';
-}
 </script>

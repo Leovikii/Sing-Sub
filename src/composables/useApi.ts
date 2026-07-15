@@ -1,54 +1,42 @@
 import { ref } from 'vue';
-import type { UserSettings, SetupData, StateData, GithubUser, Profile } from '../types';
+import { api } from '../api/endpoints';
+import { ApiClientError } from '../api/client';
+import type { GithubUser, Profile, SetupData, StateData, UserSettings } from '../types';
+import type { PutFileRequest, UpdateSettingsRequest } from '../../shared';
 
-export class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-  }
-}
+export { ApiClientError as ApiError } from '../api/client';
 
 export function useApi() {
   const user = ref<GithubUser | null>(null);
   const settings = ref<UserSettings | null>(null);
 
-  async function apiCall(path: string, options: RequestInit = {}): Promise<any> {
-    const res = await fetch(path, {
-      ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers },
-    });
-    if (res.status === 401) {
-      user.value = null;
-      settings.value = null;
-      throw new ApiError('Not authenticated', 401);
+  async function call<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        user.value = null;
+        settings.value = null;
+      }
+      throw error;
     }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new ApiError(err.error || res.statusText, res.status);
-    }
-    return res.json();
   }
 
-  async function login(data: SetupData): Promise<UserSettings & { warning?: string }> {
-    const result = await apiCall('/api/login', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+  async function login(data: SetupData) {
+    const result = await call(() => api.login(data));
     settings.value = result;
     user.value = { login: result.userLogin, avatar_url: result.userAvatar };
     return result;
   }
 
   async function logout(): Promise<void> {
-    await apiCall('/api/logout', { method: 'POST' });
+    await call(api.logout);
     user.value = null;
     settings.value = null;
   }
 
   async function getSettings(): Promise<UserSettings | null> {
-    const data = await apiCall('/api/settings');
+    const data = await call(api.getSettings);
     if (data) {
       settings.value = data;
       user.value = { login: data.userLogin, avatar_url: data.userAvatar };
@@ -56,8 +44,8 @@ export function useApi() {
     return data;
   }
 
-  async function bootstrap(): Promise<{ settings: UserSettings | null; state?: StateData }> {
-    const data = await apiCall('/api/bootstrap') as { settings: UserSettings | null; state?: StateData };
+  async function bootstrap() {
+    const data = await call(api.bootstrap);
     if (data.settings) {
       settings.value = data.settings;
       user.value = { login: data.settings.userLogin, avatar_url: data.settings.userAvatar };
@@ -65,67 +53,34 @@ export function useApi() {
     return data;
   }
 
-  async function saveSettings(data: SetupData & { subToken: string }): Promise<UserSettings & { warning?: string }> {
-    const result = await apiCall('/api/settings', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
+  async function saveSettings(data: UpdateSettingsRequest) {
+    const result = await call(() => api.saveSettings(data));
     settings.value = result;
     user.value = { login: result.userLogin, avatar_url: result.userAvatar };
     return result;
   }
 
-  async function deleteSettings(): Promise<void> {
-    await apiCall('/api/settings', { method: 'DELETE' });
-    user.value = null;
-    settings.value = null;
-  }
-
-  async function getState(): Promise<{ state: StateData }> {
-    return apiCall('/api/state');
-  }
-
-  async function saveState(state: StateData, profileName?: string, oldProfileName?: string): Promise<{ warning?: string }> {
-    return apiCall('/api/state', {
-      method: 'PUT',
-      body: JSON.stringify({ state, profileName, oldProfileName }),
-    });
-  }
-
-  async function rebuild(): Promise<{ state: StateData; warning?: string }> {
-    return apiCall('/api/rebuild', { method: 'POST' });
-  }
-
-  async function getPreview(name: string): Promise<{ content: string }> {
-    return apiCall(`/api/preview/${name}.json`);
-  }
-
-  async function postPreview(profile: Profile): Promise<{ content: string }> {
-    return apiCall('/api/preview', {
-      method: 'POST',
-      body: JSON.stringify(profile),
-    });
-  }
-
-  async function getAssets(force = false): Promise<{ nodes: any[], templates: any[], patches: any[], rulesets: any[] }> {
-    return apiCall(`/api/assets${force ? '?refresh=1' : ''}`);
-  }
-
-  async function getFile(path: string): Promise<{ content: string; sha: string }> {
-    return apiCall(`/api/file?path=${encodeURIComponent(path)}`);
-  }
-
-  async function getTemplate(source: string): Promise<{ content: unknown }> {
-    return apiCall(`/api/template?source=${encodeURIComponent(source)}`);
-  }
-
-  async function deleteFile(path: string): Promise<void> {
-    return apiCall(`/api/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
-  }
-
   return {
-    user, settings,
-    login, logout, bootstrap, getSettings, saveSettings, deleteSettings,
-    getState, saveState, rebuild, getPreview, postPreview, getAssets, getFile, getTemplate, deleteFile,
+    user,
+    settings,
+    login,
+    logout,
+    bootstrap,
+    getSettings,
+    saveSettings,
+    getState: () => call(api.getState),
+    saveState: (state: StateData, expectedRevision: string, profileName?: string, oldProfileName?: string) =>
+      call(() => api.saveState(state, expectedRevision, profileName, oldProfileName)),
+    getPreview: (name: string) => call(() => api.getPreview(name)),
+    postPreview: (profile: Profile) => call(() => api.postPreview(profile)),
+    getAssets: () => call(api.getAssets),
+    getFile: (path: string) => call(() => api.getFile(path)),
+    getTemplate: (source: string) => call(() => api.getTemplate(source)),
+    putFile: (data: PutFileRequest) => call(() => api.putFile(data)),
+    deleteFile: (path: string, expectedRevision: string) => call(() => api.deleteFile(path, expectedRevision)),
+    getRulesetBuild: (rulesetId: string) => call(() => api.getRulesetBuild(rulesetId)),
+    retryRulesetBuild: (rulesetId: string) => call(() => api.retryRulesetBuild(rulesetId)),
+    getSrsCompiler: () => call(api.getSrsCompiler),
+    setSrsCompiler: (enabled: boolean) => call(() => api.setSrsCompiler(enabled)),
   };
 }

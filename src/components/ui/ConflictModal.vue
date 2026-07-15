@@ -1,26 +1,31 @@
 <template>
-  <ModalDialog :visible="visible" labelledBy="conflict-modal-title" @close="$emit('cancel')">
-        <h3 id="conflict-modal-title" class="text-lg font-semibold text-text-primary">内容已被修改</h3>
-        <p class="text-sm text-text-muted leading-relaxed">该文件在你编辑期间已被其他方式修改。你可以放弃本地改动，重新加载最新版本；或者用你的改动强制覆盖。</p>
-        <div class="flex gap-3 pt-2">
-          <Button @click="$emit('reload')" variant="secondary" class="flex-1">重新加载</Button>
-          <Button @click="$emit('overwrite')" variant="danger" class="flex-1">强制覆盖</Button>
-        </div>
-  </ModalDialog>
+  <Dialog
+    :visible="visible"
+    modal
+    :header="t('common.conflictTitle')"
+    class="w-[min(92vw,28rem)]"
+    @update:visible="value => { if (!value) $emit('cancel'); }"
+  >
+    <p class="text-sm leading-relaxed text-text-muted">
+      {{ t('common.conflictMessage') }}
+    </p>
+    <template #footer>
+      <Button severity="secondary" outlined @click="$emit('reload')">
+        {{ t('common.reload') }}
+      </Button>
+      <Button severity="danger" @click="$emit('overwrite')">
+        {{ t('common.replace') }}
+      </Button>
+    </template>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
-import Button from './Button.vue';
-import ModalDialog from './ModalDialog.vue';
+import { useI18n } from 'vue-i18n';
+import Button from 'primevue/button';
+import Dialog from 'primevue/dialog';
 
-defineProps<{
-  visible: boolean;
-}>();
-
-defineEmits<{
-  reload: [];
-  overwrite: [];
-  cancel: [];
-}>();
-
+defineProps<{ visible: boolean }>();
+defineEmits<{ reload: []; overwrite: []; cancel: [] }>();
+const { t } = useI18n();
 </script>
