@@ -242,7 +242,7 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 已用 replacement-only adapter 取代通用 patch DSL；Profile 只引用可选 `adapterUrl`。
 - 已删除 `profile.overrides`、`patchUrl`、`smartMerge` 与所有 `$` 操作符，构建器只执行严格路径整体替换和唯一数组匹配替换。
 - 新 workspace 初始化创建可编辑 Momo 预设；adapter 在节点注入前执行，路径/匹配不明确时构建失败。
-- Beta 采用 workspace schema v2；生产切换由 ADR-046 的临时登录迁移器把 active v1 revision 一次性发布为 v2，验证后删除迁移器，不把兼容读取带入正式版。
+- Beta 采用 workspace schema v2；ADR-046 的生产切换和迁移器清理已经完成，正式版不携带 v1 兼容读取。
 - 目标是维护一份基础模板和节点集，按目标生成适配配置，不复制维护多套完整模板。
 
 ### C. 前端 Beta 收束

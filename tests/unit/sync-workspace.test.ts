@@ -65,22 +65,17 @@ const connection: SyncRepositoryConnection = {
 };
 
 describe('safe directional GitHub sync', () => {
-  it('only allows an explicit R2 overwrite when the remote tree has a legacy profile schema', async () => {
+  it('only allows an explicit R2 overwrite when the remote tree has an invalid profile schema', async () => {
     const store = new InMemoryWorkspaceStore('primary', snapshot());
     const gateway = new FakeSyncGateway();
-    const legacyProfile = JSON.stringify({
+    const invalidProfile = JSON.stringify({
       name: 'default',
-      templateUrl: '',
-      patchUrl: 'sing-sub/patches/momo.json',
-      nodesPath: '',
-      rules: [],
-      inboundRules: [],
-      order: 0,
+      unsupported: true,
     });
     gateway.files = [{
       path: 'sing-sub/configs/default.json',
-      content: legacyProfile,
-      contentHash: await sha256Hex(legacyProfile),
+      content: invalidProfile,
+      contentHash: await sha256Hex(invalidProfile),
     }];
     const dependencies = { workspaceStore: store, gateway, connection };
 
@@ -104,7 +99,7 @@ describe('safe directional GitHub sync', () => {
     expect(pushed.action).toBe('pushed');
     expect(gateway.pushCalls).toHaveLength(1);
     expect(gateway.pushCalls[0].files.find(file => file.path === 'sing-sub/configs/default.json')?.content)
-      .not.toContain('patchUrl');
+      .not.toContain('unsupported');
     expect(gateway.pushCalls[0].files.some(file => file.path === SYNC_MANIFEST_PATH)).toBe(true);
   });
 

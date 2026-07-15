@@ -9,7 +9,7 @@
 - Workers observability 与 Turnstile 暂不启用。
 - Profile 外部 HTTP/HTTPS 模板是明确移除的兼容项；旧数据必须先把模板导入 `sing-sub/templates/` 并更新 Profile 引用，不能依赖旧 URL 读取旁路。
 - 私有配置订阅 Token 已直接切换为 `s2.<22-char-tag>`；旧 `v1.payload.signature` 链接不兼容，部署后必须从 WebUI 重新复制订阅链接。
-- replacement adapter 将 workspace 切换为 schema v2。当前 Beta 临时包含一次性 v1 升级器：部署后首次使用正确管理员口令登录时，Worker 校验 active v1 revision/hash，再以 R2 ETag/CAS 发布新的 v2 root revision。错误口令、bootstrap 和普通读取均不触发写入；v2 workspace 上该逻辑自动 no-op。
+- replacement adapter 使用 workspace schema v2；生产切换已完成，当前 Worker 只读取 v2，不再包含登录时 v1 识别或转换代码。
 - 规则集公开 URL 导入不受上述变化影响，仍使用独立的 SSRF、大小、重定向和超时限制。
 
 ## 发布前检查
@@ -24,16 +24,12 @@ npx wrangler r2 bucket info sing-sub-data
 
 `worker:dry-run` 必须只显示 `WORKSPACE_BUCKET -> sing-sub-data`。只读检查不得列出或下载私有对象。生产部署仍是独立、显式操作，不属于检查命令。
 
-## Schema v1 到 v2 临时升级
+## Workspace schema 基线
 
-1. 不清空或删除 `sing-sub-data` bucket；先确认 GitHub/本地仍有当前业务文件备份。
-2. 合并并等待生产 deploy Action 成功。部署完成前不要登录 WebUI。
-3. 打开生产 WebUI，使用现有管理员口令登录一次。首次正确登录会同步完成 R2 schema v1 到 v2 升级。
-4. 确认 Profile、节点、模板、规则集、订阅、GitHub 连接与已有 SRS 均可读取；曾引用任意旧 patch 的 Profile 会改为引用 `sing-sub/adapters/momo.json`，未引用 patch 的 Profile 不增加 adapter。
-5. 旧 `assets.patches` 与 `profile.overrides` 不迁移；Momo adapter 由预设重新创建。GitHub sync base 重置为 `never`，登录迁移本身不写 GitHub。
-6. 如果同步页把旧 GitHub tree 标记为冲突，只允许确认“R2 覆盖 GitHub”；旧格式 remote 禁止 pull。覆盖 push 会写入 v2 Profile/adapter/manifest。`sing-sub/patches/` 已退出受管范围，部署者随后在私有仓库手工删除该旧目录。
-7. 当前 v1 revision 对象保留在 R2，但不进入新的 active/previous revision 链；不要尝试用 v2 Worker 直接 restore 该对象。
-8. 生产验证通过后删除 `r2-workspace-v1-upgrade.ts`、登录接线和对应临时测试，并重新运行完整发布门禁。代码无法修改自身，但 workspace 已是 v2 时升级器不会再次写入。
+- 当前运行时仅支持 workspace schema v2；v1→v2 生产迁移已于 Beta 阶段完成，临时迁移器已从源码删除。
+- `workspaces/primary/head.json` 仍使用 head schema v1，这是只包含 revision 指针与 content hash 的独立文档契约；active `revisions/{currentRevision}.json` 才是 workspace schema v2。GitHub sync manifest v2 与 adapter schema v1 也分别独立版本化，不得用其中一个推断另一个。
+- 不得把历史 v1 revision 直接设为 head 或交给 v2 restore；旧部署升级必须使用对应 Release 的离线迁移工具，或备份业务文件后重新初始化。
+- GitHub 远端受管文件 schema 无效时，状态固定为 conflict；只允许用户显式使用 R2 overwrite push 修复，pull 继续拒绝无效数据。该保护不解析旧 patch 或其他历史 DSL。
 
 ## 数据恢复
 
