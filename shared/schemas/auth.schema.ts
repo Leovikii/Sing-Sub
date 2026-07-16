@@ -7,15 +7,7 @@ export const repositoryCoordinatesSchema = z.object({
 
 export const loginRequestSchema = z.object({
   adminPassword: z.string().min(1),
-  owner: z.string().min(1).optional(),
-  repo: z.string().min(1).optional(),
-  pat: z.string().min(1).optional(),
-}).strict().superRefine((value, context) => {
-  const setupFields = [value.owner, value.repo, value.pat];
-  if (setupFields.some(Boolean) && !setupFields.every(Boolean)) {
-    context.addIssue({ code: 'custom', path: ['owner'], message: 'Setup repository fields must be provided together' });
-  }
-});
+}).strict();
 
 export const updateSettingsRequestSchema = z.object({
   expectedRevision: z.string().min(1),

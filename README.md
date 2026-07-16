@@ -9,7 +9,7 @@ Current pre-release: `v3.0.0-beta.1`
 - Cloudflare R2 Standard is the only persistent application store.
 - The Worker serves the WebUI, authenticated APIs, private JSON subscriptions, and public SRS artifacts.
 - Browser sessions use signed `HttpOnly` cookies; no KV session store is required.
-- GitHub is optional for initial import and future backup/editable sync.
+- GitHub is optional for data import, backup, and editable sync.
 - Rule-set JSON is always distributed directly from the current R2 revision. A connected private GitHub repository can optionally run the stateless SRS compiler and return binary artifacts to the Worker.
 
 ```text
@@ -28,31 +28,26 @@ The private configuration token uses the compact `s2.<22-char-tag>` format. It r
 
 ## Prerequisites
 
-- Node.js 22
-- A Cloudflare account with Workers and R2 enabled
-- Wrangler 4.x (installed by this project)
+- A Cloudflare account with Workers enabled and an active R2 subscription
+- A GitHub account for the source fork
 - A private GitHub data repository and PAT only when importing or enabling optional sync
 
-## Manual Deployment
+## Cloudflare Deployment
 
-Create the private R2 bucket declared in `wrangler.toml`:
+1. Fork this repository.
+2. In Cloudflare Workers, connect the fork under `Settings > Builds` and select `main`.
+3. Disable non-production branch builds.
+4. Set the build command to `npm run build` and the deploy command to `npm run deploy:cloudflare`.
+5. Let Cloudflare create the Builds API token.
+6. Add an encrypted build secret named `SING_SUB_ADMIN_PASSWORD` with at least 12 UTF-8 bytes.
+7. Connect the repository and wait for the build to finish.
+8. Open the generated `workers.dev` URL and sign in with the administrator password.
 
-```powershell
-npx wrangler login
-npx wrangler r2 bucket create sing-sub-data
-```
+The deployment initializer automatically creates or reuses the private `sing-sub-data` bucket and generates the two independent signing secrets. Existing buckets, objects, and runtime secrets are never cleared or rotated during normal code updates. The administrator password is the only deployment credential the user needs to choose or remember.
 
-Configure three different Worker secrets through the interactive prompt:
+After the first successful deployment, the build secret can be removed. GitHub data sync, PAT, and SRS compilation remain optional settings inside the WebUI.
 
-```powershell
-npx wrangler secret put ADMIN_PASSWORD
-npx wrangler secret put SESSION_SIGNING_SECRET
-npx wrangler secret put SUBSCRIPTION_SIGNING_SECRET
-```
-
-The two signing secrets must each contain at least 32 random bytes. Never commit or print these values.
-
-Verify and deploy:
+For local maintenance, Wrangler remains available:
 
 ```powershell
 npm ci
@@ -61,19 +56,17 @@ npm run worker:dry-run
 npm run deploy
 ```
 
-`workers_dev` is currently disabled. Configure a Custom Domain or Route for the Worker in Cloudflare before opening the WebUI.
-
-On an empty R2 bucket, the WebUI creates a blank workspace with only the administrator password. GitHub import is optional. Once initialized, every device logs in with only the administrator password.
+On an empty R2 bucket, the WebUI creates a blank workspace and the built-in Momo adapter using only the administrator password. GitHub connection is configured later from repository settings.
 
 ## GitHub Workflows
 
 - `ci.yml` validates pull requests.
-- `deploy.yml` automatically deploys the maintainer-owned development deployment from `main` and can also be started manually. It requires the maintainer's `CLOUDFLARE_API_TOKEN`.
+- Cloudflare Workers Builds deploys the tracked `main` branch; there is no GitHub website deployment workflow or user-managed Cloudflare API token.
 - When SRS is enabled for a connected private repository, the Worker automatically provisions the versioned workflow template. It does not commit source or artifacts during normal compilation.
 - SRS provisioning uses the repository-scoped PAT already stored in private R2 metadata. Users do not create an Actions Secret or Variable; callbacks use a short-lived job ticket derived from the existing session signing secret.
-- Release users deploy locally with Wrangler and do not require Actions, a fork, or a GitHub repository.
+- Ordinary users update explicitly with GitHub's `Sync fork`; the resulting `main` commit triggers their own Cloudflare build.
 
-The core refactor is complete. `3.0.0-beta.1` now enters Phase 9 Beta stabilization, covering standalone Release deployment, controlled updates, target-based profile adaptation, and frontend polish. Ordinary users will not be required to fork the source repository. Version `3.0.0` will only be published after the Beta release gates pass.
+The core refactor is complete. `3.0.0-beta.1` is in Phase 9 Beta stabilization, covering Cloudflare onboarding, controlled updates, target-based profile adaptation, and frontend polish. Version `3.0.0` will only be published after the Beta release gates pass.
 
 ## Development
 

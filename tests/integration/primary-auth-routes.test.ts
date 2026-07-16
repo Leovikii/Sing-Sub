@@ -48,13 +48,6 @@ async function data(response: Response) {
   return (await response.json() as { data: unknown }).data;
 }
 
-function githubJson(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
 afterEach(() => vi.unstubAllGlobals());
 
 describe('primary workspace auth routes', () => {
@@ -101,19 +94,8 @@ describe('primary workspace auth routes', () => {
     await expect(new R2PrivateMetadataStore(bucket).read('primary')).resolves.toBeNull();
   });
 
-  it('optionally imports GitHub data during first initialization without KV', async () => {
+  it('rejects legacy GitHub fields instead of importing during login', async () => {
     const bucket = new InMemoryR2Bucket();
-    const env = environment(bucket);
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const path = new URL(String(input)).pathname;
-      if (path === '/user') return githubJson({ login: 'github-user', avatar_url: '' });
-      if (path === '/repos/owner/repo') return githubJson({ default_branch: 'main' });
-      if (path.endsWith('/git/ref/heads/main')) return githubJson({ object: { sha: 'commit-1' } });
-      if (path.endsWith('/git/trees/commit-1')) return githubJson({ truncated: false, tree: [] });
-      return githubJson({}, 404);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
     const response = await handleLogin(new Request('https://example.com/api/login', {
       method: 'POST',
       body: JSON.stringify({
@@ -122,19 +104,10 @@ describe('primary workspace auth routes', () => {
         repo: 'repo',
         pat: 'github-token',
       }),
-    }), env);
+    }), environment(bucket));
 
-    expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    await expect(new R2WorkspaceStore(bucket).read('primary')).resolves.toMatchObject({
-      snapshot: {
-        settings: { owner: 'owner', repo: 'repo', userLogin: 'github-user' },
-        migration: { source: 'github-import', commitSha: 'commit-1' },
-      },
-    });
-    await expect(new R2PrivateMetadataStore(bucket).read('primary')).resolves.toMatchObject({
-      credentials: { github: { pat: 'github-token', owner: 'owner', repo: 'repo' } },
-    });
+    expect(response.status).toBe(400);
+    await expect(new R2WorkspaceStore(bucket).read('primary')).rejects.toThrow('Workspace not found');
   });
 
   it('rejects an incorrect administrator password', async () => {

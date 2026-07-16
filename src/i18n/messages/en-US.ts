@@ -39,12 +39,8 @@ export default {
     setupSubtitle: 'Create the local workspace for this deployment',
     loginSubtitle: 'Sign in to this Cloudflare deployment',
     password: 'Administrator password',
-    optionalImport: 'Import an existing GitHub configuration (optional)',
-    repository: 'owner/repo',
-    pat: 'GitHub PAT',
     setupAction: 'Initialize',
     loginAction: 'Sign in',
-    importHint: 'The PAT is only used to read the selected private repository. Leave it blank for an empty workspace.',
   },
   nav: {
     main: 'Main navigation',

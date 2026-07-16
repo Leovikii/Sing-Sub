@@ -1,83 +1,77 @@
-# 独立 Release 分发与部署自动化设想
+# Cloudflare Workers Builds 部署与更新
 
-状态：`ACTIVE`。归属 Phase 9 Beta 稳定与产品化；在 `3.0.0` 正式版发布前完成方案定稿和必需的从零部署/升级/回滚能力。SRS workflow 自动 provision 已提前至 Phase 4，不作为本文件的前置条件。
+状态：`IMPLEMENTED`，等待现有生产 Worker smoke 与版本回滚演练。本文件记录 Phase 9 已接受的普通用户初始化、源码更新和生产回滚模型；它取代独立 Release、Windows 程序、Node CLI 和本地部署助手方案。
 
-## 用户设想
+## 唯一部署模型
 
-- CI/CD 由维护仓库的 GitHub Actions 发布正式 GitHub Release，包括仓库源码、版本信息、校验文件和升级说明。
-- 提供面向 Windows 的自动化脚本或程序；用户启动后输入必要信息，即可完成 Cloudflare 登录、资源检查、Secret 初始化和首次部署。
-- 工具可以检查并拉取新的稳定 Release，展示变更与兼容信息，经用户确认后构建并发布到其 Cloudflare Worker。
-- 工具支持查看当前版本、部署指定版本和回滚，不要求用户手工理解 Worker ID、R2 binding、Wrangler 命令或 signing secret 生成细节。
-- 普通用户直接下载 Release，不要求 GitHub fork、Git checkout、合并上游分支或维护源码仓库；fork 只面向贡献者和需要自定义源码的高级用户。
+```text
+维护仓库 main -> 维护者 Cloudflare Workers Builds -> 维护者 Worker
 
-## 建议的职责拆分
+维护仓库 main -> 用户 GitHub fork -> GitHub Sync fork
+                                  -> 用户 Cloudflare Workers Builds
+                                  -> 用户 Worker
+```
 
-### Release CI
+- 网站代码由 Cloudflare Workers Builds 拉取、构建和部署，不使用 GitHub deployment Action。
+- 维护者的生产 Worker 跟踪官方仓库 `main`；普通用户的 Worker 跟踪自己的 fork `main`。
+- 普通用户只有点击 GitHub `Sync fork` 后才接收上游更新；维护仓库的提交不能直接更新其他用户的生产 Worker。
+- `.github/workflows/ci.yml` 只验证 Pull Request；私有数据仓库中的 SRS workflow 只承担可选编译，两者都不负责网站部署。
 
-Release Action 只负责生成可信发布物，不接触任何用户 Cloudflare 账户：
+## 首次部署
 
-1. tag/release 触发完整 verify、Worker dry-run 和发布检查；
-2. 生成源码归档、版本化 release manifest、SHA-256 checksum、变更说明和兼容范围；
-3. 标记最低数据 schema、是否需要迁移、最低 Wrangler/Node 版本和已知回滚限制；
-4. 发布可独立下载的 GitHub Release，不自动部署任何用户的生产 Worker。
+用户只执行以下步骤：
 
-### Windows 部署助手
+1. 注册 Cloudflare，启用 Workers 与 R2 subscription；不手动创建 R2 bucket。
+2. Fork Sing-Sub 公共仓库。
+3. 在现有或新建 Worker 的 `Settings > Builds` 授权 GitHub，选择自己的 fork 和 `main`。
+4. 关闭非生产分支构建；Build command 使用 `npm run build`，Deploy command 使用 `npm run deploy:cloudflare`。
+5. 让 Cloudflare 自动创建 Builds API Token；不要输入 Account ID 或自建 Cloudflare API Token。
+6. 添加加密 Build Secret `SING_SUB_ADMIN_PASSWORD`，值至少 12 UTF-8 bytes。
+7. 连接仓库并等待构建完成，然后打开 `workers.dev` 地址，以相同管理员口令初始化空 workspace。
 
-首次部署流程：
+GitHub 数据仓库、PAT、editable sync 和 SRS compiler 均在登录后的仓库设置页按需连接，不属于部署或首次登录。
 
-1. 检查运行环境与网络，调用 Wrangler 官方 OAuth 登录；
-2. 选择 Cloudflare account、Worker 名称、R2 bucket 和 workers.dev/custom domain/Route；
-3. 交互输入管理员口令，在本机内存生成两个独立 signing secret；
-4. 创建或确认 R2、上传 Secrets、执行 dry-run、显式确认后部署；
-5. 访问 health/bootstrap endpoint，记录 Worker version ID 和本地非敏感 deployment manifest；
-6. 打开 WebUI，以管理员口令创建空 `primary` workspace；GitHub 仓库、PAT、sync 和 SRS 均在部署后按需连接，不进入默认初始化主流程。
+## 部署初始化器
 
-该简化流程已由 ADR-045 接受，但当前 Beta 代码仍保留 WebUI 首次登录时的可选 GitHub 导入；只有部署助手、fresh-account smoke 和迁移说明齐备后才修改初始化实现。
+`scripts/deploy-cloudflare.mjs` 只在本地或 Cloudflare 构建机运行，不进入 Worker bundle。每次部署按以下顺序执行：
 
-更新流程：
+1. `wrangler secret list --format json` 只读取 Secret 名称，不读取值。
+2. 如果 Worker 不存在，将其视为首次部署；其他查询失败立即中止，避免误轮换已有密钥。
+3. 缺少 `ADMIN_PASSWORD` 时，从加密 Build Secret 读取并校验管理员口令。
+4. 分别生成缺失的 32-byte `SESSION_SIGNING_SECRET` 与 `SUBSCRIPTION_SIGNING_SECRET`；已有 Secret 永远不覆盖。
+5. 查询固定 private bucket `sing-sub-data`；仅在 Cloudflare 明确返回 R2 not-found code `10006` 时创建，其他错误立即中止。
+6. 通过仅当前进程可读的临时 JSON 与 `wrangler deploy --secrets-file` 上传缺失 Secret；`finally` 删除临时目录。
+7. Wrangler 对未出现在 secret file 中的现有 Secrets 保持不变，R2 bucket 和对象从不删除或清空。
 
-1. 查询稳定 Release channel，展示版本、release notes、schema 变化和风险；
-2. 下载并校验 release manifest/checksum，不直接执行未经校验的远程脚本；
-3. 检查当前已安装版本和本地部署 manifest；普通 Release 安装目录不承担源码合并；
-4. 在部署前执行 verify/dry-run 和必要的兼容检查；
-5. 用户明确确认后部署，完成 health check，再记录新旧 Worker version ID。
+现有生产 Worker 已有三个 runtime secrets，因此不需要添加 `SING_SUB_ADMIN_PASSWORD`；初始化器会直接保留现有值。Build Secret 在首次成功部署后可以删除，后续代码部署不依赖它。若管理员 runtime secret 被手动删除，则下次部署必须重新提供 Build Secret。
 
-SRS workflow 的自动 provision、短期 ticket 和 pending ruleset reconcile 属于当前 Phase 4：WebUI 对已连接仓库的显式 SRS toggle 调用 Worker command，Worker 自动完成模板 upsert、权限验证与 dispatch。Phase 9 助手只复用该产品能力，不再承担 GitHub Secret/Variable 配置。
+## Secret 生命周期
 
-回滚流程：
+- `ADMIN_PASSWORD` 是用户唯一需要设置和记忆的凭据。
+- `SESSION_SIGNING_SECRET` 签名登录 Cookie 和短期 SRS job ticket；轮换会让现有会话和 ticket 失效。
+- `SUBSCRIPTION_SIGNING_SECRET` 生成和验证私有配置短 Token；轮换会让旧订阅链接失效。
+- 两个 signing secrets 不进入 GitHub、R2、前端、日志或构建输出，用户不查看也不记忆。
+- 删除整个 Worker 后无法从 Cloudflare 读回 Secret；重新生成不会损坏 R2 数据，但需要重新登录并更新私有订阅链接。
 
-- 应用代码优先使用 Wrangler version rollback 或重新部署指定 Release。
-- R2 数据回滚与 Worker 代码回滚分离；涉及 schema migration 时必须声明向前/向后兼容范围。
-- 工具不得删除 R2 bucket、覆盖业务数据或修改用户源码仓库来模拟回滚。
+## 更新与回滚
 
-## 安全与行为边界
+- 维护者合并到官方 `main` 后，维护者 Workers Builds 自动部署。
+- 普通用户在 GitHub 显式点击 `Sync fork`；fork `main` 更新后，用户 Workers Builds 自动部署。
+- 用户修改过源码且产生 Git 冲突时，GitHub 必须先解决冲突；Cloudflare 不执行上游合并。
+- 构建或部署失败时，Cloudflare 保留上一生产版本；初始化器不清理 R2 或 Secrets。
+- 代码问题使用 Cloudflare Worker version rollback；R2 数据问题使用 immutable workspace revision restore，两者不得混为同一操作。
 
-- 维护者开发部署可由其拥有的 `main` 分支自动发布；该约定不扩展到 Release 用户部署。
-- 对 Release 用户，上游更新通知或发现新 Release 都不得自动改动其生产部署。
-- Cloudflare OAuth/API token、管理员口令和 signing secret 不进入命令参数、日志、release、GitHub issue 或本地明文 manifest。
-- Release Action 不持有用户的 Cloudflare token、Worker Secret、R2 credential 或 GitHub sync PAT。
-- 首次部署、更新、数据迁移和回滚是四个显式操作，不能由一个不可中断的脚本混合完成。
-- 工具失败时保留当前生产版本和 R2 head，不执行破坏性清理。
-- GitHub sync 数据仓库与应用代码 Release 是两个独立来源，不能因为更新应用代码而修改用户业务数据仓库。
-- 官方发布与部署助手不要求用户 fork，也不把用户 Cloudflare 配置回传到维护仓库。
-- 浏览器 WebUI 只调用已认证 Worker 的 enable/disable/status API；PAT 始终保留在 R2 private metadata，ticket 只在 Worker 与私有 Action run 间短期流转，浏览器不读取 PAT 或 ticket。
+## 不再实施的方案
 
-## 当前重构需要预留的契约
+- 不发布独立 Release 安装包、release feed 或 Windows 可执行程序。
+- 不开发 PowerShell/Node setup、update 或 rollback 助手。
+- 不要求用户配置 GitHub Actions deployment Secret、Cloudflare API Token 或 Account ID。
+- 不让未初始化的公开 WebUI 接受“首位访问者设置管理员密码”；管理员口令只通过 Cloudflare 的受信构建控制面输入。
+- 不自动把维护仓库更新推送到所有用户；普通用户升级始终由 `Sync fork` 显式触发。
 
-- 应用版本、Worker version、workspace `schemaVersion` 和 migration version 可被工具读取。
-- schema migration 幂等、可测试，并声明最低兼容应用版本。
-- 提供不泄露数据的 health/version endpoint，用于部署后验证。
-- Wrangler 配置和资源命名可参数化，不能把维护者的 account、domain 或 bucket ID 固化进发布物。
-- Release manifest、checksum、兼容范围和回滚说明在 Phase 9 Beta 发布门禁内定稿并演练。
+## 验证门禁
 
-## Phase 9 待决策
-
-- 先交付 PowerShell + Node CLI，还是直接制作带界面的 Windows 可执行程序。
-- GitHub Release asset 的具体结构，以及是否需要独立 release feed/channel。
-- Release 签名只使用 checksum，还是增加 Sigstore/GitHub artifact attestation。
-- 高级用户自定义源码与普通 Release 安装是否完全分为两种模式；默认部署助手不负责源码合并。
-- stable/preview channel、自动检查频率、代理支持和离线安装包。
-- 多 Cloudflare account、多部署、custom domain 和现有资源接管的交互模型。
-- Phase 9 助手如何展示已有 SRS enablement status、如何协助诊断 PAT 权限和 Action 失败；不再管理 GitHub Secret/Variable。
-
-默认倾向是先实现可审计的 Node CLI 与薄 PowerShell 启动器，验证流程稳定后再评估 GUI/单文件程序；最终选择在 Phase 9 开始时另建 ADR。
+- unit tests 覆盖已有部署、全新 Worker、缺失单个 Secret、R2 创建竞争和不明确查询失败。
+- `npm run verify` 与 `npm run worker:dry-run` 必须通过。
+- fresh-account smoke 需要真实 Cloudflare 账户启用 R2 后执行一次，确认 bucket、三个 runtime secrets、workers.dev、空 workspace 和后续无 Secret Build 均正常。
+- 网站部署 `deploy.yml` 已从源码删除；维护者仍需在现有 `sing-sub` Worker 连接官方仓库并确认首次 Cloudflare Build 成功，才算完成生产控制面切换。

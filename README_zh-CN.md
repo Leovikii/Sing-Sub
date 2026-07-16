@@ -11,7 +11,7 @@ Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org
 - Cloudflare R2 Standard 是唯一持久化主存储。
 - Worker 提供 WebUI、鉴权 API、私有配置订阅和公开规则集分发。
 - 浏览器会话使用签名 `HttpOnly` Cookie，不依赖 KV 会话。
-- GitHub 是可选的初始导入、备份和双向编辑同步介质。
+- GitHub 是可选的数据导入、备份和双向编辑同步介质。
 - 规则集 JSON 直接来自当前 R2 revision；连接私有仓库后，可选用 GitHub Actions 编译 SRS 并回传 R2。
 
 ```text
@@ -30,31 +30,26 @@ Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org
 
 ## 前置条件
 
-- Node.js 22
-- 已启用 Workers 和 R2 的 Cloudflare 账户
-- 项目内安装的 Wrangler 4.x
-- 只有导入、同步或启用 SRS 时才需要私有 GitHub 仓库和 PAT
+- 已启用 Workers 和 R2 subscription 的 Cloudflare 账户
+- 用于 Fork 源码的 GitHub 账户
+- 只有导入、同步或启用 SRS 时才需要私有 GitHub 数据仓库和 PAT
 
-## 手动部署
+## Cloudflare 部署
 
-创建 `wrangler.toml` 中声明的私有 R2 bucket：
+1. Fork 本仓库。
+2. 在 Cloudflare Worker 的 `Settings > Builds` 连接该 fork，并选择 `main`。
+3. 关闭非生产分支构建。
+4. Build command 填写 `npm run build`，Deploy command 填写 `npm run deploy:cloudflare`。
+5. 让 Cloudflare 自动创建 Builds API Token。
+6. 添加名为 `SING_SUB_ADMIN_PASSWORD` 的加密 Build Secret，值至少包含 12 个 UTF-8 bytes。
+7. 连接仓库并等待 Build 完成。
+8. 打开生成的 `workers.dev` 地址，用管理员口令登录。
 
-```powershell
-npx wrangler login
-npx wrangler r2 bucket create sing-sub-data
-```
+部署初始化器会自动创建或复用私有 `sing-sub-data` bucket，并生成两个相互独立的 signing secret。正常更新不会清空或轮换现有 bucket、对象和 runtime secret；管理员口令是用户唯一需要设置和记忆的部署凭据。
 
-通过交互提示配置三个不同的 Worker Secret：
+首次成功部署后可以删除 Build Secret。GitHub 数据同步、PAT 和 SRS 编译仍是 WebUI 内的可选设置。
 
-```powershell
-npx wrangler secret put ADMIN_PASSWORD
-npx wrangler secret put SESSION_SIGNING_SECRET
-npx wrangler secret put SUBSCRIPTION_SIGNING_SECRET
-```
-
-两个 signing secret 均应至少包含 32 个随机 bytes。不要提交或输出这些值。
-
-验证并部署：
+本地维护仍可使用 Wrangler：
 
 ```powershell
 npm ci
@@ -63,16 +58,16 @@ npm run worker:dry-run
 npm run deploy
 ```
 
-当前 `workers_dev` 已关闭，首次打开 WebUI 前需要在 Cloudflare 配置 Custom Domain 或 Route。空 R2 会创建空的 `primary` workspace；GitHub 导入是可选项，之后所有设备只使用管理员口令登录。
+空 R2 会仅凭管理员口令创建空的 `primary` workspace 和内置 Momo 适配器；GitHub 连接稍后在仓库设置中配置。
 
 ## GitHub 工作流
 
 - `ci.yml` 验证 Pull Request。
-- `deploy.yml` 用于维护者自己的生产部署，也支持手动触发。
+- Cloudflare Workers Builds 部署所跟踪的 `main`；不再存在 GitHub 网站部署 workflow，也不需要用户管理 Cloudflare API Token。
 - 启用 SRS 后，Worker 会自动向已连接的私有仓库安装版本化编译 workflow；用户不需要手动创建 Actions Secret 或 Variable。
-- 普通发布用户使用本地 Wrangler 部署，不要求 fork、GitHub Actions 或数据仓库。
+- 普通用户通过 GitHub `Sync fork` 显式更新；fork 的 `main` 更新后触发其自己的 Cloudflare Build。
 
-核心重构已经完成。`3.0.0-beta.1` 进入 Phase 9 Beta 稳定阶段，统一处理独立 Release 部署、受控升级、目标化配置派生和前端体验收束。普通用户不要求 fork；只有 Beta 发布门禁全部通过后才发布 `3.0.0` 正式版。
+核心重构已经完成。`3.0.0-beta.1` 进入 Phase 9 Beta 稳定阶段，统一处理 Cloudflare 初始化、受控升级、目标化配置派生和前端体验收束。只有 Beta 发布门禁全部通过后才发布 `3.0.0` 正式版。
 
 ## 开发
 

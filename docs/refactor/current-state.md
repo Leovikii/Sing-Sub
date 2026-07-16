@@ -87,4 +87,4 @@
 - 不维护 R2/GitHub 长期双写；GitHub 只保留主动 sync/backup。
 - SRS 由 GitHub Actions 编译，通过 Worker callback 写入 private R2。
 - KV binding 已在迁移完成后删除；热点响应只使用可丢弃的 Workers Cache API。
-- 新部署默认创建空 R2 workspace，GitHub 导入与后续同步均为可选功能。
+- 新部署默认创建空 R2 workspace；GitHub 只在登录后的仓库设置中按需连接和同步。

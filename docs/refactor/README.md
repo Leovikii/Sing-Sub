@@ -24,7 +24,7 @@ Phase 0-8 的架构重构已经完成。当前 `3.0.0-beta.1` 进入 Phase 9 Bet
 - [roadmap.md](./roadmap.md)：实施阶段、任务顺序、验收门槛和回滚边界。
 - [decisions.md](./decisions.md)：已锁定和待确认的架构决策。
 - [progress.md](./progress.md)：任务状态、验证记录、阻塞项和会话日志。
-- [deployment-automation-backlog.md](./deployment-automation-backlog.md)：Beta 阶段 Release CI/CD、Windows 部署助手、升级与回滚方案。
+- [deployment-automation-backlog.md](./deployment-automation-backlog.md)：已接受的 Workers Builds 初始化、Sync fork 更新与回滚方案。
 
 ## 执行方式
 

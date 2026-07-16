@@ -40,8 +40,9 @@ R2 Standard 是唯一持久化真相来源。业务状态通过 immutable worksp
 Sing-Sub/
 ├─ .github/
 │  └─ workflows/
-│     ├─ ci.yml
-│     └─ deploy.yml
+│     └─ ci.yml
+├─ scripts/
+│  └─ deploy-cloudflare.mjs
 ├─ templates/
 │  └─ github/
 │     └─ compile-srs.yml

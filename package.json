@@ -19,7 +19,8 @@
     "worker:dry-run": "npm run build && wrangler deploy --dry-run",
     "verify": "npm run lint && npm run typecheck && npm run test && vite build && npm run test:e2e",
     "preview": "wrangler dev",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
+    "deploy": "npm run build && npm run deploy:cloudflare"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

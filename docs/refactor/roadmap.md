@@ -9,7 +9,7 @@
 1. 建立类型、测试和 CI 安全网。
 2. 固定 shared contract、API error 和 workspace revision 语义。
 3. 建立 R2 WorkspaceStore、head ETag CAS、signed auth 与 retention。
-4. 一次性导入现有 GitHub/KV 数据并切换 R2 主读写；新部署默认创建空 workspace，GitHub 导入可选。
+4. 一次性迁移现有 GitHub/KV 数据并切换 R2 主读写；新部署只创建空 workspace，GitHub 后续按需连接。
 5. 接入 Actions 编译回调与 R2 artifact 发布。
 6. 实现可选 GitHub backup/editable sync。
 7. 在稳定 API 上迁移 PrimeVue、i18n、Pinia、Router 和 feature。
@@ -231,11 +231,11 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 
 ### A. 普通用户部署与升级
 
-- 提供随 Release 分发的幂等 setup/update/rollback 流程，普通用户无需 fork、Git checkout 或维护源码仓库。
-- Release CI 发布源码归档、manifest、checksum、兼容范围和升级说明，不接触用户 Cloudflare 凭据。
-- Windows 部署助手或 Node CLI 负责 Wrangler 登录、R2/binding/Secret 初始化、dry-run、health check 和显式部署确认。
-- 生产更新必须区分首次安装、更新和回滚；发现新版本不得自动覆盖用户 Worker。
-- 记录 Worker version、应用版本和 workspace schema 兼容关系，保留代码回滚与 R2 数据恢复的独立边界。
+- 网站部署统一使用 Cloudflare Workers Builds；维护者跟踪官方 `main`，普通用户跟踪自己的 fork `main`。
+- 用户只需启用 R2、Fork 仓库、在 Cloudflare 连接 fork 并输入加密管理员 Build Secret；部署入口自动创建/复用 bucket 和生成缺失 signing secrets。
+- 普通用户通过 GitHub `Sync fork` 显式更新；不开发 Release 安装包、Windows/Node 助手或 GitHub deployment Action。
+- Cloudflare Build 失败保留上一生产版本；代码 rollback 与 R2 revision restore 始终分离。
+- 首次登录只创建空 workspace；GitHub 数据仓库、PAT、sync 和 SRS 在登录后按需连接。
 
 ### B. Profile replacement adapter（完成）
 
@@ -256,7 +256,7 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 
 - 收集并关闭 P0/P1 bug，P2 必须有明确延后记录；不得存在数据丢失、静默覆盖或凭据泄露风险。
 - 完成新用户空 R2 部署、已有数据迁移、可选 GitHub sync、无 GitHub 模式和 SRS 可选模式的回归矩阵。
-- 完成 Release 从零部署、升级、回滚、R2 restore 和生产只读检查演练。
+- 完成 Workers Builds 从零部署、Sync fork 更新、Worker rollback、R2 restore 和生产只读检查演练。
 - 完整 `verify`、Worker dry-run、desktop/mobile E2E、版本/依赖/文档/许可证扫描通过。
 - 只有所有必需项完成后，才把版本从 `3.0.0-beta.*` 更新为 `3.0.0` 并创建正式 Release。
 

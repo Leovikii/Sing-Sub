@@ -61,7 +61,7 @@ POST /api/github-sync/pull { expectedRevision, resolution: "safe" }
 - Pull 固定一个 remote commit，完整下载并校验路径、UTF-8、数量、大小、JSON schema、文件名和引用后，才以 expected R2 revision 发布完整 workspace。验证失败不会产生部分可见数据。
 - Push 覆盖后可从 Git commit history 恢复；Pull 覆盖前的 R2 revision 仍在 retention 历史中，sync base revision 始终受保护。
 - 空 private repository 可由首次 overwrite push 直接建立默认分支，不要求用户先手工创建 README commit。
-- bucket/account 级恢复使用初始化时的可选 GitHub 导入。导入固定 commit、执行同一结构校验，并把恢复出的首个 R2 revision 与 GitHub commit 登记为 sync base。
+- bucket/account 级恢复先用管理员口令创建空 workspace，再在仓库设置中连接 private repository 并执行显式 pull。pull 固定 remote commit、执行同一结构校验，并把新的 R2 revision 与 GitHub commit 登记为 sync base。
 
 Pull 改变 ruleset source 且 SRS 已启用时，会调用既有 reconcile/dispatch 流程。同步成功不依赖编译成功；编译补建失败通过 `SRS_RECONCILE_FAILED` warning 暴露，JSON ruleset 与已拉取的 R2 数据仍保持有效。
 

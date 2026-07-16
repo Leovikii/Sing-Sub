@@ -39,12 +39,8 @@ export default {
     setupSubtitle: '创建此部署的本地工作区',
     loginSubtitle: '登录此 Cloudflare 部署',
     password: '管理员口令',
-    optionalImport: '从 GitHub 导入现有配置（可选）',
-    repository: 'owner/repo',
-    pat: 'GitHub PAT',
     setupAction: '初始化',
     loginAction: '登录',
-    importHint: 'PAT 只用于读取指定的私有仓库；空白时将创建空工作区。',
   },
   nav: {
     main: '主导航',

@@ -13,7 +13,7 @@
 | ADR-007 | ACCEPTED | 使用 ports/adapters | 隔离 R2、GitHub 和 HTTP，支持 fake/integration test。 |
 | ADR-008 | SUPERSEDED | GitHub 文件写入使用 blob/head 乐观锁 | ADR-029 将在线存储切换为 R2 revision；GitHub 乐观锁只保留给可选 sync adapter。 |
 | ADR-009 | ACCEPTED | Repository provisioning 与 CRUD 分离 | 显式 SRS enable command 自动安装或升级私有仓库 workflow；普通 ruleset save 永不管理 workflow。 |
-| ADR-010 | ACCEPTED | 每个 Worker 部署只管理一个 `primary` workspace | 每个用户独立部署 Worker/R2，避免用户索引、权限系统与 workspace lookup；源码不要求 fork。 |
+| ADR-010 | ACCEPTED | 每个 Worker 部署只管理一个 `primary` workspace | 每个用户独立部署 Worker/R2，避免用户索引、权限系统与 workspace lookup。 |
 | ADR-011 | ACCEPTED | API 返回稳定错误码，前端翻译 | 支持 i18n，不泄漏基础设施自由文本。 |
 | ADR-012 | ACCEPTED | 渐进式迁移，不做长期大爆炸分支 | 每阶段可验证、发布、回滚。 |
 | ADR-013 | ACCEPTED | 保留 CodeMirror、Lucide、vuedraggable | 它们解决专业需求，不是自研轮子。 |
@@ -34,10 +34,10 @@
 | ADR-028 | ACCEPTED | 不依赖 Cloudflare Queue/Cron | 使用 R2 deterministic job、`ctx.waitUntil` dispatch 和管理员显式 retry，避免为少数 SRS 用户增加所有部署的后台服务。 |
 | ADR-029 | ACCEPTED | R2 Standard 是唯一持久化存储 | 当前 workspace 小、低并发、无复杂查询；immutable revision + ETag head 同时覆盖 CRUD、快照、回滚与 SRS。 |
 | ADR-030 | ACCEPTED | 最终移除 KV 和 D1 | 签名 Cookie 替代 session store，HMAC token 替代 token index，Cache API 只承担可丢弃热点缓存。 |
-| ADR-031 | ACCEPTED | 空 R2 默认创建本地 workspace，GitHub 导入可选 | R2 是主存储；强制仓库/PAT 会让可选同步介质重新成为启动依赖。 |
+| ADR-031 | SUPERSEDED | 空 R2 默认创建本地 workspace，GitHub 导入可选 | ADR-047 删除登录时导入，只保留登录后仓库连接与显式 sync pull。 |
 | ADR-032 | ACCEPTED | SRS 使用无 Token 的公开短链接 | 规则集是公开资产；复用私有订阅 Token 会让公开分享间接泄露 JSON bearer credential。 |
-| ADR-033 | ACCEPTED | 生产部署必须显式触发 | Release 更新不应自动改动生产 Worker；完整一键 onboarding 延后到 Phase 9。 |
-| ADR-034 | ACCEPTED | 普通用户通过独立 Release 部署，不要求 fork | 维护仓库负责发布可信版本包；部署助手在用户本机连接其 Cloudflare。具体工具形态在 Phase 9 决定。 |
+| ADR-033 | SUPERSEDED | 生产部署必须显式触发 | ADR-047 改由 Workers Builds 跟踪各自 `main`；普通用户仍通过显式 Sync fork 决定升级。 |
+| ADR-034 | SUPERSEDED | 普通用户通过独立 Release 部署，不要求 fork | ADR-047 取消 Release 助手并采用 fork + Workers Builds。 |
 | ADR-035 | ACCEPTED | JSON ruleset 始终公开分发，SRS 是可选优化 | 没有 GitHub/Actions 时仍保留完整规则集编辑与订阅能力。 |
 | ADR-036 | ACCEPTED | 订阅按 current revision 动态构建，Cache 仅做加速 | 避免持久化最终配置、手动重建与失效扇出；保存后通过新 revision 自动绕过旧 cache。 |
 | ADR-037 | ACCEPTED | SRS 使用短期 job ticket 自动 provision | 不要求用户配置 GitHub Action Secret/Variable；ticket 只授权单一、短期 build callback。 |
@@ -45,7 +45,8 @@
 | ADR-042 | ACCEPTED | 重构完成后进入 Beta 稳定阶段，设置 `3.0.0` 发布门禁 | 部署产品化、适配器机制和前端反馈仍需要真实使用验证，不能把架构完成等同于正式版完成。 |
 | ADR-043 | ACCEPTED | 用可编辑 replacement adapter 取代通用 patch DSL | 初始化创建 Momo 预设；构建器只支持严格路径替换和唯一数组匹配替换。 |
 | ADR-044 | ACCEPTED | 私有订阅直接切换为 25 字符确定性短 Token | 单 workspace 不需要在 URL 重复携带 claims；128-bit HMAC tag 保留轮换和隔离能力并显著缩短链接。 |
-| ADR-045 | ACCEPTED | Beta 初始化目标由本地部署助手承担 Secret 与 Cloudflare 资源配置 | WebUI 默认只初始化空 workspace，GitHub 后连；本轮只记录方案，不修改现有初始化实现。 |
+| ADR-045 | SUPERSEDED | Beta 初始化目标由本地部署助手承担 Secret 与 Cloudflare 资源配置 | ADR-047 使用 Cloudflare Builds 控制面和仓库内幂等部署入口。 |
+| ADR-047 | ACCEPTED | Fork + Cloudflare Workers Builds 是唯一网站部署与更新模型 | 复用 Cloudflare Git 集成、R2 权限与自动构建；删除 Release 助手和 GitHub deployment Action。 |
 | ADR-046 | SUPERSEDED | 用正确管理员登录触发一次性 R2 schema v1→v2 升级 | 生产迁移验证完成；临时 schema、登录接线与测试已删除。 |
 
 ## ADR-002：PrimeVue 版本政策
@@ -79,6 +80,8 @@
 
 ## ADR-031：GitHub 可选初始化
 
+状态：SUPERSEDED（由 ADR-047 取代）。
+
 - 空 R2 首次初始化默认只要求管理员口令，创建空 `primary` workspace。
 - GitHub 导入通过显式可选入口填写 `owner/repo` 与 PAT，并执行只读固定 commit dry-run。
 - 初始化后可在 sync 功能中连接 GitHub；未连接时所有 R2 CRUD、订阅和登录保持完整。
@@ -95,6 +98,8 @@
 - 当前产品把所有 SRS source 视为可公开内容；未来如需私有规则集，必须设计独立授权模式，不得复用配置订阅 Token。
 
 ## ADR-033/034：维护者部署与独立 Release 分发
+
+状态：SUPERSEDED（由 ADR-047 取代）。以下内容保留为历史决策记录。
 
 - 维护者拥有源码仓库和目标 Cloudflare 部署，`.github/workflows/deploy.yml` 允许 `main` push 自动部署并保留 `workflow_dispatch`。
 - 首次部署当前仍使用 Wrangler 手动创建 R2、设置 Worker secrets、配置域名并部署。
@@ -244,13 +249,27 @@
 
 ## ADR-045：Beta 初始化简化目标
 
-状态：ACCEPTED
+状态：SUPERSEDED
 日期：2026-07-15
 
 - 普通用户未来从 Release 启动本地 Node CLI/薄 PowerShell 助手，由助手完成 Wrangler OAuth、account/Worker/R2/domain 选择、管理员口令输入、两个 signing secret 的本机内存生成与上传、dry-run 和显式部署。
 - 部署后 WebUI 默认只以管理员口令创建空 `primary` workspace；GitHub 导入、sync 和 SRS 连接进入仓库设置，不再作为首次初始化主流程。
 - 助手不得把管理员口令或 signing secret 写入仓库、命令参数、日志或非敏感 deployment manifest。
 - 本 ADR 只确认 Phase 9 目标流程；本次短 Token 优化不修改现有 `handleLogin`、初始化表单或 GitHub 可选导入代码。
+
+## ADR-047：Fork + Cloudflare Workers Builds 初始化与更新
+
+状态：ACCEPTED
+日期：2026-07-16
+
+- 维护者 Worker 跟踪官方仓库 `main`；普通用户 Worker 跟踪自己的 GitHub fork `main`。Cloudflare Workers Builds 检测目标分支的新 commit 后自动构建和部署。
+- 普通用户通过 GitHub 原生 `Sync fork` 显式接收上游更新；维护仓库 push 不得绕过用户 fork 自动更新其他账户的 Worker。
+- 网站部署不使用 GitHub `deploy.yml`、用户 Cloudflare API Token、Account ID、Release 安装包、Windows 程序或本地 update/rollback 助手。PR CI 和私有仓库 SRS workflow 继续承担各自独立职责。
+- Cloudflare 自动 Builds token 具备 Workers Scripts 与 R2 edit。仓库内 `deploy:cloudflare` 先只读检查 Secret 名称和固定 bucket `sing-sub-data`；bucket 只在明确 not-found 时创建，已有 bucket/object 永不清空。
+- 首次部署缺少 `ADMIN_PASSWORD` 时读取加密 Build Secret `SING_SUB_ADMIN_PASSWORD`；两个 32-byte signing secrets 分别随机生成。已有 runtime secret 被保留，Secret 值不进入参数、日志、仓库、R2 或前端。
+- `workers.dev` 默认启用，preview URL 与非生产分支部署默认关闭。Custom Domain 是部署后的可选增强。
+- 首次 WebUI 登录只接受管理员口令并创建空 workspace；删除 GitHub/PAT 初始化导入契约。数据仓库、sync 和 SRS 只能在登录后的仓库设置中显式连接。
+- 构建失败保留上一生产版本；代码回滚使用 Cloudflare Worker version rollback，业务数据恢复使用 R2 immutable revision，两者保持分离。
 
 ## ADR-027：免费额度策略
 
