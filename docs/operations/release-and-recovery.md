@@ -42,6 +42,8 @@
 
 首次 Build 只读取 Secret 名称和 R2 bucket 状态，不读取或轮换现有 Secret，不修改 R2 对象。确认 `ss.vkio.org` 登录、Profile、订阅、规则集和 GitHub sync 正常后，网站部署完全由 Workers Builds 承担。
 
+2026-07-16 生产验证完成：官方仓库 `main` 新 commit 已自动触发构建和部署，WebUI 与 R2/GitHub 功能正常。fresh-account 从零部署因暂无独立 Cloudflare 账户尚未执行，不影响现有生产 Worker 的控制面切换结论。
+
 ## 更新
 
 - 维护者：官方 `main` 新 commit 自动触发 Cloudflare Build。

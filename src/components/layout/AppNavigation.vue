@@ -45,18 +45,19 @@ import { useI18n } from 'vue-i18n';
 import PanelMenu from 'primevue/panelmenu';
 import type { MenuItem } from 'primevue/menuitem';
 import {
+  ArrowLeftRight,
   Boxes,
   ChevronDown,
-  CircleDot,
-  FileJson,
+  FileCog,
   Github,
   Info,
-  Languages,
   Layers3,
-  Network,
-  Puzzle,
+  Link2,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
+  Waypoints,
+  Wrench,
 } from 'lucide-vue-next';
 
 const props = withDefaults(defineProps<{
@@ -83,26 +84,26 @@ type NavigationItem = Omit<MenuItem, 'icon' | 'items'> & {
 };
 
 const items = computed<NavigationItem[]>(() => [
-  { key: 'profiles', label: t('nav.profiles'), iconComponent: FileJson, route: '/profiles' },
+  { key: 'profiles', label: t('nav.profiles'), iconComponent: FileCog, route: '/profiles' },
   {
     key: 'resources',
     label: t('nav.resources'),
     iconComponent: Boxes,
     items: [
-      { key: 'nodes', label: t('nav.nodes'), iconComponent: Network, route: '/resources/nodes' },
+      { key: 'nodes', label: t('nav.nodes'), iconComponent: Waypoints, route: '/resources/nodes' },
       { key: 'templates', label: t('nav.templates'), iconComponent: Layers3, route: '/resources/templates' },
-      { key: 'adapters', label: t('nav.adapters'), iconComponent: Puzzle, route: '/resources/adapters' },
+      { key: 'adapters', label: t('nav.adapters'), iconComponent: Wrench, route: '/resources/adapters' },
       { key: 'rulesets', label: t('nav.rulesets'), iconComponent: ShieldCheck, route: '/resources/rulesets' },
     ],
   },
-  { key: 'sync', label: t('nav.sync'), iconComponent: Github, route: '/sync' },
+  { key: 'sync', label: t('nav.sync'), iconComponent: ArrowLeftRight, route: '/sync' },
   {
     key: 'settings',
     label: t('nav.settings'),
     iconComponent: Settings,
     items: [
-      { key: 'general', label: t('nav.general'), iconComponent: Languages, route: '/settings/general' },
-      { key: 'subscription', label: t('nav.subscription'), iconComponent: CircleDot, route: '/settings/subscription' },
+      { key: 'general', label: t('nav.general'), iconComponent: SlidersHorizontal, route: '/settings/general' },
+      { key: 'subscription', label: t('nav.subscription'), iconComponent: Link2, route: '/settings/subscription' },
       { key: 'repository', label: t('nav.repository'), iconComponent: Github, route: '/settings/repository' },
       { key: 'about', label: t('nav.about'), iconComponent: Info, route: '/settings/about' },
     ],
@@ -138,7 +139,7 @@ function onLeafSelect() {
 .nav-link,
 .nav-group {
   color: var(--color-text-nav);
-  transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 .nav-link:hover,
@@ -150,8 +151,8 @@ function onLeafSelect() {
 .nav-link-active,
 .nav-link-active:hover {
   background: var(--color-bg-nav-active);
-  box-shadow: inset 3px 0 0 var(--color-brand-pink);
   color: var(--color-text-nav-active);
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {

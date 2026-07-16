@@ -437,19 +437,73 @@ test('keeps the active navigation emphasis while another item is hovered', async
   await expect(activeLink).toHaveClass(/nav-link-active/);
   const activeBefore = await activeLink.evaluate(element => ({
     backgroundColor: getComputedStyle(element).backgroundColor,
-    boxShadow: getComputedStyle(element).boxShadow,
+    color: getComputedStyle(element).color,
+    fontWeight: getComputedStyle(element).fontWeight,
   }));
   expect(activeBefore.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-  expect(activeBefore.boxShadow).not.toBe('none');
+  expect(Number(activeBefore.fontWeight)).toBeGreaterThanOrEqual(600);
 
   await syncLink.hover();
   const activeAfter = await activeLink.evaluate(element => ({
     backgroundColor: getComputedStyle(element).backgroundColor,
-    boxShadow: getComputedStyle(element).boxShadow,
+    color: getComputedStyle(element).color,
+    fontWeight: getComputedStyle(element).fontWeight,
   }));
   const hoverBackground = await syncLink.evaluate(element => getComputedStyle(element).backgroundColor);
   expect(activeAfter).toEqual(activeBefore);
   expect(hoverBackground).not.toBe(activeBefore.backgroundColor);
+});
+
+test('applies the saved dark theme before the application mounts', async ({ page }) => {
+  await mockApi(page);
+  await page.addInitScript(() => localStorage.setItem('sing-sub.appearance', 'dark'));
+  await page.goto('/');
+
+  const theme = await page.evaluate(() => ({
+    darkClass: document.documentElement.classList.contains('app-dark'),
+    theme: document.documentElement.dataset.theme,
+    colorScheme: getComputedStyle(document.documentElement).colorScheme,
+    htmlBackground: getComputedStyle(document.documentElement).backgroundColor,
+    bodyBackground: getComputedStyle(document.body).backgroundColor,
+    themeColor: document.querySelector<HTMLMetaElement>('#theme-color')?.content,
+  }));
+  expect(theme).toEqual({
+    darkClass: true,
+    theme: 'dark',
+    colorScheme: 'dark',
+    htmlBackground: 'rgb(18, 18, 18)',
+    bodyBackground: 'rgb(18, 18, 18)',
+    themeColor: '#121212',
+  });
+});
+
+test('switches workspace tabs without waiting for a page transition', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const mockState = await mockApi(page);
+  await login(page, mockState);
+  await navigateTo(page, '节点集');
+  await expect(page.getByText('暂无节点集')).toBeVisible();
+
+  await page.evaluate(() => {
+    const state = window as typeof window & { __routeSwitchDuration?: number | null };
+    state.__routeSwitchDuration = null;
+    const start = performance.now();
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('main')?.textContent?.includes('暂无模板')) {
+        state.__routeSwitchDuration = performance.now() - start;
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.querySelector('main')!, { childList: true, subtree: true, characterData: true });
+  });
+  await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '模板', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (
+    window as typeof window & { __routeSwitchDuration?: number | null }
+  ).__routeSwitchDuration)).not.toBeNull();
+  const duration = await page.evaluate(() => (
+    window as typeof window & { __routeSwitchDuration?: number | null }
+  ).__routeSwitchDuration!);
+  expect(duration).toBeLessThan(130);
 });
 
 test('persists language and runs a safe GitHub push', async ({ page }) => {

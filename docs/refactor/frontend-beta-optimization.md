@@ -21,8 +21,11 @@
 | FBO-06 | DONE | 合并 ruleset 状态与格式链接 | 每张卡片只有一个 `SRS` 或 `JSON` 链接按钮 |
 | FBO-07 | DONE | 补充响应式和关键交互 E2E | 320/390/412/768/1024px 自动或浏览器断言通过 |
 | FBO-08 | DONE | 完成桌面/移动端中英文浏览器复核 | 无遮挡、溢出、错位或不可达操作 |
-| FBO-09 | DONE | 分离侧栏激活与悬停视觉层级 | 激活项保持主题色背景和左侧强调，悬停其他项不覆盖激活态 |
+| FBO-09 | DONE | 分离侧栏激活与悬停视觉层级 | 激活项只使用主题色背景/文字和字重，无自定义实线或阴影 |
 | FBO-10 | DONE | 为同步操作增加互斥忙碌态 | 当前操作显示加载反馈，刷新/拉取/推送在请求完成前全部禁用 |
+| FBO-11 | DONE | 统一导航与资产语义图标 | 同步、仓库不再共用 GitHub；节点集、模板、适配器和规则集在导航/卡片中一致 |
+| FBO-12 | DONE | 消除暗色模式首帧白闪 | Vue 挂载前同步应用保存/系统主题；`html/body/#app` 同底色与 `color-scheme` |
+| FBO-13 | DONE | 消除 Firefox 桌面端页面切换等待 | 删除串行 `out-in` 路由淡出；桌面 Firefox 内容切换 < 130ms |
 
 ## 编辑弹窗
 
@@ -62,7 +65,7 @@
 
 ## 验证矩阵
 
-- `npm run lint`、三套 typecheck、unit、integration、production build、desktop/mobile E2E。
+- `npm run lint`、三套 typecheck、unit、integration、production build、Chromium desktop/mobile 与 Firefox desktop E2E。
 - 视口至少覆盖 320x568、390x844、412x915、768x1024、1440x900。
 - 中英文分别验证编辑弹窗、Profile 选择器、Ruleset 单链接、同步按钮和设置页。
 - 自动检查 `documentElement.scrollWidth <= clientWidth`，并验证关键触控目标、稳定按钮位置和唯一规则集格式按钮。
@@ -70,7 +73,8 @@
 ## 完成记录
 
 - 2026-07-16 完成 FBO-01 至 FBO-08；未增加依赖，未改动 API 或 ruleset endpoint 语义。
-- `npm run verify` 通过：107 unit、66 integration、18 desktop/mobile E2E，并包括 lint、三套 typecheck 和 production build。
+- `npm run verify` 通过：107 unit、66 integration、24 Chromium/Firefox E2E，并包括 lint、三套 typecheck 和 production build。
 - 浏览器复核覆盖 320x568、390x844、412x915、768x1024、1024x900 与 1440x900，包含简体中文和英文。
-- `npm run worker:dry-run` 通过：Wrangler 4.110.0 打包 22 个静态资源，总上传 749.93 KiB / gzip 122.22 KiB，仅识别 `WORKSPACE_BUCKET` R2 binding，未部署生产。
+- `npm run worker:dry-run` 通过：Wrangler 4.110.0 打包 23 个静态资源（含同源主题初始化脚本），总上传 749.93 KiB / gzip 122.22 KiB，仅识别 `WORKSPACE_BUCKET` R2 binding，未部署生产。
 - 追加 FBO-09/FBO-10：侧栏激活态不再被 PrimeVue 外层悬停背景遮盖；同步慢响应期间按钮互斥，强制重复点击仅产生一条请求。
+- 追加 FBO-11 至 FBO-13：导航/资产图标按业务语义统一；主题在应用脚本与 CSS 前同步初始化；删除 Firefox 会串行等待的页面 `out-in` 淡出。

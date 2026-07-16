@@ -251,7 +251,7 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 优先复用 PrimeVue 原生能力；不为局部视觉问题重新引入基础组件或大型动画依赖。
 - 补齐长耗时操作、错误、空状态、冲突和未保存 draft 的可见状态，并保持 API/store/feature 边界。
 - UI 改动必须覆盖 desktop/mobile 和中英文关键流程，避免在正式版前引入大规模信息架构变更。
-- 完成记录见 `frontend-beta-optimization.md`：稳定编辑弹窗、320px 响应式、精简文案、订阅复制反馈和 ruleset 单链接。
+- 完成记录见 `frontend-beta-optimization.md`：稳定编辑弹窗、320px 响应式、精简文案、ruleset 单链接、导航语义、暗色首帧和 Firefox 即时切换。
 
 ### D. Beta 验收与正式版门禁
 
