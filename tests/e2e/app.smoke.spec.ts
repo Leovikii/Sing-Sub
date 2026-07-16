@@ -267,13 +267,15 @@ test('uses a compact and stable desktop editor header', async ({ page }) => {
   const noteBox = (await noteInput.boundingBox())!;
   const modeBox = (await modeControl.boundingBox())!;
   const saveBox = (await saveButton.boundingBox())!;
+  const editHeaderBox = (await header.boundingBox())!;
+  const editContentBox = (await dialog.locator('.p-dialog-content').boundingBox())!;
   expect(Math.abs(
     (nameBox.y + nameBox.height / 2) - (noteBox.y + noteBox.height / 2),
   )).toBeLessThan(2);
-  expect(nameBox.width).toBeGreaterThanOrEqual(160);
-  expect(nameBox.width).toBeLessThanOrEqual(225);
-  expect(noteBox.width).toBeGreaterThanOrEqual(224);
-  expect(noteBox.width).toBeLessThanOrEqual(321);
+  expect(nameBox.width).toBeGreaterThanOrEqual(112);
+  expect(nameBox.width).toBeLessThanOrEqual(177);
+  expect(noteBox.width).toBeGreaterThanOrEqual(128);
+  expect(noteBox.width).toBeLessThanOrEqual(225);
   expect(noteBox.x).toBeGreaterThan(nameBox.x + nameBox.width);
   expect(modeBox.x).toBeGreaterThan(noteBox.x + noteBox.width);
   expect(saveBox.x).toBeGreaterThan(modeBox.x + modeBox.width);
@@ -285,11 +287,23 @@ test('uses a compact and stable desktop editor header', async ({ page }) => {
   await expect(saveButton).toBeVisible();
   const previewTitle = dialog.locator('.editor-preview-title');
   const previewNote = dialog.locator('.editor-preview-note');
+  const previewMetadata = dialog.locator('.editor-metadata-preview');
   const previewTitleBox = (await previewTitle.boundingBox())!;
   const previewNoteBox = (await previewNote.boundingBox())!;
+  const previewMetadataBox = (await previewMetadata.boundingBox())!;
+  const previewHeaderBox = (await header.boundingBox())!;
+  const previewContentBox = (await dialog.locator('.p-dialog-content').boundingBox())!;
   expect(previewTitleBox.x).toBeCloseTo(nameBox.x, 0);
   expect(previewNoteBox.x - (previewTitleBox.x + previewTitleBox.width)).toBeGreaterThanOrEqual(15);
   expect(previewNoteBox.x - (previewTitleBox.x + previewTitleBox.width)).toBeLessThanOrEqual(17);
+  expect(Math.abs(
+    (previewTitleBox.y + previewTitleBox.height / 2) - (previewMetadataBox.y + previewMetadataBox.height / 2),
+  )).toBeLessThan(2);
+  expect(Math.abs(
+    (previewNoteBox.y + previewNoteBox.height / 2) - (previewMetadataBox.y + previewMetadataBox.height / 2),
+  )).toBeLessThan(2);
+  expect(Math.abs(previewHeaderBox.height - editHeaderBox.height)).toBeLessThan(1);
+  expect(Math.abs(previewContentBox.y - editContentBox.y)).toBeLessThan(1);
   expect((await modeControl.boundingBox())?.x).toBe(modeX);
   expect((await saveButton.boundingBox())?.x).toBe(saveX);
 });
@@ -330,14 +344,20 @@ test('keeps editor metadata and actions stable at 320px', async ({ page }) => {
   const previewButton = dialog.getByRole('button', { name: '预览', exact: true });
   const saveButton = dialog.getByRole('button', { name: '保存', exact: true });
   const modeControl = dialog.locator('.p-selectbutton');
+  const header = dialog.locator('.p-dialog-header');
+  const content = dialog.locator('.p-dialog-content');
   await expect.poll(() => dialog.evaluate(element => getComputedStyle(element).transform))
     .toBe('matrix(1, 0, 0, 1, 0, 0)');
   const modeX = (await modeControl.boundingBox())?.x;
   const saveX = (await saveButton.boundingBox())?.x;
+  const editHeaderHeight = (await header.boundingBox())?.height;
+  const editContentY = (await content.boundingBox())?.y;
   await previewButton.click();
   await expect(saveButton).toBeVisible();
   expect((await modeControl.boundingBox())?.x).toBe(modeX);
   expect((await saveButton.boundingBox())?.x).toBe(saveX);
+  expect((await header.boundingBox())?.height).toBe(editHeaderHeight);
+  expect((await content.boundingBox())?.y).toBe(editContentY);
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });

@@ -43,8 +43,8 @@
               </IftaLabel>
             </div>
             <div v-else class="editor-metadata-preview min-w-0">
-              <span class="editor-preview-title truncate text-lg font-semibold">{{ title || t('common.untitled') }}</span>
-              <span v-if="note" class="editor-preview-note truncate text-sm text-text-muted" :title="note">{{ note }}</span>
+              <span class="editor-preview-title truncate text-xl font-semibold">{{ title || t('common.untitled') }}</span>
+              <span v-if="note" class="editor-preview-note truncate text-base text-text-muted" :title="note">{{ note }}</span>
             </div>
           </slot>
         </div>
@@ -179,42 +179,43 @@ function onDialogVisible(visible: boolean) {
 
 .editor-metadata {
   grid-area: metadata;
+  height: 3.5rem;
 }
 
 .editor-metadata-fields {
   display: flex;
+  height: 3.5rem;
   align-items: center;
   gap: 0.5rem;
-  min-height: 3.5rem;
 }
 
 .editor-title-field {
-  min-width: 10rem;
+  min-width: 7rem;
+  max-width: 11rem;
+  flex: 0 1 11rem;
+}
+
+.editor-note-field {
+  min-width: 8rem;
   max-width: 14rem;
   flex: 0 1 14rem;
 }
 
-.editor-note-field {
-  min-width: 14rem;
-  max-width: 20rem;
-  flex: 0 1 20rem;
-}
-
 .editor-metadata-preview {
   display: flex;
-  min-height: 3.5rem;
-  align-items: baseline;
+  height: 3.5rem;
+  align-items: center;
   gap: 1rem;
 }
 
 .editor-preview-title {
-  max-width: 14rem;
+  max-width: 11rem;
   flex: 0 1 auto;
 }
 
 .editor-preview-note {
   min-width: 0;
-  max-width: 20rem;
+  max-width: 14rem;
   flex: 0 1 auto;
 }
 
@@ -259,9 +260,15 @@ function onDialogVisible(visible: boolean) {
 }
 
 @media (max-width: 640px) {
+  .editor-metadata {
+    height: 7rem;
+  }
+
   .editor-metadata-fields {
+    height: 7rem;
     align-items: stretch;
     flex-direction: column;
+    justify-content: center;
   }
 
   .editor-title-field,
@@ -273,7 +280,7 @@ function onDialogVisible(visible: boolean) {
   }
 
   .editor-metadata-preview {
-    min-height: 5.5rem;
+    height: 7rem;
     align-items: stretch;
     flex-direction: column;
     justify-content: center;
