@@ -1,6 +1,6 @@
 # Cloudflare Workers Builds 部署与更新
 
-状态：`IMPLEMENTED`，等待现有生产 Worker smoke 与版本回滚演练。本文件记录 Phase 9 已接受的普通用户初始化、源码更新和生产回滚模型；它取代独立 Release、Windows 程序、Node CLI 和本地部署助手方案。
+状态：`IMPLEMENTED`；现有生产 Worker smoke 与 `main` 自动更新已验证，等待 fresh-account smoke 与版本回滚演练。本文件记录 Phase 9 已接受的普通用户初始化、源码更新和生产回滚模型；它取代独立 Release、Windows 程序、Node CLI 和本地部署助手方案。
 
 ## 唯一部署模型
 
@@ -74,4 +74,5 @@ GitHub 数据仓库、PAT、editable sync 和 SRS compiler 均在登录后的仓
 - unit tests 覆盖已有部署、全新 Worker、缺失单个 Secret、R2 创建竞争和不明确查询失败。
 - `npm run verify` 与 `npm run worker:dry-run` 必须通过。
 - fresh-account smoke 需要真实 Cloudflare 账户启用 R2 后执行一次，确认 bucket、三个 runtime secrets、workers.dev、空 workspace 和后续无 Secret Build 均正常。
-- 网站部署 `deploy.yml` 已从源码删除；维护者仍需在现有 `sing-sub` Worker 连接官方仓库并确认首次 Cloudflare Build 成功，才算完成生产控制面切换。
+- 网站部署 `deploy.yml` 已从源码删除；现有 `sing-sub` Worker 已连接官方仓库，并于 2026-07-16 验证首次与后续 `main` Cloudflare Build 成功，生产控制面切换完成。
+- 当前无独立 Cloudflare 账户执行 fresh-account smoke；不得通过删除现有 Worker 或清空 R2 来模拟。
