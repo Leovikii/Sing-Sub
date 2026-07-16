@@ -246,6 +246,54 @@ test('logs in and creates a profile', async ({ page }) => {
   expect(Math.abs(widthAfter! - widthBefore!)).toBeLessThan(1);
 });
 
+test('uses a compact and stable desktop editor header', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const mockState = await mockApi(page);
+  await login(page, mockState);
+
+  await page.getByRole('button', { name: '新建' }).click();
+  const dialog = page.getByRole('dialog');
+  const header = dialog.locator('.p-dialog-header');
+  const nameInput = dialog.getByLabel('名称', { exact: true });
+  const noteInput = dialog.getByLabel('备注', { exact: true });
+  const modeControl = dialog.locator('.p-selectbutton');
+  const previewButton = dialog.getByRole('button', { name: '预览', exact: true });
+  const saveButton = dialog.getByRole('button', { name: '保存', exact: true });
+
+  await expect.poll(() => dialog.evaluate(element => getComputedStyle(element).transform))
+    .toBe('matrix(1, 0, 0, 1, 0, 0)');
+  const nameBox = (await nameInput.boundingBox())!;
+  const noteBox = (await noteInput.boundingBox())!;
+  const modeBox = (await modeControl.boundingBox())!;
+  const saveBox = (await saveButton.boundingBox())!;
+  expect(Math.abs(
+    (nameBox.y + nameBox.height / 2) - (noteBox.y + noteBox.height / 2),
+  )).toBeLessThan(2);
+  expect(nameBox.width).toBeGreaterThanOrEqual(160);
+  expect(noteBox.width).toBeGreaterThanOrEqual(224);
+  expect(noteBox.x).toBeGreaterThan(nameBox.x + nameBox.width);
+  expect(modeBox.x).toBeGreaterThan(noteBox.x + noteBox.width);
+  expect(saveBox.x).toBeGreaterThan(modeBox.x + modeBox.width);
+  expect((await header.boundingBox())!.height).toBeLessThan(140);
+
+  const modeX = modeBox.x;
+  const saveX = saveBox.x;
+  await previewButton.click();
+  await expect(saveButton).toBeVisible();
+  expect((await modeControl.boundingBox())?.x).toBe(modeX);
+  expect((await saveButton.boundingBox())?.x).toBe(saveX);
+});
+
+test('shows the repository MIT license in About settings', async ({ page }) => {
+  const mockState = await mockApi(page);
+  await login(page, mockState);
+  await navigateTo(page, '关于');
+
+  const licenseLink = page.getByRole('link', { name: 'MIT' });
+  await expect(licenseLink).toHaveAttribute('href', 'https://github.com/Leovikii/Sing-Sub/blob/main/LICENSE');
+  await expect(page.getByText('GPL-3.0')).toHaveCount(0);
+});
+
 test('keeps editor metadata and actions stable at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   const mockState = await mockApi(page);

@@ -26,10 +26,12 @@
 | FBO-11 | DONE | 统一导航与资产语义图标 | 同步、仓库不再共用 GitHub；节点集、模板、适配器和规则集在导航/卡片中一致 |
 | FBO-12 | DONE | 消除暗色模式首帧白闪 | Vue 挂载前同步应用保存/系统主题；`html/body/#app` 同底色与 `color-scheme` |
 | FBO-13 | DONE | 消除 Firefox 桌面端页面切换等待 | 删除串行 `out-in` 路由淡出；桌面 Firefox 内容切换 < 130ms |
+| FBO-14 | DONE | 压缩桌面编辑弹窗标题区 | 名称/备注动态同排；模式切换位于保存左侧；移动端保持纵向字段 |
+| FBO-15 | DONE | 对齐关于页许可证元数据 | 显示并链接仓库 MIT `LICENSE`，不再硬编码错误的 GPL-3.0 |
 
 ## 编辑弹窗
 
-桌面使用三列稳定布局：`metadata 1fr | mode auto | actions 1fr`。名称和备注在 metadata 中上下排列；模式切换保持居中；保存和关闭靠右。移动端 metadata 独占第一行，模式和操作进入第二行。
+桌面使用紧凑稳定布局：`metadata 1fr | mode auto | actions auto`。metadata 内名称与备注采用带最小宽度的 `2fr/3fr` 动态同排；模式切换紧邻保存左侧，保存和关闭靠右。中等宽度先把操作区折到第二行，手机端再把名称和备注恢复为纵向字段。
 
 - 编辑态使用有明确 label 的名称和备注输入；备注不显示“可选”等括号补充。
 - 名称仅显示用户可编辑部分，不在弹窗标题尾部拼接 `.json`。
@@ -73,8 +75,9 @@
 ## 完成记录
 
 - 2026-07-16 完成 FBO-01 至 FBO-08；未增加依赖，未改动 API 或 ruleset endpoint 语义。
-- `npm run verify` 通过：107 unit、66 integration、24 Chromium/Firefox E2E，并包括 lint、三套 typecheck 和 production build。
+- `npm run verify` 通过：107 unit、66 integration、28 Chromium/Firefox E2E，并包括 lint、三套 typecheck 和 production build。
 - 浏览器复核覆盖 320x568、390x844、412x915、768x1024、1024x900 与 1440x900，包含简体中文和英文。
 - `npm run worker:dry-run` 通过：Wrangler 4.110.0 打包 23 个静态资源（含同源主题初始化脚本），总上传 749.93 KiB / gzip 122.22 KiB，仅识别 `WORKSPACE_BUCKET` R2 binding，未部署生产。
 - 追加 FBO-09/FBO-10：侧栏激活态不再被 PrimeVue 外层悬停背景遮盖；同步慢响应期间按钮互斥，强制重复点击仅产生一条请求。
 - 追加 FBO-11 至 FBO-13：导航/资产图标按业务语义统一；主题在应用脚本与 CSS 前同步初始化；删除 Firefox 会串行等待的页面 `out-in` 淡出。
+- 追加 FBO-14/FBO-15：桌面编辑弹窗标题区压缩为动态单行元数据和右侧连续操作区；关于页许可证与根目录、npm metadata 的 MIT 声明一致。
