@@ -260,6 +260,7 @@ test('uses a compact and stable desktop editor header', async ({ page }) => {
   const previewButton = dialog.getByRole('button', { name: '预览', exact: true });
   const saveButton = dialog.getByRole('button', { name: '保存', exact: true });
 
+  await noteInput.fill('compact note');
   await expect.poll(() => dialog.evaluate(element => getComputedStyle(element).transform))
     .toBe('matrix(1, 0, 0, 1, 0, 0)');
   const nameBox = (await nameInput.boundingBox())!;
@@ -270,7 +271,9 @@ test('uses a compact and stable desktop editor header', async ({ page }) => {
     (nameBox.y + nameBox.height / 2) - (noteBox.y + noteBox.height / 2),
   )).toBeLessThan(2);
   expect(nameBox.width).toBeGreaterThanOrEqual(160);
+  expect(nameBox.width).toBeLessThanOrEqual(225);
   expect(noteBox.width).toBeGreaterThanOrEqual(224);
+  expect(noteBox.width).toBeLessThanOrEqual(321);
   expect(noteBox.x).toBeGreaterThan(nameBox.x + nameBox.width);
   expect(modeBox.x).toBeGreaterThan(noteBox.x + noteBox.width);
   expect(saveBox.x).toBeGreaterThan(modeBox.x + modeBox.width);
@@ -280,6 +283,13 @@ test('uses a compact and stable desktop editor header', async ({ page }) => {
   const saveX = saveBox.x;
   await previewButton.click();
   await expect(saveButton).toBeVisible();
+  const previewTitle = dialog.locator('.editor-preview-title');
+  const previewNote = dialog.locator('.editor-preview-note');
+  const previewTitleBox = (await previewTitle.boundingBox())!;
+  const previewNoteBox = (await previewNote.boundingBox())!;
+  expect(previewTitleBox.x).toBeCloseTo(nameBox.x, 0);
+  expect(previewNoteBox.x - (previewTitleBox.x + previewTitleBox.width)).toBeGreaterThanOrEqual(15);
+  expect(previewNoteBox.x - (previewTitleBox.x + previewTitleBox.width)).toBeLessThanOrEqual(17);
   expect((await modeControl.boundingBox())?.x).toBe(modeX);
   expect((await saveButton.boundingBox())?.x).toBe(saveX);
 });

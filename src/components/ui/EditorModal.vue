@@ -19,7 +19,7 @@
         <div class="editor-metadata min-w-0">
           <slot name="title">
             <div v-if="viewMode !== 'preview'" class="editor-metadata-fields min-w-0">
-              <IftaLabel v-if="editableTitle">
+              <IftaLabel v-if="editableTitle" class="editor-title-field">
                 <InputText
                   :id="`${fieldId}-title`"
                   :model-value="title"
@@ -29,9 +29,9 @@
                 />
                 <label :for="`${fieldId}-title`">{{ titlePlaceholder || t('common.name') }}</label>
               </IftaLabel>
-              <span v-else class="truncate text-base font-semibold">{{ title || t('common.untitled') }}</span>
+              <span v-else class="editor-title-field truncate text-base font-semibold">{{ title || t('common.untitled') }}</span>
 
-              <IftaLabel v-if="editableNote !== false">
+              <IftaLabel v-if="editableNote !== false" class="editor-note-field">
                 <InputText
                   :id="`${fieldId}-note`"
                   :model-value="note"
@@ -43,8 +43,8 @@
               </IftaLabel>
             </div>
             <div v-else class="editor-metadata-preview min-w-0">
-              <span class="truncate text-lg font-semibold">{{ title || t('common.untitled') }}</span>
-              <span v-if="note" class="truncate text-sm text-text-muted" :title="note">{{ note }}</span>
+              <span class="editor-preview-title truncate text-lg font-semibold">{{ title || t('common.untitled') }}</span>
+              <span v-if="note" class="editor-preview-note truncate text-sm text-text-muted" :title="note">{{ note }}</span>
             </div>
           </slot>
         </div>
@@ -181,13 +181,41 @@ function onDialogVisible(visible: boolean) {
   grid-area: metadata;
 }
 
-.editor-metadata-fields,
-.editor-metadata-preview {
-  display: grid;
-  grid-template-columns: minmax(10rem, 2fr) minmax(14rem, 3fr);
+.editor-metadata-fields {
+  display: flex;
   align-items: center;
   gap: 0.5rem;
   min-height: 3.5rem;
+}
+
+.editor-title-field {
+  min-width: 10rem;
+  max-width: 14rem;
+  flex: 0 1 14rem;
+}
+
+.editor-note-field {
+  min-width: 14rem;
+  max-width: 20rem;
+  flex: 0 1 20rem;
+}
+
+.editor-metadata-preview {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.editor-preview-title {
+  max-width: 14rem;
+  flex: 0 1 auto;
+}
+
+.editor-preview-note {
+  min-width: 0;
+  max-width: 20rem;
+  flex: 0 1 auto;
 }
 
 .editor-mode {
@@ -232,12 +260,21 @@ function onDialogVisible(visible: boolean) {
 
 @media (max-width: 640px) {
   .editor-metadata-fields {
-    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editor-title-field,
+  .editor-note-field {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
   }
 
   .editor-metadata-preview {
-    display: flex;
     min-height: 5.5rem;
+    align-items: stretch;
     flex-direction: column;
     justify-content: center;
     gap: 0.25rem;
