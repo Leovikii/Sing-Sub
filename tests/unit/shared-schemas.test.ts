@@ -63,10 +63,9 @@ describe('shared request schemas', () => {
     }).success).toBe(false);
   });
 
-  it('accepts password-only login and requires complete setup coordinates', () => {
+  it('accepts only password-based login', () => {
     expect(loginRequestSchema.safeParse({ adminPassword: 'password' }).success).toBe(true);
-    expect(loginRequestSchema.safeParse({ adminPassword: 'password', owner: 'owner', repo: 'repo', pat: 'token' }).success).toBe(true);
+    expect(loginRequestSchema.safeParse({ adminPassword: 'password', owner: 'owner', repo: 'repo', pat: 'token' }).success).toBe(false);
     expect(loginRequestSchema.safeParse({ adminPassword: 'password', owner: 'owner' }).success).toBe(false);
-    expect(loginRequestSchema.safeParse({ adminPassword: 'password', owner: '', repo: '', pat: '' }).success).toBe(false);
   });
 });

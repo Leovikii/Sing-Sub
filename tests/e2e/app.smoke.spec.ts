@@ -191,21 +191,13 @@ async function login(page: Page, mockState: ApiMockState): Promise<void> {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '初始化工作区' })).toBeVisible();
   await page.getByPlaceholder('管理员口令').fill('test-admin-password');
-  await page.getByRole('button', { name: '从 GitHub 导入现有配置（可选）' }).click();
-  await page.getByPlaceholder('owner/repo').fill('example/private-config');
-  await page.getByPlaceholder('GitHub PAT').fill('test-pat');
 
   const loginRequest = page.waitForRequest(request =>
     new URL(request.url()).pathname === '/api/login' && request.method() === 'POST');
   await page.locator('form button[type="submit"]').click();
   const request = await loginRequest;
 
-  expect(request.postDataJSON()).toEqual({
-    adminPassword: 'test-admin-password',
-    owner: 'example',
-    repo: 'private-config',
-    pat: 'test-pat',
-  });
+  expect(request.postDataJSON()).toEqual({ adminPassword: 'test-admin-password' });
   expect(mockState.authenticated).toBe(true);
   await expectNavigation(page);
   await expect(page.getByRole('heading', { name: '配置' })).toBeVisible();

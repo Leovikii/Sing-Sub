@@ -96,11 +96,11 @@
 
 ## 8.1 部署触发
 
-- 维护者开发部署允许 `main` push 自动部署，并保留显式 `workflow_dispatch`；该 Action 只使用维护者自己的 Cloudflare 凭据。
-- 普通 Release 用户不依赖 GitHub Actions 或 fork，通过本地部署助手显式调用 Wrangler 部署到自己的 Cloudflare 账户。
-- Release 的首次初始化、日常升级和回滚必须是不同操作，不能由 main push 或发现新版本隐式完成。
-- 普通用户部署不得要求 fork；维护仓库 Release Action 不能获得或代理用户 Cloudflare 凭据。
-- SRS compiler 属于连接私有仓库后的可选能力，维护者与 Release 用户使用同一机制。
+- 网站部署只使用 Cloudflare Workers Builds，不使用 GitHub deployment Action。维护者跟踪官方 `main`，普通用户跟踪自己的 fork `main`。
+- 普通用户只有执行 GitHub `Sync fork` 才接收上游更新；维护仓库 push 不得直接更新其他 Cloudflare 账户。
+- 首次部署只要求启用 R2、授权 fork 和输入加密 `SING_SUB_ADMIN_PASSWORD`；R2 bucket 和缺失 signing secrets 由幂等部署入口创建。
+- 部署入口只能读取 Secret 名称，禁止读取、输出或覆盖已有值；R2 仅在明确 not-found 时创建，禁止清空或删除。
+- SRS compiler 属于连接私有数据仓库后的可选能力，维护者与普通用户使用同一机制。
 - `3.0.0-beta.*` 阶段允许基于真实使用反馈优化产品能力，但不得降低数据、鉴权、同步和恢复边界；部署方案、前端 Beta 收束和 P0/P1 回归全部完成前不得发布 `3.0.0`。
 - 未连接 GitHub 或未配置 compiler 时，WebUI、R2 CRUD、私有 JSON 配置订阅、ruleset 编辑及公开 JSON ruleset 订阅必须完整可用。
 

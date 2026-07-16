@@ -4,18 +4,13 @@ import { loginPrimaryWorkspace } from '../application/auth/primary-workspace-aut
 import { toPublicWorkspaceSettings } from '../application/auth/public-workspace-settings';
 import { initializeEmptyWorkspace } from '../application/commands/workspace/initialize-empty-workspace';
 import { updateWorkspaceSettings } from '../application/commands/settings/update-settings';
-import type { GithubImportSettings } from '../application/migration/legacy-migration-model';
-import { migrateLegacyWorkspace } from '../application/migration/migrate-legacy-workspace';
 import { createPrimaryWorkspaceServices } from '../composition/primary-workspace-services';
 import { PRIMARY_WORKSPACE_ID } from '../domain/workspace/primary-workspace';
-import { GithubLegacySourceReader } from '../infrastructure/github/github-legacy-source-reader';
-import { dryRunLegacyMigration } from '../infrastructure/legacy/legacy-migration-dry-run';
 import { WorkspaceNotFoundError } from '../infrastructure/r2/r2-workspace-errors';
 import {
   clearSessionCookieHeader,
   sessionCookieHeader,
 } from '../infrastructure/security/session-cookie';
-import { fetchRepository, fetchUser, type RepoSession } from '../lib/github';
 import { getPrimaryWorkspaceAuth } from '../http/authenticate';
 import { errorResponse, jsonResponse } from '../lib/security';
 import type { Env } from '../types';
@@ -58,49 +53,11 @@ export async function handleLogin(request: Request, env: Env): Promise<Response>
   }
 
   if (!await workspaceExists(env)) {
-    const { owner, repo, pat } = parsed.data;
-    if (owner && repo && pat) {
-      const userResponse = await fetchUser(pat);
-      if (!userResponse.ok) return errorResponse('Invalid GitHub PAT', 401, 'NOT_AUTHENTICATED');
-      const user = await userResponse.json() as { login: string; avatar_url: string };
-      let repository: { default_branch: string };
-      try {
-        repository = await fetchRepository(owner, repo, pat);
-      } catch {
-        return errorResponse('Repository not found or not accessible', 404, 'NOT_FOUND');
-      }
-
-      const settings: GithubImportSettings = {
-        pat,
-        owner,
-        repo,
-        userLogin: user.login,
-        userAvatar: user.avatar_url,
-        defaultBranch: repository.default_branch,
-      };
-      const session: RepoSession = { owner, repo, pat, defaultBranch: repository.default_branch };
-      const source = await new GithubLegacySourceReader(session).read();
-      const dryRun = dryRunLegacyMigration(source, settings);
-      if (!dryRun.valid || !dryRun.normalized) {
-        return errorResponse(
-          dryRun.issues.find(issue => issue.severity === 'error')?.message || 'GitHub import validation failed',
-          400,
-          'VALIDATION_FAILED',
-        );
-      }
-      await migrateLegacyWorkspace({
-        workspaceId: PRIMARY_WORKSPACE_ID,
-        revisionId: crypto.randomUUID(),
-        migratedAt: new Date().toISOString(),
-        normalized: dryRun.normalized,
-      }, services);
-    } else {
-      await initializeEmptyWorkspace(services.workspaceStore, {
-        workspaceId: PRIMARY_WORKSPACE_ID,
-        revisionId: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-      });
-    }
+    await initializeEmptyWorkspace(services.workspaceStore, {
+      workspaceId: PRIMARY_WORKSPACE_ID,
+      revisionId: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+    });
   }
 
   const now = Math.floor(Date.now() / 1000);

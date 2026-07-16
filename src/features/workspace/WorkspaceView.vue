@@ -155,7 +155,7 @@ const {
   deletedPaths: deletedAssets,
 } = storeToRefs(assetsStore);
 
-const setupData = reactive<SetupData>({ adminPassword: '', owner: '', repo: '', pat: '' });
+const setupData = reactive<SetupData>({ adminPassword: '' });
 const saveStatus = ref<'idle' | 'saving' | 'refreshing' | 'success' | 'warning' | 'error'>('idle');
 const statusMessage = ref('');
 const copyStatus = ref<Record<number, boolean>>({});
@@ -358,15 +358,9 @@ onUnmounted(() => {
 
 async function handleSetup() {
   if (!setupData.adminPassword) return;
-  const githubFields = [setupData.owner, setupData.repo, setupData.pat];
-  const importingFromGithub = githubFields.some(Boolean);
-  if (setupRequired.value && importingFromGithub && !githubFields.every(Boolean)) return;
   loadingData.value = true;
   try {
-    const loginRequest = setupRequired.value && importingFromGithub
-      ? { ...setupData }
-      : { adminPassword: setupData.adminPassword };
-    const result = await login(loginRequest);
+    const result = await login({ adminPassword: setupData.adminPassword });
     const data = await bootstrap();
     setupRequired.value = data.setupRequired;
     assetsLoaded.value = false;
@@ -378,7 +372,6 @@ async function handleSetup() {
     }
     await router.replace('/profiles');
     setupData.adminPassword = '';
-    setupData.pat = '';
     if (result.warning) {
       showStatus('warning', t('workspace.loginWarning', { message: result.warning }), 5000);
     }
