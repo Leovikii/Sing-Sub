@@ -201,9 +201,15 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 - 固定格式控件保持稳定尺寸，动态文本不得推动工具栏布局。
 - 响应式不是 PrimeVue 全局开关；Tailwind 组合层必须在 320px、390px、412px、平板和桌面断点显式验证。页面和 Dialog 不得产生非业务需要的横向滚动。
 - 编辑/预览等模式切换必须占据稳定位置；条件显示的保存、状态或反馈不得推动相邻控件。移动端字段优先纵向堆叠，不得把可编辑输入压缩为不可用宽度。
+- 桌面编辑弹窗的短元数据字段优先使用带最小宽度的弹性同排布局；模式切换与保存/关闭组成连续右侧操作区，不为视觉居中制造对称空列。
 - Playwright 在 desktop/mobile 验证遮挡、溢出、导航和弹层。
 
-## 15. 多语言
+## 15. 产品元数据
+
+- WebUI、`package.json`、README 和发行物中的版本、许可证及源码地址必须与仓库根目录的权威文件一致。
+- 许可证正文保留在根目录 `LICENSE`；关于页可显示轻量链接，但不得硬编码与仓库不一致的许可证标识。
+
+## 16. 多语言
 
 - 使用 Vue I18n，首批 locale 为 `zh-CN`、`en-US`。
 - locale 顺序：用户值、浏览器语言、`zh-CN` fallback。
@@ -218,7 +224,7 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 - 短期反馈不得用长文本改变按钮尺寸；复制统一使用稳定按钮和 `已复制`/`Copied` 状态。
 - Ruleset 卡片只显示一个公开格式链接：current binary 可用时使用 SRS，否则使用 JSON；UI fallback 不得改变 `.srs` endpoint 的响应格式。
 
-## 16. Router、导航与页面
+## 17. Router、导航与页面
 
 - 使用 Vue Router：`/connect`、`/profiles`、`/resources/nodes`、`/resources/templates`、`/resources/adapters`、`/resources/rulesets`、`/sync`、`/settings/general`、`/settings/subscription`、`/settings/repository`、`/settings/about`。
 - session guard 只决定访问与跳转，不执行保存或同步。
@@ -232,7 +238,7 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 - Profile 的模板选择只引用 workspace 内的模板资产；编辑器、schema、预览构建和模板 API 均不得接受外部 URL。未来若重新支持必须在模板资源页建立独立导入流程，并通过新的 ADR 重新启用。
 - 节点集、模板和适配器不保留无价值的只读 JSON/编辑切换；CodeMirror 直接承担编辑与校验。规则集页面按需展示公开 JSON/SRS、构建状态和编辑入口。
 
-## 17. 错误与可观测性
+## 18. 错误与可观测性
 
 - 领域错误为可判别类型，不依赖字符串比较。
 - 只在 HTTP error boundary 映射 error -> status/code。
@@ -241,7 +247,7 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 - expected conflict 记录为 info/warn，不作为未知 500。
 - 监控 R2 bytes/operations、head conflict、orphan count、build latency 和 sync failures。
 
-## 18. 测试标准
+## 19. 测试标准
 
 ### Unit
 
@@ -266,7 +272,7 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 
 每个 bug 修复前先添加复现测试；不能自动化时记录原因和替代验证。
 
-## 19. CI、免费额度与依赖
+## 20. CI、免费额度与依赖
 
 目标脚本：
 

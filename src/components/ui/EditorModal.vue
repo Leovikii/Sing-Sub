@@ -18,7 +18,7 @@
       <div class="editor-header-grid min-w-0 flex-1">
         <div class="editor-metadata min-w-0">
           <slot name="title">
-            <div v-if="viewMode !== 'preview'" class="grid min-w-0 gap-2">
+            <div v-if="viewMode !== 'preview'" class="editor-metadata-fields min-w-0">
               <IftaLabel v-if="editableTitle">
                 <InputText
                   :id="`${fieldId}-title`"
@@ -42,9 +42,9 @@
                 <label :for="`${fieldId}-note`">{{ t('common.note') }}</label>
               </IftaLabel>
             </div>
-            <div v-else class="flex min-h-[5.5rem] min-w-0 flex-col justify-center">
+            <div v-else class="editor-metadata-preview min-w-0">
               <span class="truncate text-lg font-semibold">{{ title || t('common.untitled') }}</span>
-              <span v-if="note" class="mt-1 truncate text-sm text-text-muted" :title="note">{{ note }}</span>
+              <span v-if="note" class="truncate text-sm text-text-muted" :title="note">{{ note }}</span>
             </div>
           </slot>
         </div>
@@ -172,13 +172,22 @@ function onDialogVisible(visible: boolean) {
 .editor-header-grid {
   display: grid;
   grid-template-areas: "metadata mode actions";
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 0.75rem;
 }
 
 .editor-metadata {
   grid-area: metadata;
+}
+
+.editor-metadata-fields,
+.editor-metadata-preview {
+  display: grid;
+  grid-template-columns: minmax(10rem, 2fr) minmax(14rem, 3fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3.5rem;
 }
 
 .editor-mode {
@@ -208,15 +217,34 @@ function onDialogVisible(visible: boolean) {
   justify-content: center;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .editor-header-grid {
     grid-template-areas:
       "metadata metadata"
       "mode actions";
-    grid-template-columns: minmax(0, 1fr) 6rem;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .editor-mode {
+    justify-self: end;
+  }
+}
+
+@media (max-width: 640px) {
+  .editor-metadata-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editor-metadata-preview {
+    display: flex;
+    min-height: 5.5rem;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25rem;
+  }
+
+  .editor-mode {
+    justify-self: start;
     justify-content: flex-start;
   }
 

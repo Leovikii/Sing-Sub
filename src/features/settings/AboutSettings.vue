@@ -10,7 +10,18 @@
     </div>
     <div class="settings-row">
       <span class="settings-label">{{ t('about.license') }}</span>
-      <span class="text-sm text-text-muted">GPL-3.0</span>
+      <Button
+        as="a"
+        href="https://github.com/Leovikii/Sing-Sub/blob/main/LICENSE"
+        target="_blank"
+        rel="noopener noreferrer"
+        severity="secondary"
+        text
+        size="small"
+      >
+        <span>MIT</span>
+        <ExternalLink :size="13" aria-hidden="true" />
+      </Button>
     </div>
     <div class="settings-row">
       <span class="settings-label">{{ t('about.source') }}</span>
