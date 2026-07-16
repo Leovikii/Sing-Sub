@@ -16,36 +16,40 @@
   >
     <template #header>
       <div class="editor-header-grid min-w-0 flex-1">
-        <div class="editor-title min-w-0">
+        <div class="editor-metadata min-w-0">
           <slot name="title">
-            <div class="flex min-w-0 items-center gap-1">
-              <InputText
-                v-if="editableTitle && viewMode !== 'preview'"
-                :model-value="title"
-                :placeholder="titlePlaceholder || 'untitled'"
-                class="min-w-0 flex-1 font-semibold"
-                @update:model-value="$emit('update:title', $event || '')"
-              />
-              <span v-else class="truncate text-base font-semibold">{{ title || 'untitled' }}</span>
-              <code v-if="editableTitle && viewMode !== 'preview' && extension" class="shrink-0 text-xs text-text-muted">{{ extension }}</code>
+            <div v-if="viewMode !== 'preview'" class="grid min-w-0 gap-2">
+              <IftaLabel v-if="editableTitle">
+                <InputText
+                  :id="`${fieldId}-title`"
+                  :model-value="title"
+                  :aria-label="titlePlaceholder || t('common.name')"
+                  class="w-full min-w-0 font-semibold"
+                  @update:model-value="$emit('update:title', $event || '')"
+                />
+                <label :for="`${fieldId}-title`">{{ titlePlaceholder || t('common.name') }}</label>
+              </IftaLabel>
+              <span v-else class="truncate text-base font-semibold">{{ title || t('common.untitled') }}</span>
+
+              <IftaLabel v-if="editableNote !== false">
+                <InputText
+                  :id="`${fieldId}-note`"
+                  :model-value="note"
+                  :aria-label="t('common.note')"
+                  class="w-full min-w-0"
+                  @update:model-value="$emit('update:note', $event || '')"
+                />
+                <label :for="`${fieldId}-note`">{{ t('common.note') }}</label>
+              </IftaLabel>
+            </div>
+            <div v-else class="flex min-h-[5.5rem] min-w-0 flex-col justify-center">
+              <span class="truncate text-lg font-semibold">{{ title || t('common.untitled') }}</span>
+              <span v-if="note" class="mt-1 truncate text-sm text-text-muted" :title="note">{{ note }}</span>
             </div>
           </slot>
         </div>
 
-        <div v-if="editableNote !== false || note" class="editor-note min-w-0">
-          <InputText
-            v-if="editableNote !== false && viewMode !== 'preview'"
-            :model-value="note"
-            :placeholder="t('common.note')"
-            :aria-label="t('common.note')"
-            class="w-full"
-            @update:model-value="$emit('update:note', $event || '')"
-          />
-          <span v-else class="block truncate text-sm text-text-muted">{{ note || t('common.noNote') }}</span>
-        </div>
-
-        <div class="editor-actions flex shrink-0 items-center justify-end gap-2">
-          <slot name="header-actions" />
+        <div class="editor-mode flex shrink-0 items-center justify-center">
           <SelectButton
             v-if="showViewToggle"
             :model-value="viewMode || 'edit'"
@@ -57,13 +61,16 @@
             @update:model-value="$emit('update:viewMode', $event as 'preview' | 'edit')"
           >
             <template #option="{ option }">
-              <component :is="option.icon" :size="15" aria-hidden="true" />
-              <span>{{ option.label }}</span>
+              <component :is="option.icon" :size="15" class="hidden sm:block" aria-hidden="true" />
+              <span class="whitespace-nowrap">{{ option.label }}</span>
             </template>
           </SelectButton>
+        </div>
 
+        <div class="editor-actions flex min-w-0 items-center justify-end gap-2">
+          <slot name="header-actions" />
           <Button
-            v-if="showSave && viewMode !== 'preview'"
+            v-if="showSave"
             :loading="isSaving"
             :disabled="!isDirty || isSaving || saveDisabled"
             :aria-label="saveText || t('common.save')"
@@ -93,11 +100,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useConfirm } from 'primevue/useconfirm';
 import Button from 'primevue/button';
 import Dialog from 'primevue/dialog';
+import IftaLabel from 'primevue/iftalabel';
 import InputText from 'primevue/inputtext';
 import SelectButton from 'primevue/selectbutton';
 import { Eye, Pencil, Save, X } from 'lucide-vue-next';
@@ -109,7 +117,6 @@ const props = defineProps<{
   note?: string;
   editableTitle?: boolean;
   editableNote?: boolean;
-  extension?: string;
   isDirty?: boolean;
   isSaving?: boolean;
   showSave?: boolean;
@@ -130,6 +137,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const confirm = useConfirm();
+const fieldId = useId();
 const viewModeOptions = computed(() => [
   { value: 'edit', label: t('common.edit'), icon: Pencil },
   { value: 'preview', label: t('common.preview'), icon: Eye },
@@ -163,30 +171,57 @@ function onDialogVisible(visible: boolean) {
 <style scoped>
 .editor-header-grid {
   display: grid;
-  grid-template-areas: "title note actions";
-  grid-template-columns: minmax(0, 1fr) minmax(12rem, 18rem) auto;
+  grid-template-areas: "metadata mode actions";
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
-.editor-title {
-  grid-area: title;
+.editor-metadata {
+  grid-area: metadata;
 }
 
-.editor-note {
-  grid-area: note;
+.editor-mode {
+  grid-area: mode;
+  position: relative;
+  width: 11rem;
+  min-width: 11rem;
+  min-height: 44px;
 }
 
 .editor-actions {
   grid-area: actions;
 }
 
+.editor-mode :deep(.p-selectbutton) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  width: 100%;
+  margin: 0;
+}
+
+.editor-mode :deep(.p-togglebutton) {
+  box-sizing: border-box;
+  flex: 1 1 50%;
+  width: 50%;
+  justify-content: center;
+}
+
 @media (max-width: 640px) {
   .editor-header-grid {
     grid-template-areas:
-      "title actions"
-      "note note";
-    grid-template-columns: minmax(0, 1fr) auto;
+      "metadata metadata"
+      "mode actions";
+    grid-template-columns: minmax(0, 1fr) 6rem;
+  }
+
+  .editor-mode {
+    justify-content: flex-start;
+  }
+
+  .editor-actions {
+    min-width: 6rem;
   }
 }
 </style>

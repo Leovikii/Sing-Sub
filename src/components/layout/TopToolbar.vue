@@ -11,14 +11,16 @@
           outlined
           :disabled="!isDirty || saveStatus !== 'idle'"
           :loading="saveStatus === 'saving'"
+          :aria-label="t('common.save')"
+          v-tooltip.bottom="t('common.save')"
           @click="$emit('save')"
         >
           <Save :size="17" aria-hidden="true" />
-          <span>{{ t('common.save') }}</span>
+          <span class="hidden sm:inline">{{ t('common.save') }}</span>
         </Button>
-        <Button @click="$emit('add')">
+        <Button :aria-label="t('common.add')" v-tooltip.bottom="t('common.add')" @click="$emit('add')">
           <Plus :size="17" aria-hidden="true" />
-          <span>{{ t('common.add') }}</span>
+          <span class="hidden sm:inline">{{ t('common.add') }}</span>
         </Button>
       </div>
     </template>

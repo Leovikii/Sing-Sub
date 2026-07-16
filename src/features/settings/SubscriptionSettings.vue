@@ -3,7 +3,6 @@
     <div class="settings-row items-start">
       <div>
         <div class="settings-label">{{ t('subscription.token') }}</div>
-        <div class="settings-hint">{{ t('subscription.tokenHint') }}</div>
       </div>
       <div class="flex w-full max-w-xl gap-2 sm:w-auto">
         <InputText :model-value="token" readonly class="min-w-0 flex-1 font-mono text-sm sm:w-80" />
@@ -21,8 +20,8 @@
     </div>
     <div class="settings-row">
       <div>
-        <div class="settings-label">{{ t('subscription.rotate') }}</div>
-        <div class="settings-hint">{{ t('subscription.tokenHint') }}</div>
+        <div class="settings-label">{{ t('subscription.reset') }}</div>
+        <div class="settings-hint">{{ t('subscription.rotateHint') }}</div>
       </div>
       <Button severity="danger" outlined :loading="loading" @click="confirmRotate">
         <RefreshCw :size="17" aria-hidden="true" />
@@ -64,7 +63,7 @@ async function copyToken() {
 
 function confirmRotate() {
   confirm.require({
-    header: t('subscription.rotate'),
+    header: t('subscription.reset'),
     message: t('subscription.rotateConfirm'),
     rejectLabel: t('common.cancel'),
     acceptLabel: t('common.confirm'),

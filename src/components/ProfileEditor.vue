@@ -14,11 +14,11 @@
         @click.stop="$emit('copyLink', profile.name || '', index)"
         outlined
         class="!min-h-11 md:!min-h-9"
-        :aria-label="copyStatus ? t('profiles.copiedSubscription') : t('profiles.subscription')"
+        :aria-label="copyStatus ? t('common.copied') : t('profiles.subscription')"
       >
         <Check v-if="copyStatus" :size="18" aria-hidden="true" />
         <Link2 v-else :size="18" aria-hidden="true" />
-        <span>{{ copyStatus ? t('profiles.copiedSubscription') : t('profiles.subscription') }}</span>
+        <span class="inline-block min-w-[3rem] text-center">{{ copyStatus ? t('common.copied') : t('profiles.subscription') }}</span>
       </Button>
     </template>
   </FileCard>
@@ -46,7 +46,7 @@
     <template #default>
       <!-- Visual Editor -->
       <div v-if="viewMode === 'edit'" class="flex-1 overflow-auto flex flex-col min-h-0">
-        <div class="p-5 sm:p-6 space-y-6 flex-1 min-h-0">
+        <div class="min-h-0 flex-1 space-y-6 p-4 sm:p-6">
           <ProfileTemplateConfig v-model:profile="localProfile" :availableNodes="availableNodes" :availableTemplates="availableTemplates" :availableAdapters="availableAdapters" />
           <ProfileInbounds v-model:profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />
           <ProfileOutbounds v-model:profile="localProfile" :templateData="fetchedTemplateData" :nodesData="fetchedNodesData" />

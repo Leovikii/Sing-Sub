@@ -16,11 +16,25 @@
         @action="(act) => handleFileAction(act, file)"
       >
         <template #actions>
-          <Tag
+          <Button
             v-if="type === 'ruleset'"
-            :value="rulesetStatusLabel(file)"
-            :severity="rulesetStatusSeverity(file)"
-          />
+            :severity="rulesetLinkSeverity(file)"
+            text
+            size="small"
+            :aria-label="rulesetLinkAriaLabel(file)"
+            v-tooltip.top="rulesetLinkTooltip(file)"
+            @click.stop="copyRulesetLink(file, rulesetLinkFormat(file))"
+          >
+            <Check v-if="isRulesetLinkCopied(file)" :size="17" aria-hidden="true" />
+            <LoaderCircle
+              v-else-if="isRulesetBuilding(file)"
+              :size="18"
+              class="animate-spin"
+              aria-hidden="true"
+            />
+            <Link2 v-else :size="18" aria-hidden="true" />
+            <span class="font-mono text-xs font-semibold">{{ rulesetLinkFormat(file).toUpperCase() }}</span>
+          </Button>
           <Button
             v-if="type === 'ruleset' && rulesetBuild(file)?.status === 'failed'"
             severity="danger"
@@ -32,32 +46,6 @@
             @click.stop="retryRuleset(file)"
           >
             <RotateCcw :size="18" aria-hidden="true" />
-          </Button>
-          <Button
-            v-if="type === 'ruleset'"
-            severity="secondary"
-            text
-            size="small"
-            @click.stop="copyRulesetLink(file, 'json')"
-            :aria-label="copiedRulesetPath === `${file.path}:json` ? t('common.copied') : t('assets.copyJson')"
-            v-tooltip.top="copiedRulesetPath === `${file.path}:json` ? t('common.copied') : t('assets.copyJson')"
-          >
-            <Check v-if="copiedRulesetPath === `${file.path}:json`" :size="17" aria-hidden="true" />
-            <Link2 v-else :size="18" aria-hidden="true" />
-            <span class="hidden sm:inline">JSON</span>
-          </Button>
-          <Button
-            v-if="type === 'ruleset' && rulesetBuild(file)?.formats.binary"
-            severity="secondary"
-            text
-            size="small"
-            @click.stop="copyRulesetLink(file, 'srs')"
-            :aria-label="copiedRulesetPath === `${file.path}:srs` ? t('common.copied') : t('assets.copySrs')"
-            v-tooltip.top="copiedRulesetPath === `${file.path}:srs` ? t('common.copied') : t('assets.copySrs')"
-          >
-            <Check v-if="copiedRulesetPath === `${file.path}:srs`" :size="17" aria-hidden="true" />
-            <Link2 v-else :size="18" aria-hidden="true" />
-            <span class="hidden sm:inline">SRS</span>
           </Button>
         </template>
       </FileCard>
@@ -86,7 +74,6 @@
       @update:viewMode="viewMode = $event"
       :editableTitle="true"
       :editableNote="true"
-      extension=".json"
       :isDirty="isEditorDirty || isNameDirty || isNoteDirty"
       :isSaving="isSaving || globalBusy"
       :showSave="true"
@@ -123,8 +110,7 @@ import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import Button from 'primevue/button';
-import Tag from 'primevue/tag';
-import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check, Loader2, RotateCcw } from 'lucide-vue-next';
+import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check, Loader2, LoaderCircle, RotateCcw } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
 import CodePreview from './ui/CodePreview.vue';
@@ -221,12 +207,40 @@ function rulesetStatusLabel(file: { path: string }) {
   return status === 'none' ? t('rulesets.jsonOnly') : t(`rulesets.${status}`);
 }
 
-function rulesetStatusSeverity(file: { path: string }) {
+function rulesetLinkFormat(file: { path: string }): 'json' | 'srs' {
+  return rulesetBuild(file)?.formats.binary ? 'srs' : 'json';
+}
+
+function rulesetLinkKey(file: { path: string }) {
+  return `${file.path}:${rulesetLinkFormat(file)}`;
+}
+
+function isRulesetLinkCopied(file: { path: string }) {
+  return copiedRulesetPath.value === rulesetLinkKey(file);
+}
+
+function isRulesetBuilding(file: { path: string }) {
   const status = rulesetBuild(file)?.status;
-  if (status === 'ready') return 'success';
+  return status === 'pending' || status === 'dispatching' || status === 'compiling';
+}
+
+function rulesetLinkSeverity(file: { path: string }) {
+  const status = rulesetBuild(file)?.status;
   if (status === 'failed') return 'danger';
-  if (status === 'pending' || status === 'dispatching' || status === 'compiling') return 'warn';
+  if (isRulesetBuilding(file)) return 'warn';
+  if (rulesetLinkFormat(file) === 'srs') return 'success';
   return 'secondary';
+}
+
+function rulesetLinkAriaLabel(file: { path: string }) {
+  if (isRulesetLinkCopied(file)) return t('common.copied');
+  const copyLabel = t(rulesetLinkFormat(file) === 'srs' ? 'assets.copySrs' : 'assets.copyJson');
+  return `${copyLabel} · ${rulesetStatusLabel(file)}`;
+}
+
+function rulesetLinkTooltip(file: { path: string }) {
+  if (isRulesetLinkCopied(file)) return t('common.copied');
+  return rulesetLinkAriaLabel(file);
 }
 
 async function loadRulesetBuild(file: { path: string }) {

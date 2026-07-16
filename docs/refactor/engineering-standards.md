@@ -196,6 +196,8 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 - 表单错误使用 `aria-describedby`。
 - 触控目标最小 44x44 CSS px。
 - 固定格式控件保持稳定尺寸，动态文本不得推动工具栏布局。
+- 响应式不是 PrimeVue 全局开关；Tailwind 组合层必须在 320px、390px、412px、平板和桌面断点显式验证。页面和 Dialog 不得产生非业务需要的横向滚动。
+- 编辑/预览等模式切换必须占据稳定位置；条件显示的保存、状态或反馈不得推动相邻控件。移动端字段优先纵向堆叠，不得把可编辑输入压缩为不可用宽度。
 - Playwright 在 desktop/mobile 验证遮挡、溢出、导航和弹层。
 
 ## 15. 多语言
@@ -208,6 +210,10 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 - 日期、相对时间和数字使用 Intl/Vue I18n。
 - 不翻译 commit message、路径、JSON 字段、日志和用户内容。
 - 禁止新增硬编码用户可见文案。
+- 字段 label 使用名词，按钮使用明确动词；hint 只说明风险、限制或不可由控件本身表达的后果，不得复述 label、选项或按钮。
+- 普通 UI 不暴露 workflow、revision、sync baseline 等实现术语；危险覆盖、Token 失效、字符约束和数据丢失确认必须保留必要方向与后果。
+- 短期反馈不得用长文本改变按钮尺寸；复制统一使用稳定按钮和 `已复制`/`Copied` 状态。
+- Ruleset 卡片只显示一个公开格式链接：current binary 可用时使用 SRS，否则使用 JSON；UI fallback 不得改变 `.srs` endpoint 的响应格式。
 
 ## 16. Router、导航与页面
 

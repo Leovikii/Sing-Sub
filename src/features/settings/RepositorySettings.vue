@@ -9,6 +9,8 @@
         <Tag
           :severity="sync.status?.connected ? 'success' : 'secondary'"
           :value="sync.status?.connected ? sync.status.repository : t('common.notConnected')"
+          class="max-w-full"
+          :pt="{ label: { class: 'truncate' } }"
         />
       </div>
 
@@ -40,7 +42,7 @@
           </div>
           <div class="space-y-2">
             <label for="repository-pat" class="settings-label">{{ t('repository.pat') }}</label>
-            <Password id="repository-pat" v-model="pat" :feedback="false" toggle-mask fluid autocomplete="new-password" />
+            <Password input-id="repository-pat" v-model="pat" :feedback="false" toggle-mask fluid autocomplete="new-password" />
           </div>
         </div>
         <Message v-if="changingRepository" severity="warn" size="small" :closable="false">

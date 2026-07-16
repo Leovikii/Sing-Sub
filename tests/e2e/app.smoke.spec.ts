@@ -16,6 +16,7 @@ interface ApiMockState {
   stateRequests: Request[];
   fileRequests: Request[];
   syncRequests: Request[];
+  syncDelayMs: number;
 }
 
 test.beforeEach(async ({ page }, testInfo) => {
@@ -27,6 +28,14 @@ test.beforeEach(async ({ page }, testInfo) => {
 async function mockApi(page: Page, setupRequired = true): Promise<ApiMockState> {
   await page.addInitScript(() => {
     localStorage.setItem('sing-sub.locale', 'zh-CN');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          (window as typeof window & { __copiedText?: string }).__copiedText = value;
+        },
+      },
+    });
   });
   const mockState: ApiMockState = {
     authenticated: false,
@@ -34,6 +43,7 @@ async function mockApi(page: Page, setupRequired = true): Promise<ApiMockState> 
     stateRequests: [],
     fileRequests: [],
     syncRequests: [],
+    syncDelayMs: 0,
   };
 
   const apiPattern = new URL('/api/**', process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:4173').toString();
@@ -74,6 +84,7 @@ async function mockApi(page: Page, setupRequired = true): Promise<ApiMockState> 
       return;
     }
     if (url.pathname === '/api/github-sync' && request.method() === 'GET') {
+      if (mockState.syncDelayMs) await new Promise(resolve => setTimeout(resolve, mockState.syncDelayMs));
       await json({
         connected: true,
         repository: 'example/private-config',
@@ -100,6 +111,7 @@ async function mockApi(page: Page, setupRequired = true): Promise<ApiMockState> 
     }
     if (url.pathname === '/api/github-sync/push' && request.method() === 'POST') {
       mockState.syncRequests.push(request);
+      if (mockState.syncDelayMs) await new Promise(resolve => setTimeout(resolve, mockState.syncDelayMs));
       await json({
         action: 'pushed',
         revision: `revision-${mockState.revision}`,
@@ -190,7 +202,7 @@ test('initializes an empty workspace without GitHub credentials', async ({ page 
 async function login(page: Page, mockState: ApiMockState): Promise<void> {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '初始化工作区' })).toBeVisible();
-  await page.getByPlaceholder('管理员口令').fill('test-admin-password');
+  await page.getByLabel('管理员口令', { exact: true }).fill('test-admin-password');
 
   const loginRequest = page.waitForRequest(request =>
     new URL(request.url()).pathname === '/api/login' && request.method() === 'POST');
@@ -210,7 +222,7 @@ test('logs in and creates a profile', async ({ page }) => {
   await page.getByRole('button', { name: '新建' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByPlaceholder('输入配置名称').fill('smoke-profile');
+  await dialog.getByLabel('名称', { exact: true }).fill('smoke-profile');
 
   const saveButton = dialog.getByRole('button', { name: '保存' });
   await expect(saveButton).toBeEnabled();
@@ -222,6 +234,87 @@ test('logs in and creates a profile', async ({ page }) => {
   expect(payload.state.profiles).toHaveLength(1);
   expect(payload.state.profiles[0]).toMatchObject({ name: 'smoke-profile', order: 0 });
   await expect(dialog).toBeHidden();
+
+  const subscriptionButton = page.getByRole('button', { name: '订阅', exact: true });
+  const widthBefore = (await subscriptionButton.boundingBox())?.width;
+  await subscriptionButton.click();
+  const copiedButton = page.getByRole('button', { name: '已复制', exact: true });
+  await expect(copiedButton).toBeVisible();
+  const widthAfter = (await copiedButton.boundingBox())?.width;
+  expect(widthBefore).toBeDefined();
+  expect(widthAfter).toBeDefined();
+  expect(Math.abs(widthAfter! - widthBefore!)).toBeLessThan(1);
+});
+
+test('keeps editor metadata and actions stable at 320px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const mockState = await mockApi(page);
+  await login(page, mockState);
+
+  await page.getByRole('button', { name: '新建' }).click();
+  const dialog = page.getByRole('dialog');
+  const nameInput = dialog.getByLabel('名称', { exact: true });
+  const noteInput = dialog.getByLabel('备注', { exact: true });
+  await expect(nameInput).toBeVisible();
+  await expect(noteInput).toBeVisible();
+  expect((await nameInput.boundingBox())?.width).toBeGreaterThan(250);
+  expect((await noteInput.boundingBox())?.width).toBeGreaterThan(250);
+  expect(await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    if (!dialog) return false;
+    return [...dialog.querySelectorAll('*')].every((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0) return true;
+      return rect.left >= -1 && rect.right <= document.documentElement.clientWidth + 1;
+    });
+  })).toBe(true);
+
+  const previewButton = dialog.getByRole('button', { name: '预览', exact: true });
+  const saveButton = dialog.getByRole('button', { name: '保存', exact: true });
+  const modeControl = dialog.locator('.p-selectbutton');
+  await expect.poll(() => dialog.evaluate(element => getComputedStyle(element).transform))
+    .toBe('matrix(1, 0, 0, 1, 0, 0)');
+  const modeX = (await modeControl.boundingBox())?.x;
+  const saveX = (await saveButton.boundingBox())?.x;
+  await previewButton.click();
+  await expect(saveButton).toBeVisible();
+  expect((await modeControl.boundingBox())?.x).toBe(modeX);
+  expect((await saveButton.boundingBox())?.x).toBe(saveX);
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+test('keeps asset editor tools inside a 320px viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const mockState = await mockApi(page);
+  await login(page, mockState);
+
+  await navigateTo(page, '适配器');
+  await page.getByRole('button', { name: '新建' }).click();
+  let dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: '查找 / 替换' }).click();
+  const searchPanel = dialog.locator('.cm-search');
+  await expect(searchPanel).toBeVisible();
+  const searchBox = await searchPanel.boundingBox();
+  expect(searchBox?.x).toBeGreaterThanOrEqual(0);
+  expect((searchBox?.x || 0) + (searchBox?.width || 0)).toBeLessThanOrEqual(320);
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+
+  await navigateTo(page, '规则集');
+  await page.getByRole('button', { name: '新建' }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: '新增 SOURCE' }).click();
+  expect(await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    if (!dialog) return false;
+    return [...dialog.querySelectorAll('*')].every((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0) return true;
+      return rect.left >= -1 && rect.right <= document.documentElement.clientWidth + 1;
+    });
+  })).toBe(true);
 });
 
 test('creates node, adapter, and ruleset assets', async ({ page }) => {
@@ -230,11 +323,11 @@ test('creates node, adapter, and ruleset assets', async ({ page }) => {
 
   await navigateTo(page, '节点集');
   await expect(page.getByRole('heading', { name: '节点集' })).toBeVisible();
-  await expect(page.getByText('暂无节点集。')).toBeVisible();
+  await expect(page.getByText('暂无节点集')).toBeVisible();
 
   await page.getByRole('button', { name: '新建' }).click();
   let dialog = page.getByRole('dialog');
-  await dialog.getByPlaceholder('输入文件名称').fill('smoke-nodes');
+  await dialog.getByLabel('名称', { exact: true }).fill('smoke-nodes');
   await dialog.getByRole('button', { name: '保存' }).click();
   await expect.poll(() => mockState.fileRequests.length).toBe(1);
 
@@ -247,10 +340,10 @@ test('creates node, adapter, and ruleset assets', async ({ page }) => {
   expect(JSON.parse(nodePayload.content)).toEqual({ inbounds: [], outbounds: [] });
 
   await navigateTo(page, '适配器');
-  await expect(page.getByText('暂无适配器。')).toBeVisible();
+  await expect(page.getByText('暂无适配器')).toBeVisible();
   await page.getByRole('button', { name: '新建' }).click();
   dialog = page.getByRole('dialog');
-  await dialog.getByPlaceholder('输入文件名').fill('smoke-adapter');
+  await dialog.getByLabel('名称', { exact: true }).fill('smoke-adapter');
   await dialog.getByRole('button', { name: '保存' }).click();
   await expect.poll(() => mockState.fileRequests.length).toBe(2);
   const adapterPayload = mockState.fileRequests[1].postDataJSON();
@@ -262,10 +355,10 @@ test('creates node, adapter, and ruleset assets', async ({ page }) => {
   });
 
   await navigateTo(page, '规则集');
-  await expect(page.getByText('暂无规则集。')).toBeVisible();
+  await expect(page.getByText('暂无规则集')).toBeVisible();
   await page.getByRole('button', { name: '新建' }).click();
   dialog = page.getByRole('dialog');
-  await dialog.getByPlaceholder('输入文件名称').fill('smoke-rules');
+  await dialog.getByLabel('名称', { exact: true }).fill('smoke-rules');
   await dialog.getByRole('button', { name: '保存' }).click();
   await expect.poll(() => mockState.fileRequests.length).toBe(3);
 
@@ -322,10 +415,41 @@ test('retries a failed ruleset build and exposes the SRS link when ready', async
 
   await login(page, mockState);
   await navigateTo(page, '规则集');
-  await expect(page.getByText('编译失败', { exact: true })).toBeVisible();
+  const jsonLink = page.getByRole('button', { name: '复制 JSON 链接' });
+  await expect(jsonLink).toBeVisible();
+  await expect(jsonLink).toHaveClass(/p-button-danger/);
+  await expect(page.getByRole('button', { name: '复制 SRS 链接' })).toHaveCount(0);
   await page.getByRole('button', { name: '重新编译' }).click();
-  await expect(page.getByText('SRS 可用', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '复制 SRS 链接' })).toBeVisible();
+  const srsLink = page.getByRole('button', { name: '复制 SRS 链接' });
+  await expect(srsLink).toBeVisible();
+  await expect(srsLink).toHaveClass(/p-button-success/);
+  await expect(page.getByRole('button', { name: '复制 JSON 链接' })).toHaveCount(0);
+});
+
+test('keeps the active navigation emphasis while another item is hovered', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const mockState = await mockApi(page);
+  await login(page, mockState);
+
+  const navigation = page.getByRole('navigation', { name: '主导航' });
+  const activeLink = navigation.getByRole('link', { name: '配置', exact: true });
+  const syncLink = navigation.getByRole('link', { name: '同步', exact: true });
+  await expect(activeLink).toHaveClass(/nav-link-active/);
+  const activeBefore = await activeLink.evaluate(element => ({
+    backgroundColor: getComputedStyle(element).backgroundColor,
+    boxShadow: getComputedStyle(element).boxShadow,
+  }));
+  expect(activeBefore.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  expect(activeBefore.boxShadow).not.toBe('none');
+
+  await syncLink.hover();
+  const activeAfter = await activeLink.evaluate(element => ({
+    backgroundColor: getComputedStyle(element).backgroundColor,
+    boxShadow: getComputedStyle(element).boxShadow,
+  }));
+  const hoverBackground = await syncLink.evaluate(element => getComputedStyle(element).backgroundColor);
+  expect(activeAfter).toEqual(activeBefore);
+  expect(hoverBackground).not.toBe(activeBefore.backgroundColor);
 });
 
 test('persists language and runs a safe GitHub push', async ({ page }) => {
@@ -344,11 +468,31 @@ test('persists language and runs a safe GitHub push', async ({ page }) => {
 
   await navigateTo(page, 'Sync');
   await expect(page.getByRole('heading', { name: 'Sync' })).toBeVisible();
-  await expect(page.getByText('R2 has changes that are not on GitHub')).toBeVisible();
-  await page.getByRole('button', { name: 'Push to GitHub' }).click();
+  await expect(page.getByText('New changes in R2')).toBeVisible();
+  mockState.syncDelayMs = 250;
+  const syncSection = page.locator('section[aria-busy]');
+  const refreshButton = syncSection.getByRole('button').nth(0);
+  const pullButton = syncSection.getByRole('button').nth(1);
+  const pushButton = syncSection.getByRole('button').nth(2);
+
+  await pushButton.click();
+  await expect(pushButton).toContainText('Pushing');
+  await expect(refreshButton).toBeDisabled();
+  await expect(pullButton).toBeDisabled();
+  await expect(pushButton).toBeDisabled();
+  await pushButton.click({ force: true });
   await expect.poll(() => mockState.syncRequests.length).toBe(1);
+  await expect(pushButton).toBeEnabled();
+  expect(mockState.syncRequests).toHaveLength(1);
   expect(mockState.syncRequests[0].postDataJSON()).toEqual({
     expectedRevision: 'revision-1',
     resolution: 'safe',
   });
+
+  await refreshButton.click();
+  await expect(refreshButton).toContainText('Refreshing');
+  await expect(refreshButton).toBeDisabled();
+  await expect(pullButton).toBeDisabled();
+  await expect(pushButton).toBeDisabled();
+  await expect(refreshButton).toBeEnabled();
 });

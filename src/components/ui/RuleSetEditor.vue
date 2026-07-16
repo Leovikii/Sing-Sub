@@ -9,14 +9,17 @@
         class="glass flex shrink-0 flex-col rounded-lg border border-border-base p-4"
         :class="isSectionVisible('source') ? 'min-h-[13rem]' : 'min-h-0'"
       >
-        <div class="flex min-h-9 items-center justify-between gap-4" :class="isSectionVisible('source') ? 'mb-3' : ''">
+        <div
+          class="flex min-h-9 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+          :class="isSectionVisible('source') ? 'mb-3' : ''"
+        >
           <div class="flex min-w-0 items-center gap-2">
             <span class="shrink-0 rounded border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-purple-400">SOURCE</span>
-            <span class="truncate text-xs text-text-muted">
+            <span class="min-w-0 text-xs text-text-muted sm:truncate">
               {{ sourceLastUpdated ? t('rulesets.sourceUpdated', { time: formatUpdatedAt(sourceLastUpdated) }) : t('rulesets.sourceDescription') }}
             </span>
           </div>
-          <div v-if="!readonly" class="flex shrink-0 items-center gap-2">
+          <div v-if="!readonly" class="flex min-w-0 items-center justify-between gap-2 sm:shrink-0 sm:justify-end">
             <PrimeSelect
               v-if="isSectionVisible('source')"
               :modelValue="String(sourceIntervalHours)"
@@ -25,7 +28,7 @@
               option-value="value"
               size="small"
               :aria-label="t('rulesets.sourceInterval')"
-              class="w-40"
+              class="min-w-0 flex-1 sm:w-40 sm:flex-none"
               @update:modelValue="updateSourceInterval"
             />
             <Button
@@ -60,10 +63,10 @@
         class="glass flex shrink-0 flex-col rounded-lg border border-border-base p-4"
         :class="isSectionVisible(section.key) ? 'min-h-[13rem]' : 'min-h-0'"
       >
-        <div class="flex min-h-9 items-center justify-between gap-4" :class="isSectionVisible(section.key) ? 'mb-3' : ''">
+        <div class="flex min-h-9 items-center justify-between gap-3" :class="isSectionVisible(section.key) ? 'mb-3' : ''">
           <div class="flex min-w-0 items-center gap-2">
-            <span class="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">{{ section.label }}</span>
-            <span class="truncate text-xs text-text-muted">{{ section.description }}</span>
+            <span class="shrink-0 rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 font-mono text-[11px] font-medium tracking-wider text-blue-400">{{ section.label }}</span>
+            <span class="min-w-0 text-xs text-text-muted sm:truncate">{{ section.description }}</span>
           </div>
           <Button
             v-if="!readonly"
