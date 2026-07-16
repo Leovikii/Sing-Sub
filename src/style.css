@@ -56,6 +56,7 @@
   --color-bg-surface: #ffffff;
   --color-bg-elevated: #f1f1f3;
   --color-bg-hover: #e7e7ea;
+  --color-bg-nav-active: #fff0f4;
   --color-bg-code: #111113;
   --color-bg-code-toolbar: #09090b;
   --color-border-base: #dedee3;
@@ -72,6 +73,7 @@
   --color-bg-surface: #1c1c1e;
   --color-bg-elevated: #2c2c2e;
   --color-bg-hover: #3a3a3c;
+  --color-bg-nav-active: #38242b;
   --color-bg-code: #0d0d0d;
   --color-bg-code-toolbar: #0a0a0a;
   --color-border-base: #38383a;
@@ -142,6 +144,19 @@ body {
     align-items: stretch;
     flex-direction: column;
     gap: 0.85rem;
+    padding: 1rem;
+  }
+
+  .p-button,
+  .p-togglebutton {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .p-inputtext,
+  .p-select,
+  .p-password-input {
+    min-height: 44px;
   }
 }
 

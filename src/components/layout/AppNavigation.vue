@@ -10,8 +10,8 @@
         <RouterLink
           v-if="item.route"
           :to="item.route"
-          class="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm"
-          :class="item.route === route.path ? 'bg-primary-50 text-primary-700 app-dark:bg-primary-950 app-dark:text-primary-200' : ''"
+          class="nav-link flex min-h-11 items-center gap-3 rounded-md px-3 text-sm"
+          :class="{ 'nav-link-active': item.route === route.path }"
           :aria-current="item.route === route.path ? 'page' : undefined"
           @click="onLeafSelect"
         >
@@ -21,7 +21,7 @@
         <a
           v-else
           v-bind="props.action"
-          class="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm"
+          class="nav-group flex min-h-11 items-center gap-3 rounded-md px-3 text-sm"
         >
           <component :is="item.iconComponent" :size="18" aria-hidden="true" />
           <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
@@ -126,7 +126,38 @@ function onLeafSelect() {
   background: transparent;
 }
 
+.app-navigation :deep(.p-panelmenu-item-content),
+.app-navigation :deep(.p-panelmenu-item-content:hover) {
+  background: transparent;
+}
+
 .app-navigation :deep(.p-panelmenu-content) {
   padding: 0 0 0.25rem 0.75rem;
+}
+
+.nav-link,
+.nav-group {
+  color: var(--color-text-nav);
+  transition: background-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.nav-link:hover,
+.nav-group:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.nav-link-active,
+.nav-link-active:hover {
+  background: var(--color-bg-nav-active);
+  box-shadow: inset 3px 0 0 var(--color-brand-pink);
+  color: var(--color-text-nav-active);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-link,
+  .nav-group {
+    transition: none;
+  }
 }
 </style>

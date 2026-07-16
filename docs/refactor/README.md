@@ -25,6 +25,7 @@ Phase 0-8 的架构重构已经完成。当前 `3.0.0-beta.1` 进入 Phase 9 Bet
 - [decisions.md](./decisions.md)：已锁定和待确认的架构决策。
 - [progress.md](./progress.md)：任务状态、验证记录、阻塞项和会话日志。
 - [deployment-automation-backlog.md](./deployment-automation-backlog.md)：已接受的 Workers Builds 初始化、Sync fork 更新与回滚方案。
+- [frontend-beta-optimization.md](./frontend-beta-optimization.md)：Phase 9 移动端、弹窗、文案和规则集单链接优化记录。
 
 ## 执行方式
 

@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-4">
-    <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-text-primary">{{ t('profiles.template') }}</label>
-      <div class="flex-1 min-w-0">
+    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4">
+      <label class="w-full font-medium text-text-primary sm:w-32 sm:shrink-0">{{ t('profiles.template') }}</label>
+      <div class="min-w-0 flex-1">
         <PrimeSelect
           :modelValue="profile.templateUrl || ''"
           @update:modelValue="profile.templateUrl = $event"
@@ -11,13 +11,14 @@
           option-value="value"
           :placeholder="t('profiles.chooseTemplate')"
           :ariaLabel="t('profiles.template')"
+          class="w-full"
         />
       </div>
     </div>
     
-    <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-text-primary">{{ t('profiles.adapter') }} <span class="text-text-muted font-normal text-xs">({{ t('profiles.optional') }})</span></label>
-      <div class="flex-1 min-w-0">
+    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4">
+      <label class="w-full font-medium text-text-primary sm:w-32 sm:shrink-0">{{ t('profiles.adapter') }}</label>
+      <div class="min-w-0 flex-1">
         <PrimeSelect
           :modelValue="profile.adapterUrl || ''"
           @update:modelValue="profile.adapterUrl = $event"
@@ -26,12 +27,13 @@
           option-value="value"
           :placeholder="t('profiles.none')"
           :ariaLabel="t('profiles.adapter')"
+          class="w-full"
         />
       </div>
     </div>
-    <div class="flex items-center gap-4">
-      <label class="w-32 shrink-0 font-medium text-text-primary">{{ t('profiles.nodeSet') }}</label>
-      <div class="flex-1 min-w-0">
+    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-4">
+      <label class="w-full font-medium text-text-primary sm:w-32 sm:shrink-0">{{ t('profiles.nodeSet') }}</label>
+      <div class="min-w-0 flex-1">
         <PrimeSelect
           :modelValue="profile.nodesPath || ''"
           @update:modelValue="profile.nodesPath = $event"
@@ -40,6 +42,7 @@
           option-value="value"
           :placeholder="t('profiles.chooseNodeSet')"
           :ariaLabel="t('profiles.nodeSet')"
+          class="w-full"
         />
       </div>
     </div>

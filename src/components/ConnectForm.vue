@@ -3,21 +3,17 @@
     <template #title>
       <h2 class="text-center text-xl">{{ setupRequired ? t('auth.setupTitle') : t('auth.loginTitle') }}</h2>
     </template>
-    <template #subtitle>
-      <div class="text-center">{{ setupRequired ? t('auth.setupSubtitle') : t('auth.loginSubtitle') }}</div>
-    </template>
     <template #content>
       <form class="space-y-5" @submit.prevent="$emit('save')">
         <div class="space-y-2">
           <label for="admin-password" class="settings-label">{{ t('auth.password') }}</label>
           <Password
-            id="admin-password"
+            input-id="admin-password"
             :model-value="setupData.adminPassword"
             :feedback="false"
             toggle-mask
             fluid
             autocomplete="current-password"
-            :placeholder="t('auth.password')"
             @update:model-value="update('adminPassword', $event)"
           />
         </div>

@@ -3,7 +3,6 @@
     <div class="settings-row">
       <div>
         <div class="settings-label">{{ t('general.language') }}</div>
-        <div class="settings-hint">{{ t('general.languageHint') }}</div>
       </div>
       <Select
         v-model="locale"
@@ -11,13 +10,12 @@
         option-label="label"
         option-value="value"
         :aria-label="t('general.language')"
-        class="w-44"
+        class="w-full sm:w-44"
       />
     </div>
     <div class="settings-row">
       <div>
         <div class="settings-label">{{ t('general.appearance') }}</div>
-        <div class="settings-hint">{{ t('general.appearanceHint') }}</div>
       </div>
       <SelectButton
         v-model="appearance"
@@ -26,6 +24,7 @@
         option-value="value"
         :aria-label="t('general.appearance')"
         :allow-empty="false"
+        class="w-full sm:w-auto"
       />
     </div>
   </div>
@@ -52,3 +51,12 @@ const appearanceOptions = computed(() => [
   { label: t('general.themeDark'), value: 'dark' },
 ]);
 </script>
+
+<style scoped>
+@media (max-width: 639px) {
+  :deep(.p-selectbutton .p-togglebutton) {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+}
+</style>

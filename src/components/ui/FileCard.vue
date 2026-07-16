@@ -8,10 +8,10 @@
         <div class="truncate text-base font-semibold text-text-primary transition-colors group-hover:text-primary-600">
           {{ title }}
         </div>
-        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
-          <span class="min-w-0 truncate">{{ note || t('common.noNote') }}</span>
+        <div v-if="note || updatedAt" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
+          <span v-if="note" class="min-w-0 truncate">{{ note }}</span>
           <template v-if="updatedAt">
-            <span aria-hidden="true">·</span>
+            <span v-if="note" aria-hidden="true">·</span>
             <time :datetime="new Date(updatedAt).toISOString()">{{ formatDynamicTime(updatedAt) }}</time>
           </template>
         </div>

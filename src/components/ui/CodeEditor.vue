@@ -151,7 +151,9 @@ const themeExtensions = EditorView.theme({
     boxShadow: "var(--shadow-lg) !important",
     color: "var(--color-text-primary)",
     padding: "6px 8px !important",
-    width: "320px",
+    boxSizing: "border-box",
+    width: "min(320px, calc(100vw - 16px))",
+    maxWidth: "calc(100vw - 16px)",
     display: "flex",
     flexWrap: "wrap",
     alignItems: "center",
@@ -160,7 +162,9 @@ const themeExtensions = EditorView.theme({
     paddingRight: "18px"
   },
   ".cm-search input": {
-    width: "140px",
+    width: "min(140px, 100%)",
+    minWidth: "0",
+    flex: "1 1 7rem",
     backgroundColor: "var(--color-bg-code-toolbar) !important",
     border: "1px solid var(--color-border-base) !important",
     borderRadius: "var(--radius-xs) !important",
@@ -316,5 +320,26 @@ onBeforeUnmount(() => {
 }
 .cm-custom-wrapper .cm-focused {
   outline: none !important;
+}
+
+@media (max-width: 639px) {
+  .cm-custom-wrapper .cm-search {
+    padding-right: 44px !important;
+  }
+
+  .cm-custom-wrapper .cm-search input,
+  .cm-custom-wrapper .cm-search button {
+    min-height: 44px !important;
+  }
+
+  .cm-custom-wrapper .cm-search button {
+    min-width: 44px !important;
+  }
+
+  .cm-custom-wrapper .cm-search button[name="close"] {
+    right: 0 !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
 }
 </style>

@@ -1,6 +1,6 @@
 <template>
   <AppShell :user="user" :show-navigation="!!stateData" @logout="handleDisconnect">
-    <div class="mx-auto max-w-7xl space-y-10 p-6 md:p-12">
+    <div class="mx-auto max-w-7xl space-y-8 p-4 sm:p-6 lg:p-8 xl:p-12">
 
     <div v-if="isInitializing" class="flex justify-center items-center py-32">
       <Loader2 :size="32" class="animate-spin text-brand-pink" />
