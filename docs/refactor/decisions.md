@@ -48,6 +48,8 @@
 | ADR-045 | SUPERSEDED | Beta 初始化目标由本地部署助手承担 Secret 与 Cloudflare 资源配置 | ADR-047 使用 Cloudflare Builds 控制面和仓库内幂等部署入口。 |
 | ADR-047 | ACCEPTED | Fork + Cloudflare Workers Builds 是唯一网站部署与更新模型 | 复用 Cloudflare Git 集成、R2 权限与自动构建；删除 Release 助手和 GitHub deployment Action。 |
 | ADR-046 | SUPERSEDED | 用正确管理员登录触发一次性 R2 schema v1→v2 升级 | 生产迁移验证完成；临时 schema、登录接线与测试已删除。 |
+| ADR-048 | ACCEPTED | 接受带外部环境延期验证的 `3.0.0` 稳定发布 | 实现与本地/生产主路径已验证；不为测试 Cloudflare 控制面而破坏生产资源。 |
+| ADR-049 | ACCEPTED | 项目许可证切换为 GPL-3.0-only | 要求分发的修改版继续提供对应源码，并统一正式版许可证元数据。 |
 
 ## ADR-002：PrimeVue 版本政策
 
@@ -270,6 +272,26 @@
 - `workers.dev` 默认启用，preview URL 与非生产分支部署默认关闭。Custom Domain 是部署后的可选增强。
 - 首次 WebUI 登录只接受管理员口令并创建空 workspace；删除 GitHub/PAT 初始化导入契约。数据仓库、sync 和 SRS 只能在登录后的仓库设置中显式连接。
 - 构建失败保留上一生产版本；代码回滚使用 Cloudflare Worker version rollback，业务数据恢复使用 R2 immutable revision，两者保持分离。
+
+## ADR-049：正式版使用 GNU GPL v3
+
+状态：ACCEPTED
+日期：2026-07-17
+
+- 项目许可证由 Beta 阶段的 MIT 切换为 `GPL-3.0-only`，根 `LICENSE` 使用完整 GNU General Public License Version 3 官方正文。
+- `package.json`、lockfile、README、WebUI 关于页和 E2E 必须显示一致的许可证；第三方依赖继续适用各自许可证。
+- 选择 `-only` 明确只采用 GPL v3，不默认授予未来 GPL 版本。分发原版或修改版时必须遵守 GPL v3 的源码与许可证义务。
+
+## ADR-048：稳定版发布与外部环境延期验证
+
+状态：ACCEPTED
+日期：2026-07-17
+
+- `3.0.0` 的实现、迁移清理、Beta UI、生产 `main` 自动更新、完整测试、Worker dry-run、R2 本地恢复模型和正式文档已完成，无已知 P0/P1 风险。
+- fresh-account 从零部署、普通用户 `Sync fork` 和实际 Worker version rollback 需要独立 Cloudflare 账户或控制台入口；当前没有安全测试目标，不删除现有 Worker、不清空 R2，也不制造生产故障模拟这些路径。
+- 三项验证延期不代表功能未实现。触发条件固定为首次外部用户部署、获得第二 Cloudflare 账户或真实生产故障；届时把结果补入 `progress.md` 和运维文档。
+- 代码恢复优先使用 Git revert 产生新的可审计构建；账户提供 rollback 时可回退 Worker version。业务数据始终使用 immutable workspace revision restore，二者不得混为同一操作。
+- 接受以上残余验证风险，Phase 9 标记完成，版本对齐为 `3.0.0`。发布 tag、GitHub Release 与生产部署仍是独立授权动作。
 
 ## ADR-027：免费额度策略
 

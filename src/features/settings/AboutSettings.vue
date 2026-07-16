@@ -19,7 +19,7 @@
         text
         size="small"
       >
-        <span>MIT</span>
+        <span>GPL-3.0</span>
         <ExternalLink :size="13" aria-hidden="true" />
       </Button>
     </div>
