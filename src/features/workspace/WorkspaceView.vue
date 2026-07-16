@@ -25,7 +25,6 @@
         @save="handleSave"
       />
 
-      <transition name="page-fade" mode="out-in">
         <div v-if="isProfilesRoute" key="profiles" class="space-y-6">
           <draggable
             v-model="stateData.profiles"
@@ -94,7 +93,6 @@
           @revision="workspaceRevision = $event"
         />
         <AboutSettings v-else-if="settingsSection === 'about'" key="settings-about" :version="APP_VERSION" />
-        </transition>
 
     </template>
 
@@ -647,22 +645,3 @@ async function handleGlobalAdd() {
   }
 }
 </script>
-
-<style>
-.page-fade-enter-active,
-.page-fade-leave-active {
-  transition: opacity 150ms ease;
-}
-
-.page-fade-enter-from,
-.page-fade-leave-to {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .page-fade-enter-active,
-  .page-fade-leave-active {
-    transition: none;
-  }
-}
-</style>

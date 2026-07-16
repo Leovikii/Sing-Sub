@@ -7,7 +7,7 @@
         :key="file.path"
         :title="getBasename(file.path).replace(/\.json$/, '')"
         :note="file.note"
-        :icon="type === 'node' ? Network : (type === 'template' ? LayoutTemplate : type === 'adapter' ? Puzzle : Shield)"
+        :icon="type === 'node' ? Waypoints : (type === 'template' ? Layers3 : type === 'adapter' ? Wrench : ShieldCheck)"
         :tag="type === 'node' ? 'NODE' : (type === 'template' ? 'TEMPLATE' : type === 'adapter' ? 'ADAPTER' : 'RULESET')"
         :tagStyle="type === 'node' ? 'bg-brand-pink/10 text-brand-pink border border-brand-pink/20' : (type === 'template' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : type === 'adapter' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20')"
         :menuItems="fileMenuItems"
@@ -110,7 +110,7 @@ import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import Button from 'primevue/button';
-import { Trash2, Network, LayoutTemplate, Puzzle, Shield, Link2, Check, Loader2, LoaderCircle, RotateCcw } from 'lucide-vue-next';
+import { Trash2, Waypoints, Layers3, Wrench, ShieldCheck, Link2, Check, Loader2, LoaderCircle, RotateCcw } from 'lucide-vue-next';
 import FileCard from './ui/FileCard.vue';
 import EditorModal from './ui/EditorModal.vue';
 import CodePreview from './ui/CodePreview.vue';

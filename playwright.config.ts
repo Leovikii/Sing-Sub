@@ -20,5 +20,10 @@ export default defineConfig({
       name: 'mobile-chromium',
       use: { ...devices['Pixel 7'] },
     },
+    {
+      name: 'desktop-firefox',
+      grep: /applies the saved dark theme|switches workspace tabs/,
+      use: { ...devices['Desktop Firefox'], viewport: { width: 1440, height: 900 } },
+    },
   ],
 });

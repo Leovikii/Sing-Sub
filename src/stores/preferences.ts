@@ -17,9 +17,14 @@ export const usePreferencesStore = defineStore('preferences', () => {
   const resolvedDark = computed(() => appearance.value === 'dark' || (appearance.value === 'system' && systemDark.value));
 
   function applyPreferences() {
+    const dark = resolvedDark.value;
     i18n.global.locale.value = locale.value;
     document.documentElement.lang = locale.value;
-    document.documentElement.classList.toggle('app-dark', resolvedDark.value);
+    document.documentElement.classList.toggle('app-dark', dark);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    document.documentElement.style.backgroundColor = dark ? '#121212' : '#f7f7f8';
+    document.querySelector('#theme-color')?.setAttribute('content', dark ? '#121212' : '#f7f7f8');
     localStorage.setItem('sing-sub.locale', locale.value);
     localStorage.setItem('sing-sub.appearance', appearance.value);
   }

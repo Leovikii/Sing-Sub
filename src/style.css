@@ -85,6 +85,12 @@
   color-scheme: dark;
 }
 
+html,
+body {
+  min-height: 100%;
+  background-color: var(--color-bg-page);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
   background-color: var(--color-bg-page);
@@ -97,6 +103,7 @@ body {
 
 #app {
   min-height: 100vh;
+  background-color: var(--color-bg-page);
 }
 .glass {
   background: var(--color-bg-surface);

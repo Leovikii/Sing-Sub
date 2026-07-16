@@ -186,8 +186,11 @@ sync: never/synced/local-ahead/remote-ahead/conflict/running/failed
 - PrimeVue 可满足的 Button、Input、Select、Dialog、Popover、Toast、Tooltip 不得自研。
 - CodeMirror、Lucide、`vuedraggable` 保留。
 - 相同业务动作必须使用相同图标、组件 variant、尺寸、位置和本地化 tooltip；编辑统一使用 Pencil 语义，删除、复制、保存和关闭同理。
+- 导航激活态只使用主题色背景/文字和字重，不叠加自定义实线或装饰阴影；悬停状态不得覆盖当前路由。
 - 不引入通知中心缓存历史错误。瞬时结果使用 Toast，未解决错误使用业务页面内 Message，SRS/sync 长期状态由对应领域页面从服务端恢复。
 - 动画优先使用 PrimeVue 原生 transition 和少量 Vue Transition，不引入独立动画库；必须尊重 `prefers-reduced-motion`。
+- 频繁路由切换不使用串行 `mode="out-in"` 动画；新页内容必须在当前更新周期挂载，Firefox 桌面专项回归纳入 CI。
+- 主题必须由符合 `script-src 'self'` CSP 的同源脚本在应用模块执行前同步初始化；`html`、`body`、`#app` 共享页面底色，并同步 `color-scheme`、`data-theme` 和 theme color，避免暗色首帧白闪。
 
 ## 14. 可访问性与响应式
 
