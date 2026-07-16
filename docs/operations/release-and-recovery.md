@@ -1,6 +1,6 @@
 # Cloudflare 部署、更新与恢复
 
-对应预发布版本：`v3.0.0-beta.1`。
+对应稳定版本：`v3.0.0`。
 
 ## 兼容范围
 
@@ -82,10 +82,13 @@ GitHub 站外恢复使用显式 pull，并先完成 diff、schema/name/reference
 
 ## 代码回滚
 
-1. 在 Cloudflare Worker 的 Versions/Deployments 中选择已验证版本执行 rollback。
-2. 只有业务数据确实错误时才单独执行 workspace revision restore。
-3. 不删除或清空 R2，不使用 GitHub force push 模拟数据回滚。
-4. 回滚后检查登录、Profile 预览、私有订阅、公开规则集和可选 GitHub sync。
+1. 优先 revert 错误的源码 commit，让 `main` 的新 commit 触发可审计的 Cloudflare Build。
+2. Cloudflare 账户提供 Worker version rollback 入口时，可选择已验证版本重新部署；当前维护者控制台未提供该入口，正式版不以破坏生产的方式强制演练。
+3. 只有业务数据确实错误时才单独执行 workspace revision restore。
+4. 不删除或清空 R2，不使用 GitHub force push 模拟数据回滚。
+5. 回滚后检查登录、Profile 预览、私有订阅、公开规则集和可选 GitHub sync。
+
+独立 Cloudflare 账户的全新部署、普通用户 `Sync fork` 和实际 Worker rollback 延期到首次外部部署、获得第二账户或真实故障时验证。生产自动更新、Wrangler version discovery、配置检查和本地 R2 restore 已通过；延期项不改变代码回滚与数据恢复的边界。
 
 ## Secret 恢复
 

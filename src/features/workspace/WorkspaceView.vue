@@ -133,7 +133,7 @@ import { useWorkspaceStore } from '../../stores/workspace';
 import type { SetupData, StateData, Profile } from '../../types';
 import draggable from 'vuedraggable';
 
-const APP_VERSION = 'v3.0.0-beta.1';
+const APP_VERSION = 'v3.0.0';
 const route = useRoute();
 const router = useRouter();
 const confirm = useConfirm();

@@ -1,6 +1,6 @@
 # Cloudflare Workers Builds 部署与更新
 
-状态：`IMPLEMENTED`；现有生产 Worker smoke 与 `main` 自动更新已验证，等待 fresh-account smoke 与版本回滚演练。本文件记录 Phase 9 已接受的普通用户初始化、源码更新和生产回滚模型；它取代独立 Release、Windows 程序、Node CLI 和本地部署助手方案。
+状态：`DONE`；现有生产 Worker smoke 与 `main` 自动更新已验证，fresh-account、普通用户 `Sync fork` 与实际版本回滚按 ADR-048 延期到具备安全测试条件时执行。本文件记录 Phase 9 已接受的普通用户初始化、源码更新和生产恢复模型；它取代独立 Release、Windows 程序、Node CLI 和本地部署助手方案。
 
 ## 唯一部署模型
 

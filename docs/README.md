@@ -1,5 +1,11 @@
 # Sing-Sub 文档
 
+## 用户指南
+
+- [Wiki 首页](./wiki/HomeZH.md)
+- [Cloudflare 部署](./wiki/DeploymentZH.md)
+- [适配器使用](./wiki/AdaptersZH.md)
+
 ## 重构
 
 完整重构计划、架构标准和进度追踪入口：
@@ -13,4 +19,4 @@
 - [SRS 编译器](./operations/srs-compiler.md)
 - [Cloudflare 部署、更新与恢复](./operations/release-and-recovery.md)
 
-后续重构任务开始前，请先阅读以上三个文件，并在任务结束后更新进度台账。
+后续架构任务开始前，请先阅读重构总览、架构决策和当前进度，并在任务结束后更新进度台账。

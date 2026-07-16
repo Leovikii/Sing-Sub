@@ -294,14 +294,13 @@ test('uses a compact and stable desktop editor header', async ({ page }) => {
   expect((await saveButton.boundingBox())?.x).toBe(saveX);
 });
 
-test('shows the repository MIT license in About settings', async ({ page }) => {
+test('shows the repository GPL v3 license in About settings', async ({ page }) => {
   const mockState = await mockApi(page);
   await login(page, mockState);
   await navigateTo(page, '关于');
 
-  const licenseLink = page.getByRole('link', { name: 'MIT' });
+  const licenseLink = page.getByRole('link', { name: 'GPL-3.0' });
   await expect(licenseLink).toHaveAttribute('href', 'https://github.com/Leovikii/Sing-Sub/blob/main/LICENSE');
-  await expect(page.getByText('GPL-3.0')).toHaveCount(0);
 });
 
 test('keeps editor metadata and actions stable at 320px', async ({ page }) => {

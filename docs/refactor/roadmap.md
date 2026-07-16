@@ -225,9 +225,9 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 日志/API 不泄露私钥、PAT、Cookie 或 token。
 - `progress.md` 无未完成必需任务，恢复演练通过。
 
-## Phase 9：Beta 稳定与产品化（IN_PROGRESS）
+## Phase 9：Beta 稳定与产品化（DONE）
 
-目标：在重构完成的 `3.0.0-beta.1` 基础上完成真实使用反馈、部署产品化、适配器机制优化和前端收束；本阶段结束前不发布 `3.0.0` 正式版。
+结果：在 `3.0.0-beta.1` 基础上完成真实使用反馈、部署产品化、适配器机制优化、前端收束和正式版门禁，稳定版本对齐为 `3.0.0`。
 
 ### A. 普通用户部署与升级
 
@@ -260,6 +260,8 @@ freeze writes -> export GitHub/KV -> dry-run -> write immutable revision
 - 完成 Workers Builds 从零部署、Sync fork 更新、Worker rollback、R2 restore 和生产只读检查演练。
 - 完整 `verify`、Worker dry-run、desktop/mobile E2E、版本/依赖/文档/许可证扫描通过。
 - 只有所有必需项完成后，才把版本从 `3.0.0-beta.*` 更新为 `3.0.0` 并创建正式 Release。
+
+阶段结论：实现、生产自动更新、Beta 回归、完整测试、dry-run、正式文档与许可证扫描已完成。独立账户 fresh-account 部署、普通用户 `Sync fork` 和实际 Worker rollback 因当前没有安全测试目标，按 ADR-048 延期，不阻塞稳定版；触发条件为首次外部部署、获得第二 Cloudflare 账户或真实生产故障。
 
 详细部署设想见 `deployment-automation-backlog.md`；replacement adapter 方案见 ADR-043。
 

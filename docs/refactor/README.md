@@ -2,7 +2,7 @@
 
 本文档集是 Sing-Sub 重构工作的唯一计划与进度来源。后续开发任务开始前必须先阅读本页、`decisions.md` 和 `progress.md`，完成后必须更新进度与验证结果。
 
-Phase 0-8 的架构重构已经完成。当前 `3.0.0-beta.1` 进入 Phase 9 Beta 稳定与产品化；该阶段继续使用本计划集追踪普通用户部署、Profile 派生机制、前端反馈和 `3.0.0` 正式版发布门禁。
+Phase 0-9 已完成，当前稳定版本为 `3.0.0`。本计划集继续作为架构约束、历史决策、验证记录与后续维护的唯一追踪来源。
 
 ## 重构目标
 
@@ -26,6 +26,7 @@ Phase 0-8 的架构重构已经完成。当前 `3.0.0-beta.1` 进入 Phase 9 Bet
 - [progress.md](./progress.md)：任务状态、验证记录、阻塞项和会话日志。
 - [deployment-automation-backlog.md](./deployment-automation-backlog.md)：已接受的 Workers Builds 初始化、Sync fork 更新与回滚方案。
 - [frontend-beta-optimization.md](./frontend-beta-optimization.md)：Phase 9 移动端、弹窗、文案和规则集单链接优化记录。
+- [../wiki](../wiki/HomeZH.md)：可发布到 GitHub Wiki 的双语部署与适配器指南源文件。
 
 ## 执行方式
 
