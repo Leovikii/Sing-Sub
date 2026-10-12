@@ -21,6 +21,7 @@ interface ReactApiMock {
   rulesets: Array<{ path: string; note: string }>;
   contents: Record<string, string>;
   syncRequests: Request[];
+  syncStatus: 'never' | 'conflict' | 'local-ahead' | 'remote-ahead';
   stateRequests: Request[];
   profiles: Array<Record<string, unknown>>;
   revision: number;
@@ -49,6 +50,7 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
     rulesets: [],
     contents: {},
     syncRequests: [],
+    syncStatus: 'local-ahead',
     stateRequests: [],
     profiles: [],
     revision: 1,
@@ -118,7 +120,7 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
         connected: state.connected,
         repository: state.connected ? 'example/private-config' : undefined,
         defaultBranch: state.connected ? 'main' : undefined,
-        status: state.connected ? 'local-ahead' : 'never',
+        status: state.connected ? state.syncStatus : 'never',
         local: {
           revision: 'revision-1',
           contentHash: 'local-hash',
@@ -132,15 +134,19 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
           changes: { added: [], modified: [], deleted: [] },
         } : undefined,
         sameContent: false,
-        canPush: state.connected,
-        canPull: false,
-        requiresResolution: false,
+        canPush: state.connected && state.syncStatus === 'local-ahead',
+        canPull: state.connected && state.syncStatus === 'remote-ahead',
+        requiresResolution: state.connected && ['never', 'conflict'].includes(state.syncStatus),
       });
       return;
     }
 
-    if (pathname === '/api/github-sync/push' && request.method() === 'POST') {
+    if (['/api/github-sync/push', '/api/github-sync/pull'].includes(pathname) && request.method() === 'POST') {
       state.syncRequests.push(request);
+      if (pathname.endsWith('/pull')) {
+        state.profiles = [{ name: 'Pulled profile', templateUrl: '', nodesPath: '', rules: [], inboundRules: [] }];
+        state.revision = 2;
+      }
       await respond({
         action: 'pushed', revision: 'revision-2', remoteRevision: 'remote-2', contentHash: 'local-hash',
         changes: { added: [], modified: [], deleted: [] },
@@ -296,7 +302,7 @@ test('React entry initializes with a password-only request and guarded route', a
   expect(brandIconBox!.width).toBe(36);
   expect(brandIconBox!.height).toBe(36);
   await page.goto('/#/settings/about');
-  await expect(page.getByText('v3.1.2', { exact: true })).toBeVisible();
+  await expect(page.getByText('v3.1.3', { exact: true })).toBeVisible();
 });
 
 test('React entry persists language and color scheme with native Mantine controls', async ({ page }) => {
@@ -989,3 +995,39 @@ test('React filter modes respond to clicks and keyboard before and after enterin
   await expect(modes.nth(1)).toHaveValue('排除');
   await page.screenshot({ path: test.info().outputPath('filter-modes.png'), fullPage: true });
 });
+
+for (const syncStatus of ['never', 'conflict', 'local-ahead', 'remote-ahead'] as const) {
+  for (const direction of ['push', 'pull'] as const) {
+    test('React sync confirms manual ' + direction + ' from ' + syncStatus, async ({ page }) => {
+      const state = await mockReactApi(page);
+      state.authenticated = true;
+      state.connected = true;
+      state.syncStatus = syncStatus;
+      await page.goto('/#/sync');
+      const button = page.getByRole('button', { name: direction === 'push' ? '推送到 GitHub' : '从 GitHub 拉取', exact: true });
+      await expect(button).toBeEnabled();
+      await button.click();
+      const safe = direction === 'push' ? syncStatus === 'local-ahead' : syncStatus === 'remote-ahead';
+      if (!safe) {
+        const dialog = page.getByRole('dialog', { name: '确认覆盖数据' });
+        await expect(dialog.getByText(direction === 'push' ? '用当前 R2 数据覆盖 GitHub 受管文件。' : '用 GitHub 内容覆盖当前 R2 数据。')).toBeVisible();
+        expect(state.syncRequests).toHaveLength(0);
+        await dialog.getByRole('button', { name: '取消', exact: true }).click();
+        await expect(dialog).toBeHidden();
+        expect(state.syncRequests).toHaveLength(0);
+        await button.click();
+        await dialog.getByRole('button', { name: '确认', exact: true }).click();
+      }
+      await expect.poll(() => state.syncRequests.length).toBe(1);
+      expect(new URL(state.syncRequests[0].url()).pathname).toBe('/api/github-sync/' + direction);
+      expect(state.syncRequests[0].postDataJSON()).toEqual({ expectedRevision: 'revision-1', resolution: safe ? 'safe' : 'overwrite' });
+      if (direction === 'pull') {
+        await expect(page.getByRole('button', { name: '从 GitHub 拉取', exact: true })).toBeEnabled();
+        const menu = page.getByRole('button', { name: '打开导航', exact: true });
+        if (await menu.isVisible()) await menu.click();
+        await page.getByRole('link', { name: '配置', exact: true }).click();
+        await expect(page.getByText('Pulled profile', { exact: true })).toBeVisible();
+      }
+    });
+  }
+}

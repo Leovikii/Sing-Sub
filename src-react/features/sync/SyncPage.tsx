@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { SyncFileChanges } from '../../../shared';
+import { api } from '../../../src/api/endpoints';
+import { useAssetsStore } from '../../stores/assets';
 import { useSyncStore } from '../../stores/sync';
 import { useWorkspaceStore } from '../../stores/workspace';
 
@@ -70,7 +72,13 @@ export function SyncPage() {
     setAction(direction);
     try {
       const result = await runSync(direction, { expectedRevision: revision, resolution });
-      replaceWorkspace(workspaceState, result.revision);
+      if (direction === 'pull') {
+        useAssetsStore.getState().reset();
+        const latest = await api.getState();
+        replaceWorkspace(latest.state, latest.revision);
+      } else {
+        replaceWorkspace(workspaceState, result.revision);
+      }
       notifications.show({ color: 'green', message: t(direction === 'push' ? 'sync.push' : 'sync.pull') });
     } catch {
       notifications.show({ color: 'red', message: t('errors.generic') });
@@ -80,7 +88,9 @@ export function SyncPage() {
   };
 
   const requestRun = (direction: 'push' | 'pull') => {
-    if (!status?.requiresResolution) return void execute(direction, 'safe');
+    if (busy || !status?.connected || !revision) return;
+    const safe = direction === 'push' ? status.canPush : status.canPull;
+    if (safe) return void execute(direction, 'safe');
     modals.openConfirmModal({
       title: t('sync.overwriteTitle'),
       children: <Text size="sm">{t(direction === 'push' ? 'sync.overwriteRemote' : 'sync.overwriteLocal')}</Text>,
@@ -120,8 +130,8 @@ export function SyncPage() {
             </Group>
             <Group justify="flex-end">
               <Button variant="light" leftSection={<RefreshCw size={17} />} loading={action === 'refresh'} disabled={busy} onClick={() => void refresh()}>{t('sync.refresh')}</Button>
-              <Button variant="light" leftSection={<Download size={17} />} loading={action === 'pull'} disabled={busy || !status?.canPull} onClick={() => requestRun('pull')}>{t('sync.pull')}</Button>
-              <Button leftSection={<Upload size={17} />} loading={action === 'push'} disabled={busy || !status?.canPush} onClick={() => requestRun('push')}>{t('sync.push')}</Button>
+              <Button variant="light" leftSection={<Download size={17} />} loading={action === 'pull'} disabled={busy || !status?.connected || !revision} onClick={() => requestRun('pull')}>{t('sync.pull')}</Button>
+              <Button leftSection={<Upload size={17} />} loading={action === 'push'} disabled={busy || !status?.connected || !revision} onClick={() => requestRun('push')}>{t('sync.push')}</Button>
             </Group>
           </Stack>
         </Paper>

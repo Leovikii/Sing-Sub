@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WorkspaceSnapshot } from '../../shared';
 import { WorkspaceConflictError } from '../../worker/application/errors/workspace-conflict';
 import { canonicalJson } from '../../worker/domain/revisions/canonical-json';
@@ -270,4 +270,15 @@ describe('R2WorkspaceStore', () => {
     await expect(store.recoverHead('workspace-1', 'revision-1'))
       .rejects.toBeInstanceOf(WorkspaceAlreadyExistsError);
   });
+});
+
+it('rejects legacy current snapshots without writing or migrating data', async () => {
+  const bucket = new InMemoryR2Bucket();
+  const store = new R2WorkspaceStore(bucket);
+  await store.create({ workspaceId: 'workspace-1', snapshot: snapshot('legacy', null) });
+  bucket.forcePut(r2ObjectKeys.revision('workspace-1', 'legacy'), JSON.stringify({ ...snapshot('legacy', null), schemaVersion: 2, assets: { nodes: {}, templates: {}, rulesets: {}, adapters: {} } }));
+  const put = vi.spyOn(bucket, 'put');
+  await expect(store.read('workspace-1')).rejects.toBeInstanceOf(WorkspaceStorageCorruptError);
+  await expect(store.readRevision('workspace-1', 'legacy')).rejects.toBeInstanceOf(WorkspaceStorageCorruptError);
+  expect(put).not.toHaveBeenCalled();
 });

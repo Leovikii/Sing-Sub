@@ -2,14 +2,16 @@
 
 更新日期：2026-10-12
 回滚基线：`3.0.0`
-当前稳定版：`3.1.0`
-当前候选：`3.1.2`（用户交互验收通过，待 PR）
-状态：`3.1.2` 三项修复与一次性自动迁移完成，用户已通过本地前端连接真实后端的交互验收；交付分支 codex/3.1.2-fixes，用户手动 PR 到 main 后自动部署并在首次访问时迁移。未部署、未迁移真实数据；Firefox 本机启动故障仍需 CI 补验，不能宣称全量 verify 通过。
+当前稳定版：`3.1.2`（用户确认生产迁移并验收通过）
+当前候选：`3.1.3`（本地实现与 Chromium 验证完成，Firefox 待 CI）
+状态：3.1.2 已完成生产验证；3.1.3 迁移清理、手动同步方向及拉取后刷新已完成。交付分支 codex/3.1.3-sync-cleanup，用户手动创建 PR 到 main 并触发自动部署；本轮未合并或部署，Firefox 本机启动仍失败。
 
 ## 任务台账
 
 | ID | 状态 | 内容 |
 |---|---|---|
+| FE-3190 | DONE | 3.1.3 一次性迁移清理 |
+| FE-3191 | DONE | 手动同步方向、覆盖确认和回归验证 |
 | FE-3180 | DONE | 3.1.2 元数据产物隔离、筛选器点击修复、适配器完整移除与离线升级工具 |
 | FE-3182 | DONE | v2→v3 一次性自动迁移、不可变备份、CAS 并发保护与失败重试 |
 | FE-3181 | BLOCKED | Firefox 环境验收：官方 Firefox 150/151/153 均因 Windows mozglue SideBySide 故障无法启动 |
@@ -299,3 +301,16 @@
 - DONE：R2 current 读取入口检测 v2，独立转换模块校验并备份原 head/snapshot，发布 v3 previous/current 后 CAS 切换；冲突重读、失败可重试，历史读取和业务 schema 仍只支持 v3。备份不受 revision retention 清理。
 - 验证：191 项 unit/integration 全部通过，覆盖首次访问 bootstrap/login、重复读取不写入、并发首次访问、并发旧版保存、部分失败重试、损坏数据拒绝和 retention。lint、shared/web/worker 类型、生产构建及 Worker dry-run 通过；本轮 Chromium 桌面/移动 24 项 E2E 再次通过，Firefox 因已记录的本机启动问题待 PR CI。
 - 文档：取消必须手工迁移的操作要求；明确首次访问自动转换、删除范围及 GitHub 显式覆盖推送。未修改生产数据或部署。
+
+### 2026-10-12：FE-3190 3.1.3 一次性迁移退场
+
+- 删除 v2→v3 转换模块、current 读取钩子、备份 key 生成器、离线工具及迁移专用测试；保留严格 v3 校验，不修改现有 R2 备份或数据。
+- 184 项 unit/integration 通过，包含旧 current/readRevision 拒绝且零写入回归；shared/web/worker 类型、lint、构建和 Worker dry-run 通过。
+- 升级文档明确旧 v2 安装先经过 3.1.2；项目版本准备为 3.1.3，公开稳定徽章保留已验证的 3.1.2。
+
+### 2026-10-12：FE-3191 手动同步与拉取刷新
+
+- 修复 UI 把 canPush/canPull 当作覆盖权限导致冲突双按钮禁用的问题；已连接且空闲时可选择方向，安全方向发送 safe，其他方向经确认发送 overwrite，取消零请求。Worker 同步协议不变。
+- 拉取成功通过 typed API 重读工作区，重置资源缓存，避免新 revision 搭配旧配置；回归先复现旧列表未更新再验证修复。
+- Chromium 桌面/移动完整 40 项通过，含 18 项同步测试（首次、双端冲突、单端双向、取消确认、拉取后显示新配置）。lint、全部类型、184 项 unit/integration、生产构建、许可证、包预算和 Worker dry-run 通过。最终 gzip：普通应用 282.67 KiB、编辑器 113.54 KiB、合计 396.21 KiB。
+- Firefox 3 项均在 browserType.launch 阶段 spawn UNKNOWN，未进入应用；FE-3181 继续 BLOCKED，需 CI/可用 Firefox 环境验证，不能声称完整 verify 通过。所有同步测试均使用 mock/fake，无真实 R2/GitHub 写入。
