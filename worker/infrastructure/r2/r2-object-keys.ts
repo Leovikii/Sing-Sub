@@ -15,8 +15,6 @@ export const r2ObjectKeys = {
   revisionPrefix: (workspaceId: string) => `${workspacePrefix(workspaceId)}/revisions/`,
   revision: (workspaceId: string, revisionId: string) =>
     `${workspacePrefix(workspaceId)}/revisions/${segment(revisionId, 'revision ID')}.json`,
-  workspaceV3Backup: (workspaceId: string, revisionId: string) =>
-    `${workspacePrefix(workspaceId)}/migrations/v3/${segment(revisionId, 'revision ID')}.json`,
   privateCredentials: (workspaceId: string) => `${workspacePrefix(workspaceId)}/private/credentials.json`,
   jobPrefix: (workspaceId: string) => `${workspacePrefix(workspaceId)}/jobs/`,
   job: (workspaceId: string, jobId: string) =>

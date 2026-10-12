@@ -89,23 +89,13 @@ export class R2WorkspaceStore implements WorkspaceStore<WorkspaceSnapshot> {
   }
 
   async read(workspaceId: string): Promise<WorkspaceRead<WorkspaceSnapshot>> {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const head = await this.loadHead(workspaceId);
-      const document = await this.loadRevisionDocument(workspaceId, head.document.currentRevision);
-      if (document && typeof document === 'object' && 'schemaVersion' in document && document.schemaVersion === 2) {
-        const { migrateWorkspaceV3 } = await import('./migrations/workspace-v3');
-        await migrateWorkspaceV3(this.bucket, head.document, head.etag, document);
-        continue;
-      }
-      const snapshot = this.parseSnapshot(document, workspaceId, head.document.currentRevision);
-      const hash = await sha256Hex(canonicalJson(snapshot));
-      if (hash !== head.document.contentHash) {
-        throw new WorkspaceStorageCorruptError('Head content hash does not match current revision');
-      }
-      return { workspaceId, revision: snapshot.revisionId, snapshot };
+    const head = await this.loadHead(workspaceId);
+    const snapshot = await this.readRevision(workspaceId, head.document.currentRevision);
+    const hash = await sha256Hex(canonicalJson(snapshot));
+    if (hash !== head.document.contentHash) {
+      throw new WorkspaceStorageCorruptError('Head content hash does not match current revision');
     }
-    const latest = await this.loadHead(workspaceId);
-    throw new WorkspaceConflictError('workspace-v3-upgrade', latest.document.currentRevision);
+    return { workspaceId, revision: snapshot.revisionId, snapshot };
   }
 
   async readRevision(workspaceId: string, revisionId: string): Promise<WorkspaceSnapshot> {
