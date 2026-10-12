@@ -4,14 +4,14 @@
 
 [简体中文](README_zh-CN.md) · [Wiki](https://github.com/Leovikii/Sing-Sub/wiki) · [License](LICENSE)
 
-![Version 3.1.1](https://img.shields.io/badge/version-3.1.1-e64980)
+![Version 3.1.2](https://img.shields.io/badge/version-3.1.2-e64980)
 
 Sing-Sub is a self-hosted control plane for editing and distributing [sing-box](https://sing-box.sagernet.org/) configurations.
 
 ## Features
 
-- Edit profiles, node sets, templates, adapters, and rule sets in a responsive bilingual WebUI.
-- Build profiles dynamically from one template, an optional replacement adapter, and filtered nodes.
+- Edit profiles, node sets, templates, and rule sets in a responsive bilingual WebUI.
+- Build profiles dynamically from one template and filtered nodes.
 - Store the workspace, immutable revisions, and SRS artifacts in a private Cloudflare R2 bucket.
 - Distribute private configuration subscriptions with compact signed tokens and public rule sets as JSON or SRS.
 - Optionally import, back up, and explicitly synchronize data with a private GitHub repository.
@@ -33,7 +33,7 @@ The recommended deployment uses a GitHub fork and Cloudflare Workers Builds:
 4. Add the encrypted build secret `SING_SUB_ADMIN_PASSWORD` with at least 12 UTF-8 bytes.
 5. Deploy, open the generated Worker URL, and sign in with that password.
 
-The initializer creates or reuses `sing-sub-data`, generates missing runtime signing secrets, and creates an empty workspace with the Momo adapter on first login. GitHub data sync, PAT, and SRS compilation are optional after deployment.
+The initializer creates or reuses `sing-sub-data`, generates missing runtime signing secrets, and creates an empty workspace on first login. GitHub data sync, PAT, and SRS compilation are optional after deployment.
 
 See the [complete deployment guide](https://github.com/Leovikii/Sing-Sub/wiki/Deployment) or its [version-controlled source](docs/wiki/Deployment.md).
 

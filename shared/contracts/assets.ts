@@ -6,7 +6,6 @@ export interface AssetSummary {
 export interface AssetSnapshot {
   nodes: AssetSummary[];
   templates: AssetSummary[];
-  adapters: AssetSummary[];
   rulesets: AssetSummary[];
 }
 

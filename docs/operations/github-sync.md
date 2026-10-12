@@ -10,12 +10,11 @@ Worker 只管理以下路径：
 sing-sub/configs/*.json
 sing-sub/nodes/*.json
 sing-sub/templates/*.json
-sing-sub/adapters/*.json
 sing-sub/rulesets/*.json
 sing-sub/manifest.json
 ```
 
-replacement adapter 直接切换后，editable-sync manifest 使用 schema v2，只接受 `adapters` 路径；旧含 `patches` 的 manifest/tree 不兼容。
+editable-sync manifest 使用 schema v2，只接受 configs、nodes、templates、rulesets 路径；含 adapters 或 patches 的旧数据树不兼容。现有安装先完成 [工作区升级](./workspace-upgrade.md)，同步前清理旧数据树。
 
 `.github/workflows/compile-srs.yml` 只由 SRS provisioner 管理。README、源码、其他 workflow 和任意非受管路径在同步 push 中通过 Git base tree 原样保留。SRS 二进制、build/job 状态、PAT、Cookie、订阅 Token 和短期 ticket 不进入同步树。
 

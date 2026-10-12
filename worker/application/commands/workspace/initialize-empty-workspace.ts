@@ -1,5 +1,4 @@
 import {
-  MOMO_ADAPTER_PRESET,
   workspaceSnapshotSchema,
   type WorkspaceSnapshot,
 } from '../../../../shared';
@@ -16,7 +15,7 @@ export function initializeEmptyWorkspace(
   command: InitializeEmptyWorkspaceCommand,
 ) {
   const snapshot = workspaceSnapshotSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     workspaceId: command.workspaceId,
     revisionId: command.revisionId,
     previousRevisionId: null,
@@ -31,14 +30,6 @@ export function initializeEmptyWorkspace(
     assets: {
       nodes: {},
       templates: {},
-      adapters: {
-        momo: {
-          path: 'sing-sub/adapters/momo.json',
-          note: 'OpenWrt Momo',
-          content: MOMO_ADAPTER_PRESET,
-          updatedAt: command.createdAt,
-        },
-      },
       rulesets: {},
     },
     builds: {},

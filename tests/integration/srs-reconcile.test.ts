@@ -12,7 +12,7 @@ import { InMemoryR2Bucket } from '../fakes/in-memory-r2-bucket';
 
 function snapshot(): WorkspaceSnapshot {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     workspaceId: 'primary',
     revisionId: 'revision-1',
     previousRevisionId: null,
@@ -22,7 +22,7 @@ function snapshot(): WorkspaceSnapshot {
     },
     profiles: [],
     assets: {
-      nodes: {}, templates: {}, adapters: {},
+      nodes: {}, templates: {},
       rulesets: Object.fromEntries(Array.from({ length: 5 }, (_, index) => {
         const id = `rules-${index + 1}`;
         return [id, {

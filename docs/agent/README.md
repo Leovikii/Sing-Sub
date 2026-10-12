@@ -7,7 +7,7 @@
 1. [工程标准](./engineering-standards.md)
 2. [架构决策](./decisions.md)
 3. [当前进度](./progress.md)
-4. 与任务对应的专项计划；当前为 [v3.1.0 前端重构计划](./v3.1-frontend-plan.md)
+4. 与任务对应的专项计划；当前为 [v3.1.2 修复计划](./v3.1.2-plan.md)；历史前端迁移见 [v3.1.0 计划](./v3.1-frontend-plan.md)
 
 按需阅读：
 

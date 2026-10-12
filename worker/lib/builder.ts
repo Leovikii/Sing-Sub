@@ -1,4 +1,4 @@
-import { adapterPresetSchema, type Profile } from '../../shared';
+import type { Profile } from '../../shared';
 
 interface Outbound {
   tag?: string;
@@ -11,56 +11,6 @@ interface Inbound {
   tag?: string;
   type?: string;
   [key: string]: unknown;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function pathLabel(path: string[]): string {
-  return path.join('.');
-}
-
-export function applyAdapterPreset(
-  target: Record<string, unknown>,
-  source: unknown,
-): Record<string, unknown> {
-  const adapter = adapterPresetSchema.parse(source);
-  for (const [index, replacement] of adapter.replacements.entries()) {
-    let parent: Record<string, unknown> = target;
-    for (const segment of replacement.path.slice(0, -1)) {
-      const next = parent[segment];
-      if (!isRecord(next)) {
-        throw new Error(`Adapter ${adapter.name} replacement ${index + 1} path ${pathLabel(replacement.path)} does not exist`);
-      }
-      parent = next;
-    }
-    const key = replacement.path.at(-1)!;
-    if (!(key in parent)) {
-      throw new Error(`Adapter ${adapter.name} replacement ${index + 1} path ${pathLabel(replacement.path)} does not exist`);
-    }
-    if (!replacement.match) {
-      parent[key] = structuredClone(replacement.value);
-      continue;
-    }
-    const candidates = parent[key];
-    if (!Array.isArray(candidates)) {
-      throw new Error(`Adapter ${adapter.name} replacement ${index + 1} target ${pathLabel(replacement.path)} is not an array`);
-    }
-    const matches = candidates.flatMap((candidate, candidateIndex) => {
-      if (!isRecord(candidate)) return [];
-      return Object.entries(replacement.match!).every(([field, value]) => candidate[field] === value)
-        ? [candidateIndex]
-        : [];
-    });
-    if (matches.length !== 1) {
-      throw new Error(
-        `Adapter ${adapter.name} replacement ${index + 1} expected one match at ${pathLabel(replacement.path)}, found ${matches.length}`,
-      );
-    }
-    candidates[matches[0]] = structuredClone(replacement.value);
-  }
-  return target;
 }
 
 function parseKeywords(str: string): string[] {
@@ -111,14 +61,6 @@ export async function buildProfile(
   // builds. Every build must own the objects it mutates.
   template = structuredClone(template || {});
   nodesData = structuredClone(nodesData);
-
-  // Apply the selected adapter before node insertion so replacement inbounds
-  // become the anchors used by inbound rules.
-  if (profile.adapterUrl) {
-    const adapter = await resources.loadRepoJson(profile.adapterUrl);
-    if (!adapter) throw new Error(`Adapter not found: ${profile.adapterUrl}`);
-    template = applyAdapterPreset(template, adapter);
-  }
 
   // Step 2: Insert inbound nodes
   if (nodesData) {
@@ -172,5 +114,15 @@ export async function buildProfile(
     }
   }
 
+  // Editor metadata belongs to source assets, never to a runnable config.
+  // Do not traverse arbitrary maps such as transport.headers.
+  const configObjects = [template, ...(Array.isArray(template.inbounds) ? template.inbounds : []),
+    ...(Array.isArray(template.outbounds) ? template.outbounds : [])];
+  for (const value of configObjects) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      delete value.note;
+      delete value._sing_sub;
+    }
+  }
   return JSON.stringify(template, null, 2);
 }

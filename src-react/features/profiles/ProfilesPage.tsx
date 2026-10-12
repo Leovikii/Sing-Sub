@@ -152,6 +152,15 @@ function MatchedNodeBadge({ node }: { node: JsonNode }) {
   );
 }
 
+// Empty keywords are valid editing drafts, but do not create runtime rules.
+function withActiveFilters(profile: Profile): Profile {
+  const rules = profile.rules.map((rule) => ({ ...rule, filters: rule.filters.filter((filter) => filter.keyword.trim()) }))
+    .filter((rule) => rule.filters.length > 0);
+  const inboundRules = profile.inboundRules.map((rule) => ({ ...rule, filters: rule.filters.filter((filter) => filter.keyword.trim()) }))
+    .filter((rule) => rule.filters.length > 0);
+  return { ...profile, rules, inboundRules };
+}
+
 function FilterRow({
   label, filter, matched, onChange, onClear,
 }: {
@@ -180,6 +189,7 @@ function FilterRow({
             label={t('profiles.filterMode')}
             aria-label={`${label} ${t('profiles.filterMode')}`}
             value={value.action}
+            allowDeselect={false}
             data={[
               { value: 'include', label: t('profiles.filterInclude') },
               { value: 'exclude', label: t('profiles.filterExclude') },
@@ -283,7 +293,7 @@ function ProfileEditorModal({
     if (nextMode === 'preview') {
       setPreviewLoading(true);
       setPreview('');
-      setPreviewProfile(cloneProfile(form.values));
+      setPreviewProfile(withActiveFilters(form.values));
     }
     setMode(nextMode);
   };
@@ -299,13 +309,13 @@ function ProfileEditorModal({
   };
 
   const setInboundFilter = (filter?: FilterAction) => {
-    form.setFieldValue('inboundRules', filter?.keyword.trim()
+    form.setFieldValue('inboundRules', filter
       ? [{ tag: 'global-inbounds', filters: [filter] }]
       : []);
   };
   const setOutboundFilter = (group: string, filter?: FilterAction) => {
     const next = form.values.rules.filter((rule) => rule.group !== group);
-    if (filter?.keyword.trim()) next.push({ group, filters: [filter] });
+    if (filter) next.push({ group, filters: [filter] });
     form.setFieldValue('rules', next);
   };
 
@@ -315,7 +325,8 @@ function ProfileEditorModal({
       return;
     }
     const validGroups = new Set(selectorGroups.map((item) => item.tag as string));
-    const profile = { ...values, rules: values.rules.filter((rule) => validGroups.has(rule.group)), updated_at: new Date().getTime() };
+    const normalized = withActiveFilters(values);
+    const profile = { ...normalized, rules: normalized.rules.filter((rule) => validGroups.has(rule.group)), updated_at: new Date().getTime() };
     await onSave(profile, editor.oldName);
   };
   const submit = form.onSubmit(handleValidSubmit);
@@ -360,20 +371,13 @@ function ProfileEditorModal({
                   viewportProps={{ 'aria-label': t('profiles.editorContent') }}
                 >
                   <Stack gap="xl" pe="xs">
-                    <SimpleGrid cols={{ base: 1, sm: 3 }}>
+                    <SimpleGrid cols={{ base: 1, sm: 2 }}>
                       <Select
                         label={t('profiles.template')} placeholder={t('profiles.chooseTemplate')} searchable clearable
                         data={assets.templates.map((item) => ({ value: item.path, label: basename(item.path) }))}
                         value={form.values.templateUrl || null}
                         error={form.errors.templateUrl}
                         onChange={(value) => form.setFieldValue('templateUrl', value ?? '')}
-                      />
-                      <Select
-                        label={t('profiles.adapter')} placeholder={t('profiles.none')} searchable clearable
-                        data={assets.adapters.map((item) => ({ value: item.path, label: basename(item.path) }))}
-                        value={form.values.adapterUrl || null}
-                        error={form.errors.adapterUrl}
-                        onChange={(value) => form.setFieldValue('adapterUrl', value ?? '')}
                       />
                       <Select
                         label={t('profiles.nodeSet')} placeholder={t('profiles.chooseNodeSet')} searchable clearable
@@ -568,7 +572,7 @@ export function ProfilesPage() {
     const profile: Profile = source ? {
       ...cloneProfile(source), name: `${source.name || 'untitled'}_copy`, created_at: now, updated_at: now,
     } : {
-      name: '', note: '', templateUrl: '', adapterUrl: '', nodesPath: '', rules: [], inboundRules: [],
+      name: '', note: '', templateUrl: '', nodesPath: '', rules: [], inboundRules: [],
       created_at: now, updated_at: now, order: profiles.length,
     };
     setEditor({ profile, oldName: undefined, isNew: true, initialMode: 'edit' });

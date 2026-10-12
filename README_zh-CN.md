@@ -4,14 +4,14 @@
 
 [English](README.md) · [Wiki](https://github.com/Leovikii/Sing-Sub/wiki/HomeZH) · [许可证](LICENSE)
 
-![版本 3.1.1](https://img.shields.io/badge/version-3.1.1-e64980)
+![版本 3.1.2](https://img.shields.io/badge/version-3.1.2-e64980)
 
 Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org/) 配置的自托管控制台。
 
 ## 功能特色
 
-- 在响应式双语 WebUI 中管理配置、节点集、模板、适配器和规则集。
-- 使用一份模板、可选替换适配器和筛选后的节点动态构建配置。
+- 在响应式双语 WebUI 中管理配置、节点集、模板和规则集。
+- 使用一份模板和筛选后的节点动态构建配置。
 - 使用私有 Cloudflare R2 bucket 保存 workspace、不可变 revision 和 SRS 产物。
 - 通过简短签名 Token 分发私有配置订阅，以 JSON 或 SRS 公开分发规则集。
 - 可选连接私有 GitHub 仓库，显式导入、备份和双向同步数据。
@@ -33,7 +33,7 @@ Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org
 4. 添加至少 12 UTF-8 bytes 的加密 Build Secret `SING_SUB_ADMIN_PASSWORD`。
 5. 完成部署后打开 Worker 地址，使用该管理员口令登录。
 
-初始化器会创建或复用 `sing-sub-data`、生成缺失的运行时签名密钥，并在首次登录时创建空 workspace 和 Momo 适配器。GitHub 数据同步、PAT 与 SRS 编译均为部署后的可选功能。
+初始化器会创建或复用 `sing-sub-data`、生成缺失的运行时签名密钥，并在首次登录时创建空 workspace。GitHub 数据同步、PAT 与 SRS 编译均为部署后的可选功能。
 
 请阅读[完整部署指南](https://github.com/Leovikii/Sing-Sub/wiki/DeploymentZH)或其[仓库内源文件](docs/wiki/DeploymentZH.md)。
 

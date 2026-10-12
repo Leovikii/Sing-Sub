@@ -22,7 +22,7 @@ export default defineConfig({
     },
     {
       name: 'desktop-firefox',
-      grep: /React entry persists language and color scheme|React navigation separates nested active states/,
+      grep: /React entry persists language and color scheme|React navigation separates nested active states|React filter modes/,
       use: { ...devices['Desktop Firefox'], viewport: { width: 1440, height: 900 } },
     },
   ],

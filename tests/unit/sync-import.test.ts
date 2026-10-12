@@ -56,19 +56,9 @@ describe('sync tree import', () => {
     ])).rejects.toMatchObject<Partial<SyncTreeValidationError>>({ code: 'MISSING_REFERENCE' });
   });
 
-  it('imports replacement-only adapters and validates their names', async () => {
-    const adapter = JSON.stringify({
-      schemaVersion: 1,
-      name: 'momo',
-      replacements: [{ path: ['inbounds'], value: [] }],
-    });
-    const imported = await importSyncTree([
-      await file('sing-sub/adapters/momo.json', adapter),
-    ]);
-    expect(imported.assets.adapters.momo.content).toMatchObject({ name: 'momo' });
-
+  it('rejects removed adapter paths', async () => {
     await expect(importSyncTree([
-      await file('sing-sub/adapters/other.json', adapter),
-    ])).rejects.toMatchObject<Partial<SyncTreeValidationError>>({ code: 'INVALID_SCHEMA' });
+      await file('sing-sub/adapters/momo.json', '{}'),
+    ])).rejects.toMatchObject<Partial<SyncTreeValidationError>>({ code: 'UNSUPPORTED_PATH' });
   });
 });

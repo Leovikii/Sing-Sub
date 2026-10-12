@@ -17,7 +17,7 @@
 | ADR-027/029/030 | ACCEPTED | R2 Standard 是唯一持久化，使用软预算；最终无 KV/D1。 |
 | ADR-032/035/036 | ACCEPTED | Ruleset JSON/SRS 公开分发；私有配置使用短 Token；订阅按 current revision 动态构建。 |
 | ADR-037 | ACCEPTED | SRS 使用短期 job ticket 自动 provision。 |
-| ADR-043 | ACCEPTED | Profile 使用严格 replacement adapter，不恢复通用 patch DSL。 |
+| ADR-043 | SUPERSEDED | replacement adapter 在 3.1.2 由 ADR-061 完整移除。 |
 | ADR-047/048 | ACCEPTED | Fork + Cloudflare Workers Builds 是部署模型，代码 rollback 与 R2 restore 分离。 |
 | ADR-049 | ACCEPTED | 项目许可证为 GPL-3.0-only。 |
 | ADR-050 | ACCEPTED | 3.1 前端迁移到 React 19 + Mantine 9。 |
@@ -106,3 +106,11 @@ CodeMirror 只能在非规则集资源进入编辑状态后动态加载；资源
 
 同步继续使用既有的顺序无关语义哈希判断业务冲突，以兼容 `3.1.0` 已保存在 R2 的 `baseContentHash`。另行比较标准化输出的表示指纹；语义相同但字段顺序不同时不制造冲突，但显式 push/pull 必须分别以 R2/GitHub 一侧的顺序为准执行，不能返回 noop。Zod 仍负责完整校验，校验成功后保留原始 JSON 对象而不使用 schema 重建结果。此决策不引入原始源码副本，不保证保留任意空白格式。
 
+
+## ADR-061：3.1.2 源数据与产物边界、适配器退场
+
+用户批准完整删除适配器，不保留运行时兼容逻辑：删除 Profile adapterUrl、workspace assets.adapters、预设、CRUD、同步支持和前端入口。workspace snapshot 改为 schema v3；旧数据由独立离线升级工具生成 v3 转换基线及其后继 current revision/head 候选和报告，保证 current/previous 均可由新运行时读取，部署前人工应用，不在 Worker 读取路径迁移，不改写历史 revision。需要适配器的旧 Profile 可删除，由用户在新版本重新创建；其他源数据保持原样。升级重置 sync 基线，首次同步由用户显式选择方向，避免旧哈希引发错误覆盖。
+
+Profile 定义仍位于 sing-sub/configs，模板、节点和规则集保持独立。编辑源、R2 revision 和 GitHub 同步保留管理备注；预览与订阅共同使用的构建出口删除配置根与入站/出站对象上的 note、_sing_sub，保留任意键值映射（例如 HTTP headers）中的同名业务键及字段/数组顺序。订阅产物缓存版本随输出语义变更更新。规则集继续使用既有 compiler-source 边界。
+
+筛选器模式属于表单草稿；空关键词不能导致模式重置，空规则仅在预览/提交时规范化掉。

@@ -38,7 +38,7 @@
 - 后续部署始终保留已有运行时 Secret；
 - 使用 `WORKSPACE_BUCKET` binding 部署 Worker。
 
-打开生成的 `workers.dev` 地址并用管理员口令登录。空 bucket 首次登录成功后会创建空 workspace 和可编辑的 Momo 适配器。
+打开生成的 `workers.dev` 地址并用管理员口令登录。空 bucket 首次登录成功后会创建空 workspace。
 
 首次部署成功后，可以删除 Build variables 中的 `SING_SUB_ADMIN_PASSWORD`；运行时 `ADMIN_PASSWORD` 会继续保存在 Worker 加密变量中。只有运行时管理员 Secret 被删除时，才需要在下次部署前恢复 Build Secret。
 

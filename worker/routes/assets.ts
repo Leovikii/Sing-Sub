@@ -16,7 +16,6 @@ export async function handleGetAssets(request: Request, env: Env): Promise<Respo
   const result: AssetSnapshot = {
     nodes: summaries(auth.snapshot.assets.nodes),
     templates: summaries(auth.snapshot.assets.templates),
-    adapters: summaries(auth.snapshot.assets.adapters),
     rulesets: summaries(auth.snapshot.assets.rulesets),
   };
   return jsonResponse(result);

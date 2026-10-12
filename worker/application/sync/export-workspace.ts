@@ -44,7 +44,7 @@ export async function exportSyncBusinessFiles(source: SyncBusinessSource): Promi
   for (const profile of source.profiles) {
     entries.push({ path: encodeSyncPath('configs', profile.name), value: profile });
   }
-  for (const kind of ['nodes', 'templates', 'adapters', 'rulesets'] as const) {
+  for (const kind of ['nodes', 'templates', 'rulesets'] as const) {
     for (const [entityId, asset] of Object.entries(source.assets[kind])) {
       entries.push({ path: encodeSyncPath(kind, entityId), value: asset.content });
     }

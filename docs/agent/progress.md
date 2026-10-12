@@ -1,15 +1,17 @@
 # v3.1.x 进度
 
-更新日期：2026-08-06
+更新日期：2026-10-12
 回滚基线：`3.0.0`
 当前稳定版：`3.1.0`
-当前候选：`3.1.1`
-状态：`3.1.0` 已正式发布；`3.1.1` 同步顺序修复与版本元数据完成，待生产更新测试。
+当前候选：`3.1.2`（用户交互验收通过，待 PR）
+状态：`3.1.2` 三项修复与离线升级工具完成，用户已通过本地前端连接真实后端的交互验收；准备推送独立分支，用户手动 PR 到 main。未部署、未迁移真实数据；Firefox 本机启动故障仍需 CI 补验，不能宣称全量 verify 通过。
 
 ## 任务台账
 
 | ID | 状态 | 内容 |
 |---|---|---|
+| FE-3180 | DONE | 3.1.2 元数据产物隔离、筛选器点击修复、适配器完整移除与离线升级工具 |
+| FE-3181 | BLOCKED | Firefox 环境验收：官方 Firefox 150/151/153 均因 Windows mozglue SideBySide 故障无法启动 |
 | FE-3100 | DONE | Agent 文档入口、ADR、计划与历史压缩 |
 | FE-3101 | DONE | 许可证和 bundle 基线检查 |
 | FE-3102 | DONE | E2E 去 PrimeVue 私有选择器 |
@@ -262,6 +264,23 @@
 - 验证：package 三处版本一致性检查为 `3.1.1 / 3.1.1 / 3.1.1`；完整 shared/web/worker typecheck 与 production build 通过，桌面和移动 Chromium 版本显示专项 2 项通过。版本更新前同一代码状态的完整 `npm run verify` 已通过 116 项 unit、67 项 integration、Chromium 22 项及 Firefox 2 项。
 - 发布边界：当前工作区已准备供用户推送生产更新测试，但本任务未执行 commit、push、tag、GitHub Release、Cloudflare 部署、Secret 变更或 R2/GitHub 数据操作。生产测试确认后再把 `3.1.1` 从候选状态收束为已发布稳定版。
 - 下一任务：用户在生产验证 GitHub push/pull 后反馈结果，随后决定是否继续收集修复或完成 `3.1.1` 发布审计。
+
+### 2026-10-12：FE-3180 3.1.2 修复与适配器退场
+
+- 根因复现：builder 单测确认模板 note 泄漏；Chromium 真实点击排除后仍显示包含，复现空关键词导致受控 Select 状态被丢弃。
+- 实现：共同 builder 出口清理配置根及入站/出站 note、_sing_sub，保留源数据、对象/数组顺序和 headers 同名业务键；预览 GET/POST、订阅与缓存命中均有集成覆盖，旧产物缓存命名空间升级为 profile-v3。筛选器保留草稿模式，预览/保存才过滤空关键词。
+- 移除：前端导航/路由/选择器/资源类型、shared schema、Momo 预设、Worker CRUD/builder/sync 支持及用户文档全部清理；运行时不保留 adapterUrl、assets.adapters 或旧格式 reader。workspace schema v3，Profile configs 与模板/节点/规则集源数据仍分立。package/lockfile 项目版本统一为 3.1.2，不改依赖版本。
+- 升级：独立本地工具校验 v2 备份与 head 哈希，删除适配器及依赖 Profile，生成 v3 previous/current 两个快照、候选 head、报告与 GitHub 树。验证新运行时读取和 retention dry-run；不修改输入或历史快照，不连接远端。部署前操作见 docs/operations/workspace-upgrade.md。
+- 通过：lint、许可证、shared/web/worker typecheck（含离线转换模块）、116 unit、69 integration、生产构建与三段预算、Chromium 桌面/移动 24 项 E2E、Worker dry-run。JS gzip：普通应用 282.62 KiB、编辑器 113.54 KiB、合计 396.16 KiB。离线 CLI 用合成数据成功生成文件，未输出私有生产数据。
+- FE-3181：完整 verify 执行到 Firefox 阶段失败，3 项均在 browser launch 前失败。Windows SideBySide 日志显示缺少 mozglue dependent assembly；官方 151.0 (1532)、153.0 (1538)、150.0.2 (1522) 包均无法启动。没有修改项目浏览器依赖或跳过原 Firefox gate，需可用 Windows Firefox 环境补验。
+- 边界：未 commit、push、tag、发布或部署，未写生产 R2/GitHub，未轮换 Secret；真实数据仍需按维护窗口流程应用离线输出。
+
+### 2026-10-12：用户交互验收与 GitHub 交付
+
+- 用户确认本地 3.1.2 前端连接正式后端的交互测试通过；该入口只允许读取、认证与临时预览，人工验收不包含生产保存、删除、同步或新版 Worker 的产物生成。
+- 新版 Worker 产物隔离与写入行为由本地单元/集成测试覆盖；Firefox 环境问题仍保留 FE-3181，PR CI 在 Linux 安装浏览器后执行完整 verify。
+- 按用户授权停止本轮预览，清理仓库内测试报告、合成升级样例、dry-run 输出与构建/Vite 缓存；保留依赖、凭据和已有本地 Worker 数据。
+- 代码与文档提交到 codex/3.1.2-fixes 分支，用户稍后手动 PR 到 main。合并可能触发自动部署，须先完成 workspace v2→v3 升级维护准备；本轮不创建 PR、不合并、不部署、不写生产数据。
 
 ## 完成记录模板
 

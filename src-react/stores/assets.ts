@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AssetSnapshot } from '../../shared';
 
-const emptyAssets = (): AssetSnapshot => ({ nodes: [], templates: [], adapters: [], rulesets: [] });
+const emptyAssets = (): AssetSnapshot => ({ nodes: [], templates: [], rulesets: [] });
 
 interface AssetsStore {
   items: AssetSnapshot;

@@ -14,7 +14,7 @@ Browser
   -> R2/GitHub infrastructure adapter
 ```
 
-`shared`、Worker application/domain/infrastructure、HTTP API 和 R2 数据模型不因 3.1 前端迁移改变。React 只能依赖 shared contract 和 `src/api`，不得导入 Worker 实现。
+`shared`、Worker application/domain/infrastructure、HTTP API 和 R2 数据模型不因 3.1 前端迁移改变；3.1.2 适配器移除是 ADR-061 单独批准的功能/数据格式变更。React 只能依赖 shared contract 和 `src/api`，不得导入 Worker 实现。
 
 ## 3.1 目录
 
