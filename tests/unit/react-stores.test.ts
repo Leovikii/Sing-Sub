@@ -39,7 +39,7 @@ describe('React application stores', () => {
 
   it('clears all cross-page state on logout or unauthorized responses', () => {
     useWorkspaceStore.getState().replace({ profiles: [] }, 'revision-2');
-    useAssetsStore.getState().replace({ nodes: [], templates: [], adapters: [], rulesets: [] });
+    useAssetsStore.getState().replace({ nodes: [], templates: [], rulesets: [] });
 
     clearApplicationSession();
 

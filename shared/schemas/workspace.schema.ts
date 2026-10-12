@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { profileSchema } from './profile.schema';
-import { adapterPresetSchema } from './adapter.schema';
 
 const opaqueIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/);
 const entityIdSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/);
@@ -80,23 +79,11 @@ export const migrationMetadataSchema = z.object({
 const workspaceAssetsSchema = z.object({
   nodes: z.record(entityIdSchema, jsonAssetSchema),
   templates: z.record(entityIdSchema, jsonAssetSchema),
-  adapters: z.record(entityIdSchema, jsonAssetSchema),
   rulesets: z.record(entityIdSchema, jsonAssetSchema),
-}).strict().superRefine((assets, context) => {
-  for (const [entityId, asset] of Object.entries(assets.adapters)) {
-    const parsed = adapterPresetSchema.safeParse(asset.content);
-    if (!parsed.success || parsed.data.name !== entityId) {
-      context.addIssue({
-        code: 'custom',
-        path: ['adapters', entityId, 'content'],
-        message: 'Adapter preset schema or name is invalid',
-      });
-    }
-  }
-});
+}).strict();
 
 export const workspaceSnapshotSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   workspaceId: opaqueIdSchema,
   revisionId: opaqueIdSchema,
   previousRevisionId: opaqueIdSchema.nullable(),

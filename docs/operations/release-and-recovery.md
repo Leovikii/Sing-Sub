@@ -1,15 +1,15 @@
 # Cloudflare 部署、更新与恢复
 
-适用版本：`v3.1.1`；代码回滚基线：`v3.0.0`。
+适用版本：`v3.1.2`；代码回滚基线：`v3.0.0`。
 
-`v3.1.0` 是首个 React/Mantine 稳定版，`v3.1.1` 是兼容的数据同步修复版本。部署前必须保留上一可用 Worker version，并完成本文的发布前检查；本次更新不迁移或重写 R2 数据。
+部署前必须保留上一可用 Worker version，并完成本文的发布前检查。现有 workspace schema v2 在部署后首次访问时自动升级，详见 [工作区自动升级](./workspace-upgrade.md)，无需手工操作 R2。
 
 ## 兼容范围
 
 - Worker `compatibility_date` 为 `2026-07-15`。
 - 运行时只需要 `WORKSPACE_BUCKET` R2 binding 和 `ADMIN_PASSWORD`、`SESSION_SIGNING_SECRET`、`SUBSCRIPTION_SIGNING_SECRET`。
 - Workers observability 与 Turnstile 暂不启用。
-- 当前运行时只读取 workspace schema v2；`workspaces/primary/head.json` 使用独立 head schema v1，GitHub sync manifest v2 与 adapter schema v1 也分别版本化。
+- 当前业务只读取 workspace schema v3，v2 current 在读取入口一次性自动转换；`workspaces/primary/head.json` 使用独立 head schema v1，GitHub sync manifest 保持 v2，但不再接受适配器路径。
 - 私有配置订阅 Token 为 `s2.<22-char-tag>`；旧格式不兼容。
 - 规则集公开 JSON/SRS URL、GitHub editable sync 与 SRS compiler 均不属于网站部署初始化。
 
@@ -25,7 +25,7 @@
 6. 根目录留空；API Token 选择 Cloudflare 自动创建。
 7. 在 Build variables 中新增 `SING_SUB_ADMIN_PASSWORD`，输入至少 12 bytes 的管理员口令并点击“加密”。不得使用示例值或把口令截图、写入仓库。
 8. 连接并等待 Build 成功。初始化器自动创建/复用 `sing-sub-data`、生成两个 signing secrets，并部署 Worker。
-9. 打开 `<worker>.<account>.workers.dev`，用相同管理员口令登录；首次登录只创建空 workspace 和内置 Momo adapter。
+9. 打开 `<worker>.<account>.workers.dev`，用相同管理员口令登录；首次登录只创建空 workspace。
 10. 首次成功后可删除 Build Secret；后续部署只保留 runtime secrets。
 
 首次部署不需要手动创建 bucket、Cloudflare API Token、Account ID、GitHub Actions Secret、signing secret、数据仓库或 PAT。
@@ -84,9 +84,11 @@ GitHub 站外恢复使用显式 pull，并先完成 diff、schema/name/reference
 
 ## 代码回滚
 
+跨 workspace v2/v3 的回滚必须同时处理数据格式，不能仅切换 Worker；详见 [工作区升级与回退](./workspace-upgrade.md)。
+
 1. 优先 revert 错误的源码 commit，让 `main` 的新 commit 触发可审计的 Cloudflare Build。
 2. Cloudflare 账户提供 Worker version rollback 入口时，可选择已验证版本重新部署；当前维护者控制台未提供该入口，正式版不以破坏生产的方式强制演练。
-3. 只有业务数据确实错误时才单独执行 workspace revision restore。
+3. 相同数据格式内，只有业务数据确实错误时才单独执行 workspace revision restore；跨 v2/v3 必须按升级文档配套转换数据。
 4. 不删除或清空 R2，不使用 GitHub force push 模拟数据回滚。
 5. 回滚后检查登录、Profile 预览、私有订阅、公开规则集和可选 GitHub sync。
 

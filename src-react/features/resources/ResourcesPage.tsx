@@ -19,16 +19,16 @@ import { RulesetEditor } from './RulesetEditor';
 
 const CodeEditor = lazy(() => import('../../components/CodeEditor/CodeEditor'));
 
-export type ResourceType = 'node' | 'template' | 'adapter' | 'ruleset';
+export type ResourceType = 'node' | 'template' | 'ruleset';
 
-const directoryByType: Record<ResourceType, 'nodes' | 'templates' | 'adapters' | 'rulesets'> = {
-  node: 'nodes', template: 'templates', adapter: 'adapters', ruleset: 'rulesets',
+const directoryByType: Record<ResourceType, 'nodes' | 'templates' | 'rulesets'> = {
+  node: 'nodes', template: 'templates', ruleset: 'rulesets',
 };
 const titleKeyByType: Record<ResourceType, string> = {
-  node: 'nav.nodes', template: 'nav.templates', adapter: 'nav.adapters', ruleset: 'nav.rulesets',
+  node: 'nav.nodes', template: 'nav.templates', ruleset: 'nav.rulesets',
 };
 const emptyKeyByType: Record<ResourceType, string> = {
-  node: 'assets.nodesEmpty', template: 'assets.templatesEmpty', adapter: 'assets.adaptersEmpty', ruleset: 'assets.rulesetsEmpty',
+  node: 'assets.nodesEmpty', template: 'assets.templatesEmpty', ruleset: 'assets.rulesetsEmpty',
 };
 
 interface EditorState {
@@ -50,7 +50,6 @@ function basename(path: string) {
 
 function initialContent(type: ResourceType) {
   if (type === 'ruleset') return '{\n  "version": 2,\n  "rules": [],\n  "_sing_sub": {\n    "sources": []\n  }\n}';
-  if (type === 'adapter') return '{\n  "schemaVersion": 1,\n  "name": "untitled",\n  "replacements": []\n}';
   return '{\n  "inbounds": [],\n  "outbounds": []\n}';
 }
 
@@ -165,7 +164,6 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
         if (editor.note) metadata.note = editor.note; else delete metadata.note;
         if (Object.keys(metadata).length) document._sing_sub = metadata; else delete document._sing_sub;
       } else {
-        if (type === 'adapter') document.name = editor.name;
         if (editor.note) document.note = editor.note; else delete document.note;
       }
       const content = JSON.stringify(document, null, 2);
@@ -213,7 +211,6 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
           for (const profile of nextState.profiles) {
             if (type === 'node' && profile.nodesPath === file.path) { profile.nodesPath = ''; changed = true; }
             if (type === 'template' && profile.templateUrl === file.path) { profile.templateUrl = ''; changed = true; }
-            if (type === 'adapter' && profile.adapterUrl === file.path) { profile.adapterUrl = ''; changed = true; }
           }
           if (changed) nextRevision = (await api.saveState(nextState, nextRevision)).revision;
         }

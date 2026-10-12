@@ -28,7 +28,7 @@ function snapshot(
   baseWorkspaceRevision?: string,
 ): WorkspaceSnapshot {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     workspaceId: 'workspace-1',
     revisionId,
     previousRevisionId,
@@ -43,7 +43,7 @@ function snapshot(
       tokenVersion: 1,
     },
     profiles: [],
-    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, rulesets: {} },
     builds: {
       'ruleset-1': {
         jobId,

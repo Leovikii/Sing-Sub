@@ -1,0 +1,34 @@
+# 工作区自动升级：移除适配器
+
+现有 workspace schema v2 在部署 3.1.2 后，首次访问需要工作区的接口时自动转换为 v3。无需手动修改 R2、执行离线脚本或切换 head；新建工作区直接使用 v3。
+
+## 操作顺序
+
+1. 创建 PR，等待 CI 全部通过后合并 main；Cloudflare 按现有配置自动部署。
+2. 部署成功后打开网页并登录，或请求已有订阅，即会触发升级。
+3. 检查保留的配置、预览和订阅。旧页面持有的 revision 已失效，保存遇到冲突时重新加载。
+4. 若启用了 GitHub 同步，检查差异后明确选择以 R2 覆盖 GitHub，让保留的配置文件更新为新格式。不会在自动升级时擅自向 GitHub 推送。
+
+## 数据处理
+
+- 删除适配器资源以及 adapterUrl 非空的 Profile；被删除配置的订阅不再可用。需要保留时，可以在部署前把适配器效果写入独立模板，再取消该配置的适配器选择。
+- 其余 Profile 删除空 adapterUrl 字段；名称、备注、顺序、模板/节点引用和筛选规则不变。
+- 模板、节点、规则集、SRS 状态、artifact 指针、认证与订阅签名版本保持原样。保留配置的订阅地址不变。
+- configs 仍保存 Profile 定义，templates、nodes、rulesets 仍分立；不把完整 sing-box 产物存入 configs。
+- GitHub 同步基线重置，首次同步需要明确方向。旧 GitHub Profile 带 adapterUrl 时不能直接拉取；使用网页明确确认的 R2 覆盖推送即可更新这些文件。旧 adapters 目录已不参与同步或运行，可自行删除，不阻塞网站使用。
+
+## 一次性执行与故障恢复
+
+升级先完整校验旧 head、snapshot 身份和内容哈希，再创建原始数据备份：
+workspaces/primary/migrations/v3/<旧 revision ID>.json。
+该文件包含原 head 与 snapshot，使用只创建不覆盖的条件写入，不参与普通 revision retention 清理，也不会输出到日志或 GitHub。
+
+随后写入两个新的 v3 revision，保证 current/previous 都能被新运行时读取；最后以原 head ETag 条件切换入口。并发请求只会成功发布一个入口，其余重读；并发旧版保存不会被覆盖。中途失败保留旧 head，后续请求可重试；损坏数据拒绝转换，不清空或重新初始化工作区。
+
+迁移成功后按 v3 正常读取，不再执行转换或重复创建备份。适配器执行、业务 schema 和历史 readRevision 不支持旧格式。迁移模块独立放在 worker/infrastructure/r2/migrations/workspace-v3.ts；后续停止支持从 v2 直接升级时，可删除该模块、读取入口及备份 key 定义，不需要修改业务功能。
+
+## 回退与可选离线检查
+
+跨 v2/v3 不能只回滚 Worker。需要回退时停止写入，先备份最新 v3 数据，再配套恢复旧格式；如果已产生新数据，不得直接恢复迁移备份而丢弃新修改。自动迁移不提供自动降级。
+
+scripts/upgrade-workspace.mjs 仍可用于离线审阅备份、生成删除清单和转换结果，但正常更新不需要运行，也无需手工上传其输出。

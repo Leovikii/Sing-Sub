@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MOMO_ADAPTER_PRESET, type WorkspaceSnapshot } from '../../shared';
+import type { WorkspaceSnapshot } from '../../shared';
 import {
   handleBootstrap,
   handleLogin,
@@ -11,10 +11,11 @@ import { R2WorkspaceStore } from '../../worker/infrastructure/r2/r2-workspace-st
 import { InMemoryR2Bucket } from '../fakes/in-memory-r2-bucket';
 import { InMemoryCacheApi } from '../fakes/in-memory-cache-api';
 import worker from '../../worker/index';
+import { CacheApiResponseCache } from '../../worker/infrastructure/cache/cache-api-response-cache';
 
 function snapshot(): WorkspaceSnapshot {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     workspaceId: 'primary',
     revisionId: 'revision-1',
     previousRevisionId: null,
@@ -29,7 +30,7 @@ function snapshot(): WorkspaceSnapshot {
       tokenVersion: 1,
     },
     profiles: [],
-    assets: { nodes: {}, templates: {}, adapters: {}, rulesets: {} },
+    assets: { nodes: {}, templates: {}, rulesets: {} },
     builds: {},
     sync: { status: 'never' },
   };
@@ -80,13 +81,6 @@ describe('primary workspace auth routes', () => {
         assets: {
           nodes: {},
           templates: {},
-          adapters: {
-            momo: {
-              path: 'sing-sub/adapters/momo.json',
-              note: 'OpenWrt Momo',
-              content: MOMO_ADAPTER_PRESET,
-            },
-          },
           rulesets: {},
         },
       },
@@ -248,7 +242,7 @@ describe('primary workspace auth routes', () => {
     expect(missing.status).toBe(404);
   });
 
-  it('validates adapter assets before publishing them', async () => {
+  it('rejects removed adapter assets without publishing a revision', async () => {
     const bucket = new InMemoryR2Bucket();
     await new R2WorkspaceStore(bucket).create({ workspaceId: 'primary', snapshot: snapshot() });
     const env = environment(bucket);
@@ -281,9 +275,10 @@ describe('primary workspace auth routes', () => {
         expectedRevision: 'revision-1',
       }),
     }), env);
-    expect(saved.status).toBe(200);
+    expect(saved.status).toBe(400);
     await expect(new R2WorkspaceStore(bucket).read('primary')).resolves.toMatchObject({
-      snapshot: { assets: { adapters: { custom: { content: { name: 'custom' } } } } },
+      revision: 'revision-1',
+      snapshot: { assets: { nodes: {}, templates: {}, rulesets: {} } },
     });
   });
 
@@ -292,6 +287,7 @@ describe('primary workspace auth routes', () => {
     const configured = snapshot();
     configured.profiles = [{
       name: 'default',
+      note: 'Profile management note',
       templateUrl: 'sing-sub/templates/default.json',
       nodesPath: '',
       rules: [],
@@ -301,6 +297,9 @@ describe('primary workspace auth routes', () => {
     configured.assets.templates.default = {
       path: 'sing-sub/templates/default.json',
       content: {
+        note: 'Windows GUI',
+        _sing_sub: { note: 'Template metadata' },
+        outbounds: [{ type: 'direct', tag: 'direct', note: 'Outbound note' }],
         log: { level: 'info' },
         route: {
           rule_set: [{ tag: 'public-rules', url: 'https://example.com/rules/legacy-token/public-rules.srs' }],
@@ -309,7 +308,11 @@ describe('primary workspace auth routes', () => {
     };
     await new R2WorkspaceStore(bucket).create({ workspaceId: 'primary', snapshot: configured });
     const env = environment(bucket);
-    vi.stubGlobal('caches', { default: new InMemoryCacheApi() });
+    const cache = new InMemoryCacheApi();
+    vi.stubGlobal('caches', { default: cache });
+    await new CacheApiResponseCache(cache).put({
+      workspaceId: 'primary', revision: 'revision-1', resource: 'subscription-json', entityId: 'profile-v2-default',
+    }, { body: new TextEncoder().encode('{"note":"stale contaminated config"}'), contentType: 'application/json' }, 300);
     const login = await handleLogin(new Request('https://example.com/api/login', {
       method: 'POST',
       body: JSON.stringify({ adminPassword: 'correct-password' }),
@@ -342,6 +345,27 @@ describe('primary workspace auth routes', () => {
     const previewData = await data(preview) as { content: string };
     expect(previewData.content).toContain('https://example.com/rules/public-rules.srs');
     expect(previewData.content).not.toContain('legacy-token');
+    const draft = await worker.fetch(new Request('https://example.com/api/preview', {
+      method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify(configured.profiles[0]),
+    }), env);
+    expect(draft.status).toBe(200);
+    const draftData = await data(draft) as { content: string };
+    for (const content of [normalizedBody, previewData.content, draftData.content]) {
+      const config = JSON.parse(content);
+      expect(config).not.toHaveProperty('note');
+      expect(config).not.toHaveProperty('_sing_sub');
+      expect(config.outbounds[0]).not.toHaveProperty('note');
+      expect(config.log.level).toBe('info');
+    }
+    const source = await worker.fetch(new Request('https://example.com/api/file?path=sing-sub/templates/default.json', {
+      headers: { Cookie: cookie },
+    }), env);
+    expect(JSON.parse((await data(source) as { content: string }).content)).toMatchObject({
+      note: 'Windows GUI', _sing_sub: { note: 'Template metadata' },
+    });
+    expect((await new R2WorkspaceStore(bucket).read('primary')).snapshot).toEqual(configured);
+
 
     const updated = await worker.fetch(new Request('https://example.com/api/file', {
       method: 'PUT',

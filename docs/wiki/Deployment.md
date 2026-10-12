@@ -38,7 +38,7 @@ Connect the repository or retry the build to start deployment. The deployment in
 - preserves existing runtime secrets during later deployments;
 - deploys the Worker with the `WORKSPACE_BUCKET` binding.
 
-Open the generated `workers.dev` URL and sign in with the administrator password. On an empty bucket, the first successful login creates an empty workspace and an editable Momo adapter.
+Open the generated `workers.dev` URL and sign in with the administrator password. On an empty bucket, the first successful login creates an empty workspace.
 
 After the first successful deployment, `SING_SUB_ADMIN_PASSWORD` may be removed from Build variables. The runtime `ADMIN_PASSWORD` remains in the Worker's encrypted variables. Restore the build secret before a later deployment only if the runtime administrator secret was deleted.
 

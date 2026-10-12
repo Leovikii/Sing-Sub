@@ -34,7 +34,6 @@ export const router = createHashRouter([
             { path: 'profiles', element: deferred(<ProfilesPage />) },
             { path: 'resources/nodes', element: deferred(<ResourcesPage type="node" />) },
             { path: 'resources/templates', element: deferred(<ResourcesPage type="template" />) },
-            { path: 'resources/adapters', element: deferred(<ResourcesPage type="adapter" />) },
             { path: 'resources/rulesets', element: deferred(<ResourcesPage type="ruleset" />) },
             { path: 'sync', element: deferred(<SyncPage />) },
             {

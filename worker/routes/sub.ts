@@ -81,7 +81,7 @@ export async function handleSubscription(
     workspaceId: workspace.workspaceId,
     revision: workspace.revision,
     resource: 'subscription-json',
-    entityId: `profile-v2-${name}`,
+    entityId: `profile-v3-${name}`,
   };
   const cached = await cacheGet(identity);
   if (cached) return subscriptionResponse(new TextDecoder().decode(cached.body));

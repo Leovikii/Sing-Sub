@@ -19,7 +19,7 @@ R2 Standard 是唯一在线主存储。新部署不通过登录 API 导入 GitHu
 }
 ```
 
-管理员 Worker Secret 校验通过后创建首个 immutable workspace schema v2 revision、head pointer 和 Momo adapter。该请求不访问 GitHub，不创建 private credentials。
+管理员 Worker Secret 校验通过后创建首个 immutable workspace schema v3 revision 和 head pointer。该请求不访问 GitHub，不创建 private credentials。
 
 ## 已有 GitHub 数据
 
@@ -41,7 +41,7 @@ Pull 固定 remote commit，完成路径、大小、UTF-8、schema、名称和�
 [ ] 三个 runtime secret 名称存在，值未输出
 [ ] 未登录 bootstrap 返回 setupRequired=true
 [ ] 登录请求只包含 adminPassword
-[ ] 首个 workspace revision 为 schema v2 并包含 Momo adapter
+[ ] 首个 workspace revision 为 schema v3，资产集合不包含 adapters
 [ ] 未连接 GitHub 时 Profile、Asset、Ruleset JSON 和私有订阅可用
 [ ] 可选 GitHub 连接与 pull 在登录后独立完成
 ```

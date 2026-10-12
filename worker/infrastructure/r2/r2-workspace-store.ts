@@ -89,19 +89,38 @@ export class R2WorkspaceStore implements WorkspaceStore<WorkspaceSnapshot> {
   }
 
   async read(workspaceId: string): Promise<WorkspaceRead<WorkspaceSnapshot>> {
-    const head = await this.loadHead(workspaceId);
-    const snapshot = await this.readRevision(workspaceId, head.document.currentRevision);
-    const hash = await sha256Hex(canonicalJson(snapshot));
-    if (hash !== head.document.contentHash) {
-      throw new WorkspaceStorageCorruptError('Head content hash does not match current revision');
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const head = await this.loadHead(workspaceId);
+      const document = await this.loadRevisionDocument(workspaceId, head.document.currentRevision);
+      if (document && typeof document === 'object' && 'schemaVersion' in document && document.schemaVersion === 2) {
+        const { migrateWorkspaceV3 } = await import('./migrations/workspace-v3');
+        await migrateWorkspaceV3(this.bucket, head.document, head.etag, document);
+        continue;
+      }
+      const snapshot = this.parseSnapshot(document, workspaceId, head.document.currentRevision);
+      const hash = await sha256Hex(canonicalJson(snapshot));
+      if (hash !== head.document.contentHash) {
+        throw new WorkspaceStorageCorruptError('Head content hash does not match current revision');
+      }
+      return { workspaceId, revision: snapshot.revisionId, snapshot };
     }
-    return { workspaceId, revision: snapshot.revisionId, snapshot };
+    const latest = await this.loadHead(workspaceId);
+    throw new WorkspaceConflictError('workspace-v3-upgrade', latest.document.currentRevision);
   }
 
   async readRevision(workspaceId: string, revisionId: string): Promise<WorkspaceSnapshot> {
+    return this.parseSnapshot(await this.loadRevisionDocument(workspaceId, revisionId), workspaceId, revisionId);
+  }
+
+  private async loadRevisionDocument(workspaceId: string, revisionId: string): Promise<unknown> {
     const object = await this.bucket.get(r2ObjectKeys.revision(workspaceId, revisionId));
     if (!object) throw new WorkspaceRevisionNotFoundError(workspaceId, revisionId);
-    return this.parseSnapshot(await object.text(), workspaceId, revisionId);
+    const source = await object.text();
+    try {
+      return JSON.parse(source);
+    } catch {
+      throw new WorkspaceStorageCorruptError('Revision is not valid JSON');
+    }
   }
 
   async publish(command: PublishWorkspaceCommand<WorkspaceSnapshot>): Promise<PublishWorkspaceResult> {
@@ -194,13 +213,7 @@ export class R2WorkspaceStore implements WorkspaceStore<WorkspaceSnapshot> {
     return { document: parsed.data, etag: object.etag };
   }
 
-  private parseSnapshot(source: string, workspaceId: string, revisionId: string): WorkspaceSnapshot {
-    let document: unknown;
-    try {
-      document = JSON.parse(source);
-    } catch {
-      throw new WorkspaceStorageCorruptError('Revision is not valid JSON');
-    }
+  private parseSnapshot(document: unknown, workspaceId: string, revisionId: string): WorkspaceSnapshot {
     const parsed = workspaceSnapshotSchema.safeParse(document);
     if (!parsed.success || parsed.data.workspaceId !== workspaceId || parsed.data.revisionId !== revisionId) {
       throw new WorkspaceStorageCorruptError('Revision schema or identity is invalid');

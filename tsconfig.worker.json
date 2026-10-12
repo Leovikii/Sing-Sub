@@ -15,5 +15,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["worker/**/*.ts", "shared/**/*.ts"]
+  "include": ["worker/**/*.ts", "shared/**/*.ts", "scripts/prepare-workspace-upgrade.ts"]
 }

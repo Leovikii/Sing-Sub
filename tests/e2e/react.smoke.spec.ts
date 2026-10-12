@@ -16,6 +16,8 @@ interface ReactApiMock {
   compilerRequests: Request[];
   fileRequests: Request[];
   assets: Array<{ path: string; note: string }>;
+  templates: Array<{ path: string; note: string }>;
+  previewRequests: Request[];
   rulesets: Array<{ path: string; note: string }>;
   contents: Record<string, string>;
   syncRequests: Request[];
@@ -42,6 +44,8 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
     compilerRequests: [],
     fileRequests: [],
     assets: [],
+    templates: [],
+    previewRequests: [],
     rulesets: [],
     contents: {},
     syncRequests: [],
@@ -103,6 +107,7 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
     }
 
     if (pathname === '/api/preview' && request.method() === 'POST') {
+      state.previewRequests.push(request);
       const profile = request.postDataJSON();
       await respond({ content: JSON.stringify({ profile: profile.name, outbounds: [] }, null, 2) });
       return;
@@ -203,7 +208,13 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
     }
 
     if (pathname === '/api/assets' && request.method() === 'GET') {
-      await respond({ nodes: state.assets, templates: [], adapters: [], rulesets: state.rulesets });
+      await respond({ nodes: state.assets, templates: state.templates, rulesets: state.rulesets });
+      return;
+    }
+
+    if (pathname === '/api/template') {
+      const path = new URL(request.url()).searchParams.get('source') ?? '';
+      await respond({ content: JSON.parse(state.contents[path] ?? '{}') });
       return;
     }
 
@@ -285,7 +296,7 @@ test('React entry initializes with a password-only request and guarded route', a
   expect(brandIconBox!.width).toBe(36);
   expect(brandIconBox!.height).toBe(36);
   await page.goto('/#/settings/about');
-  await expect(page.getByText('v3.1.1', { exact: true })).toBeVisible();
+  await expect(page.getByText('v3.1.2', { exact: true })).toBeVisible();
 });
 
 test('React entry persists language and color scheme with native Mantine controls', async ({ page }) => {
@@ -922,4 +933,59 @@ test('React sync pushes with the current revision after status preflight', async
 
   await expect.poll(() => state.syncRequests.length).toBe(1);
   expect(state.syncRequests[0].postDataJSON()).toEqual({ expectedRevision: 'revision-1', resolution: 'safe' });
+});
+
+
+test('React filter modes respond to clicks and keyboard before and after entering keywords', async ({ page }) => {
+  const state = await mockReactApi(page);
+  const templatePath = 'sing-sub/templates/filters.json';
+  state.templates = [{ path: templatePath, note: '' }];
+  state.contents[templatePath] = JSON.stringify({ outbounds: [{ type: 'selector', tag: 'proxy', outbounds: [] }] });
+  await login(page, state);
+  await page.getByRole('button', { name: '新建配置', exact: true }).first().click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('combobox', { name: '适配器', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '适配器', exact: true })).toHaveCount(0);
+  await dialog.getByRole('textbox', { name: '名称', exact: true }).fill('filter-check');
+  await dialog.getByRole('combobox', { name: '模板', exact: true }).click();
+  await page.getByRole('option', { name: 'filters', exact: true }).click();
+  const modes = dialog.getByRole('combobox', { name: /筛选方式/ });
+  await expect(modes).toHaveCount(2);
+  const keywords = dialog.getByRole('textbox', { name: '关键词', exact: true });
+  for (let index = 0; index < 2; index += 1) {
+    const mode = modes.nth(index);
+    await mode.click();
+    await page.getByRole('option', { name: '排除', exact: true }).click();
+    await expect(mode).toHaveValue('排除');
+    await keywords.nth(index).fill('HK');
+    await expect(mode).toHaveValue('排除');
+    await keywords.nth(index).fill('');
+    await expect(mode).toHaveValue('排除');
+    await mode.focus();
+    await mode.press('ArrowDown');
+    await mode.press('ArrowUp');
+    await mode.press('Enter');
+    await expect(mode).toHaveValue('包含');
+    await mode.click();
+    await page.getByRole('option', { name: '排除', exact: true }).click();
+    await expect(mode).toHaveValue('排除');
+  }
+  await dialog.getByText('预览', { exact: true }).click();
+  await expect.poll(() => state.previewRequests.length).toBeGreaterThan(0);
+  expect(state.previewRequests.at(-1)!.postDataJSON()).toMatchObject({ rules: [], inboundRules: [] });
+  await dialog.getByText('编辑', { exact: true }).click();
+  for (let index = 0; index < 2; index += 1) {
+    await expect(modes.nth(index)).toHaveValue('排除');
+    await keywords.nth(index).fill('HK');
+  }
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  expect(state.profiles[0]).toMatchObject({
+    rules: [{ group: 'proxy', filters: [{ action: 'exclude', keyword: 'HK' }] }],
+    inboundRules: [{ tag: 'global-inbounds', filters: [{ action: 'exclude', keyword: 'HK' }] }],
+  });
+  await page.getByRole('article', { name: 'filter-check', exact: true }).getByRole('button', { name: '编辑', exact: true }).click();
+  await expect(modes.nth(0)).toHaveValue('排除');
+  await expect(modes.nth(1)).toHaveValue('排除');
+  await page.screenshot({ path: test.info().outputPath('filter-modes.png'), fullPage: true });
 });

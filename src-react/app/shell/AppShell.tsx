@@ -28,7 +28,6 @@ import {
   ShieldCheck,
   UserRound,
   Waypoints,
-  Wrench,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { modals } from '@mantine/modals';
@@ -44,7 +43,6 @@ const navigation = [
     children: [
       { to: '/resources/nodes', label: 'nav.nodes', icon: Waypoints },
       { to: '/resources/templates', label: 'nav.templates', icon: Layers3 },
-      { to: '/resources/adapters', label: 'nav.adapters', icon: Wrench },
       { to: '/resources/rulesets', label: 'nav.rulesets', icon: ShieldCheck },
     ],
   },

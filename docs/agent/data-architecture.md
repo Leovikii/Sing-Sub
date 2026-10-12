@@ -30,7 +30,6 @@ interface WorkspaceSnapshot {
   assets: {
     nodes: Record<string, JsonAsset>
     templates: Record<string, JsonAsset>
-    adapters: Record<string, JsonAsset>
     rulesets: Record<string, RulesetAsset>
   }
   builds: Record<string, BuildSummary>
@@ -41,8 +40,8 @@ interface WorkspaceSnapshot {
 - 普通业务数据进入 immutable revision。
 - GitHub PAT、短期 job ticket 等敏感动态配置不得进入 revision、快照导出或 GitHub manifest。
 - SRS 二进制不嵌入 workspace JSON，只保存 artifact descriptor。
-- `schemaVersion` 必须由 shared schema 校验。ADR-043 的 workspace schema v2 是唯一运行时持久化契约；ADR-046 的生产迁移已完成并删除，Worker 不再读取或转换 v1。
-- 版本号按文档类型独立演进：head schema v1、workspace snapshot schema v2、editable-sync manifest schema v2、adapter schema v1 之间没有继承或同步递增关系。
+- `schemaVersion` 必须由 shared schema 校验。workspace schema v3 是唯一业务持久化契约；ADR-062 在 current 读取入口提供独立 v2→v3 一次性自动升级，正常读取及历史 readRevision 不支持旧格式，v1 不在升级范围。
+- 版本号按文档类型独立演进：head schema v1、workspace snapshot schema v3、editable-sync manifest schema v2 之间没有继承或同步递增关系。
 - workspace 之外不维护需要事务同步的业务索引。
 
 ## R2 对象布局
@@ -99,7 +98,7 @@ HTTP route 只能调用 application use case，不得直接读取 R2、拼 key �
 - 重命名在同一 snapshot command 中验证旧名称存在且新名称不存在。
 - 删除为新 revision 中移除实体，不直接删除旧 revision 内的数据。
 - 订阅 JSON 由 current revision 在请求时拼装，不产生持久化最终配置；以 `workspaceId + revisionId + profileId` 作为 Cache API key。
-- 保存任意 profile、节点、模板或 adapter 都发布新 revision，因此下一次订阅自动绕过旧 response cache，无需 rebuild、flush 或用户刷新按钮。
+- 保存任意 profile、节点或模板 都发布新 revision，因此下一次订阅自动绕过旧 response cache，无需 rebuild、flush 或用户刷新按钮。
 - Profile 模板必须来自 workspace revision 内的模板资产；HTTP 外部模板不再支持，因此预览与订阅都具有明确的 revision 信号。
 - Cache API miss、驱逐或跨 PoP 不一致不影响正确性；禁止建立新的 KV 缓存。
 

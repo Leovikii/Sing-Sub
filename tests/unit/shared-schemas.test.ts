@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  adapterPresetSchema,
   loginRequestSchema,
   profileSchema,
   putStateRequestSchema,
@@ -13,7 +12,6 @@ const validProfile = {
   nodesPath: 'sing-sub/nodes/default.json',
   rules: [{ group: 'proxy', filters: [{ action: 'include' as const, keyword: 'HK' }] }],
   inboundRules: [{ tag: 'tun', filters: [{ action: 'exclude' as const, keyword: 'LAN' }] }],
-  adapterUrl: 'sing-sub/adapters/momo.json',
   order: 0,
 };
 
@@ -33,22 +31,9 @@ describe('shared request schemas', () => {
     expect(profileSchema.safeParse(profile).success).toBe(false);
   });
 
-  it('only accepts workspace adapter references', () => {
-    expect(profileSchema.safeParse({ ...validProfile, adapterUrl: 'sing-sub/templates/momo.json' }).success).toBe(false);
-    expect(profileSchema.safeParse({ ...validProfile, adapterUrl: 'https://example.com/momo.json' }).success).toBe(false);
-  });
-
-  it('accepts replacement-only adapters and rejects unknown operations', () => {
-    expect(adapterPresetSchema.safeParse({
-      schemaVersion: 1,
-      name: 'momo',
-      replacements: [{ path: ['inbounds'], value: [] }],
-    }).success).toBe(true);
-    expect(adapterPresetSchema.safeParse({
-      schemaVersion: 1,
-      name: 'momo',
-      replacements: [{ op: 'append', path: ['inbounds'], value: [] }],
-    }).success).toBe(false);
+  it('rejects removed adapter references instead of silently accepting them', () => {
+    expect(profileSchema.safeParse({ ...validProfile, adapterUrl: 'sing-sub/adapters/momo.json' }).success).toBe(false);
+    expect(profileSchema.safeParse({ ...validProfile, adapterUrl: '' }).success).toBe(false);
   });
 
   it('rejects duplicate profile names', () => {
