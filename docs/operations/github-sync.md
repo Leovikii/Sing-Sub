@@ -14,11 +14,11 @@ sing-sub/rulesets/*.json
 sing-sub/manifest.json
 ```
 
-editable-sync manifest 使用 schema v2，只导入 configs、nodes、templates、rulesets 路径。旧 adapters/patches 目录不参与同步，可自行删除。现有工作区会 [自动升级](./workspace-upgrade.md)；远端旧 Profile 字段不符合新 schema 时，先检查差异，再明确选择以 R2 覆盖推送，不需要手工编辑这些文件。
+editable-sync manifest 使用 schema v2，只导入 configs、nodes、templates、rulesets 路径。旧 adapters/patches 目录不参与同步，可自行删除。旧 v2 工作区须先通过 3.1.2 [完成升级](./workspace-upgrade.md)；远端旧 Profile 字段不符合新 schema 时，先检查差异，再明确选择以 R2 覆盖推送，不需要手工编辑这些文件。
 
 `.github/workflows/compile-srs.yml` 只由 SRS provisioner 管理。README、源码、其他 workflow 和任意非受管路径在同步 push 中通过 Git base tree 原样保留。SRS 二进制、build/job 状态、PAT、Cookie、订阅 Token 和短期 ticket 不进入同步树。
 
-业务 JSON 使用递归稳定 key 顺序、两空格缩进、LF 和单个末尾换行。远端文件在比较前先解析并重新规范化，因此只修改缩进或 key 顺序不会产生业务冲突。
+业务 JSON 保留对象字段与数组顺序，使用、两空格缩进、LF 和单个末尾换行。远端文件在比较前先解析并重新规范化，因此只修改缩进或 key 顺序不会产生业务冲突。
 
 ## 连接与权限
 
@@ -42,6 +42,8 @@ editable-sync manifest 使用 schema v2，只导入 configs、nodes、templates�
 - `local-ahead`：只有 R2 相对基准变化。
 - `remote-ahead`：只有 GitHub 相对基准变化。
 - `conflict`：两边相对基准都变化且内容不同。
+
+已连接时可以手动选择推送或拉取；安全方向直接执行，其他方向先确认覆盖目标。取消确认不会发起同步。远端旧格式或无效数据仍不能拉取，需修正远端数据或确认以 R2 覆盖推送。
 
 响应同时提供 local/remote/base revision、内容摘要、文件级 added/modified/deleted、`canPush`、`canPull` 和 `requiresResolution`。时间仅用于审计，不决定哪边覆盖哪边。
 

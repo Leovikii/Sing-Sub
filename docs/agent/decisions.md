@@ -118,3 +118,7 @@ Profile 定义仍位于 sing-sub/configs，模板、节点和规则集保持独�
 ## ADR-062：3.1.2 一次性自动升级
 
 取代 ADR-061 的手工离线应用要求。用户要求合并自动部署即可升级：R2 current 读取入口仅在 schema v2 时调用独立一次性转换模块，校验身份/哈希后备份原 head/snapshot，写入 v3 previous/current，再以原 ETag CAS 发布 head；冲突重读，不覆盖并发写入。业务 schema、历史 readRevision、builder 和同步导入仍只支持 v3，不保留适配器执行或双格式业务逻辑。升级代码隔离，可在不再支持从 v2 直接升级的后续版本删除。备份使用独立 migration prefix，不受 revision retention 清理。GitHub 仍只由用户显式同步，不在读取时写远端。
+
+## ADR-063：3.1.3 迁移退场与手动同步方向
+
+用户已确认 3.1.2 生产迁移成功。3.1.3 删除 v2→v3 一次性模块、current 读取触发入口、离线转换工具及专用测试，运行时只读 v3；旧安装必须先经过 3.1.2，已有迁移备份继续保留且不执行 R2 清理。同步 canPush/canPull 表示安全方向而非覆盖权限：已连接时允许选择任一方向，不安全方向使用既有 Mantine 确认弹窗和 overwrite 请求；Worker schema 校验、expectedRevision、GitHub 非强制更新及 SRS 语义不变。
