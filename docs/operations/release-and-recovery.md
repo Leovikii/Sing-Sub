@@ -2,14 +2,14 @@
 
 适用版本：`v3.1.2`；代码回滚基线：`v3.0.0`。
 
-部署前必须保留上一可用 Worker version，并完成本文的发布前检查。现有 workspace schema v2 必须先按 [工作区升级](./workspace-upgrade.md) 准备离线转换，在维护窗口配套切换数据和代码；新 Worker 不兼容旧数据格式。
+部署前必须保留上一可用 Worker version，并完成本文的发布前检查。现有 workspace schema v2 在部署后首次访问时自动升级，详见 [工作区自动升级](./workspace-upgrade.md)，无需手工操作 R2。
 
 ## 兼容范围
 
 - Worker `compatibility_date` 为 `2026-07-15`。
 - 运行时只需要 `WORKSPACE_BUCKET` R2 binding 和 `ADMIN_PASSWORD`、`SESSION_SIGNING_SECRET`、`SUBSCRIPTION_SIGNING_SECRET`。
 - Workers observability 与 Turnstile 暂不启用。
-- 当前运行时只读取 workspace schema v3；`workspaces/primary/head.json` 使用独立 head schema v1，GitHub sync manifest 保持 v2，但不再接受适配器路径。
+- 当前业务只读取 workspace schema v3，v2 current 在读取入口一次性自动转换；`workspaces/primary/head.json` 使用独立 head schema v1，GitHub sync manifest 保持 v2，但不再接受适配器路径。
 - 私有配置订阅 Token 为 `s2.<22-char-tag>`；旧格式不兼容。
 - 规则集公开 JSON/SRS URL、GitHub editable sync 与 SRS compiler 均不属于网站部署初始化。
 

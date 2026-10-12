@@ -114,3 +114,7 @@ CodeMirror 只能在非规则集资源进入编辑状态后动态加载；资源
 Profile 定义仍位于 sing-sub/configs，模板、节点和规则集保持独立。编辑源、R2 revision 和 GitHub 同步保留管理备注；预览与订阅共同使用的构建出口删除配置根与入站/出站对象上的 note、_sing_sub，保留任意键值映射（例如 HTTP headers）中的同名业务键及字段/数组顺序。订阅产物缓存版本随输出语义变更更新。规则集继续使用既有 compiler-source 边界。
 
 筛选器模式属于表单草稿；空关键词不能导致模式重置，空规则仅在预览/提交时规范化掉。
+
+## ADR-062：3.1.2 一次性自动升级
+
+取代 ADR-061 的手工离线应用要求。用户要求合并自动部署即可升级：R2 current 读取入口仅在 schema v2 时调用独立一次性转换模块，校验身份/哈希后备份原 head/snapshot，写入 v3 previous/current，再以原 ETag CAS 发布 head；冲突重读，不覆盖并发写入。业务 schema、历史 readRevision、builder 和同步导入仍只支持 v3，不保留适配器执行或双格式业务逻辑。升级代码隔离，可在不再支持从 v2 直接升级的后续版本删除。备份使用独立 migration prefix，不受 revision retention 清理。GitHub 仍只由用户显式同步，不在读取时写远端。

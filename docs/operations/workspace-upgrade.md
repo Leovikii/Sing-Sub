@@ -1,53 +1,34 @@
-# 工作区升级：移除适配器
+# 工作区自动升级：移除适配器
 
-适用于从 workspace schema v2 升级到 v3 的现有安装。新建工作区直接使用 v3，无需此步骤。新 Worker 不读取 v2，也不在运行时转换旧数据；不要先部署新 Worker 再尝试用网页修改旧配置。
+现有 workspace schema v2 在部署 3.1.2 后，首次访问需要工作区的接口时自动转换为 v3。无需手动修改 R2、执行离线脚本或切换 head；新建工作区直接使用 v3。
 
-## 变更范围
+## 操作顺序
 
-- 删除所有适配器资源，删除 adapterUrl 非空的 Profile；这些 Profile 对应的订阅将失效，之后可使用独立模板重新创建。
-- 其余 Profile 删除空的 adapterUrl 字段，名称、备注、模板和节点引用、筛选规则不变。
-- 模板、节点、规则集、SRS 状态与 artifact 指针、认证和订阅签名版本保持原样。
-- 生成两份 v3 不可变 revision：转换基线的 previousRevisionId 指向旧 current，新 current 指向该基线。这样清理任务读取 current/previous 时均使用新格式；旧 revision 不覆盖、不删除。
-- 同步基线重置为 never。下一次同步需明确选择方向，不能沿用旧适配器文件参与计算的基线。
-- 历史 v2 revision 只保留作备份，不能由 v3 运行时直接 restore；恢复前需离线转换为新格式。
+1. 创建 PR，等待 CI 全部通过后合并 main；Cloudflare 按现有配置自动部署。
+2. 部署成功后打开网页并登录，或请求已有订阅，即会触发升级。
+3. 检查保留的配置、预览和订阅。旧页面持有的 revision 已失效，保存遇到冲突时重新加载。
+4. 若启用了 GitHub 同步，检查差异后明确选择以 R2 覆盖 GitHub，让保留的配置文件更新为新格式。不会在自动升级时擅自向 GitHub 推送。
 
-## 离线准备
+## 数据处理
 
-1. 暂停自动部署及所有写入，包括网页保存、同步、SRS callback 和自动清理。备份当前 Worker version、R2 head、current revision 和 GitHub 数据树。升级文件含私有配置，存放在仓库外的受保护目录，不提交 Git。
-2. 从 R2 下载 workspaces/primary/head.json，并根据其中 currentRevision 下载对应 workspaces/primary/revisions/<revision>.json。记录 head 的 ETag；再次读取确认下载期间没有发生写入。不要把 head 或 revision 正文输出到日志。
-3. 在新代码目录安装锁定依赖后运行（路径换成自己的备份目录）：
+- 删除适配器资源以及 adapterUrl 非空的 Profile；被删除配置的订阅不再可用。需要保留时，可以在部署前把适配器效果写入独立模板，再取消该配置的适配器选择。
+- 其余 Profile 删除空 adapterUrl 字段；名称、备注、顺序、模板/节点引用和筛选规则不变。
+- 模板、节点、规则集、SRS 状态、artifact 指针、认证与订阅签名版本保持原样。保留配置的订阅地址不变。
+- configs 仍保存 Profile 定义，templates、nodes、rulesets 仍分立；不把完整 sing-box 产物存入 configs。
+- GitHub 同步基线重置，首次同步需要明确方向。旧 GitHub Profile 带 adapterUrl 时不能直接拉取；使用网页明确确认的 R2 覆盖推送即可更新这些文件。旧 adapters 目录已不参与同步或运行，可自行删除，不阻塞网站使用。
 
-~~~powershell
-npm ci
-node scripts/upgrade-workspace.mjs C:/private-backup/head.json C:/private-backup/current-revision.json C:/private-backup/upgrade-output
-~~~
+## 一次性执行与故障恢复
 
-输出目录必须不存在。工具先验证旧格式、head/revision 身份和内容哈希，再生成文件；它不连接 R2 或 GitHub，不修改输入文件，也不执行适配器替换。
+升级先完整校验旧 head、snapshot 身份和内容哈希，再创建原始数据备份：
+workspaces/primary/migrations/v3/<旧 revision ID>.json。
+该文件包含原 head 与 snapshot，使用只创建不覆盖的条件写入，不参与普通 revision retention 清理，也不会输出到日志或 GitHub。
 
-输出包括：
+随后写入两个新的 v3 revision，保证 current/previous 都能被新运行时读取；最后以原 head ETag 条件切换入口。并发请求只会成功发布一个入口，其余重读；并发旧版保存不会被覆盖。中途失败保留旧 head，后续请求可重试；损坏数据拒绝转换，不清空或重新初始化工作区。
 
-- report.json：被删除的 Profile/适配器、保留的 Profile、新旧 revision ID、目标 R2 key 及 revision custom metadata。
-- previous-revision.json、revision.json：通过新 schema 校验的转换基线和新 current。
-- head.candidate.json：指向新 revision 的候选 head；head.backup.json 保留旧 head。
-- sing-sub/：新格式的 GitHub 业务文件与 manifest。configs 仍保存 Profile 定义；templates、nodes、rulesets 仍单独保存。这里不包含完整 sing-box 配置产物。
+迁移成功后按 v3 正常读取，不再执行转换或重复创建备份。适配器执行、业务 schema 和历史 readRevision 不支持旧格式。迁移模块独立放在 worker/infrastructure/r2/migrations/workspace-v3.ts；后续停止支持从 v2 直接升级时，可删除该模块、读取入口及备份 key 定义，不需要修改业务功能。
 
-先审阅 report.json；如果仍需要某个适配器 Profile，先在旧版将所需设置直接写入独立模板、清空该 Profile 的适配器选择，再重新备份并运行工具。也可按删除报告在新版本重新创建配置。
+## 回退与可选离线检查
 
-## 应用升级
+跨 v2/v3 不能只回滚 Worker。需要回退时停止写入，先备份最新 v3 数据，再配套恢复旧格式；如果已产生新数据，不得直接恢复迁移备份而丢弃新修改。自动迁移不提供自动降级。
 
-以下操作会写入真实存储，应在维护窗口由部署负责人执行；离线工具不会执行这些操作。
-
-1. 若已连接 GitHub，在私有数据仓库中将受管 sing-sub 业务树更新为生成的树，明确删除报告中的旧 Profile 文件和所有旧 adapters 文件；保留 .github 和其他非受管内容。审阅 Git diff 后提交。不能只添加新文件而留下旧适配器路径，否则新版本同步校验会拒绝该树。
-2. 依次将 previous-revision.json、revision.json 上传到 report.json 指定的 previousRevisionKey、revisionKey，两者都要求目标不存在（If-None-Match: *）；同时设置 application/json 和 report 中对应的 previousRevisionMetadata、revisionMetadata。不得覆盖历史 revision。
-3. 重新确认 head ETag 与步骤 2 下载时记录的一致，且所有写入仍暂停。用原 ETag 作为 If-Match 条件，将 head.candidate.json 发布到 report 指定的 headKey。条件失败则停止，重新备份和生成，不能强制覆盖。
-4. 在同一维护窗口部署新 Worker。旧 Worker 与新数据格式不兼容，因此 head 切换与代码切换之间保持维护状态。
-5. 验证登录、保留的 Profile、编辑源备注、无管理字段的完整配置预览及订阅、规则集 JSON/SRS；再检查 GitHub preflight，确认不存在旧 adapters 路径，明确选择同步方向。
-6. 全部通过后恢复正常写入和自动部署。没有修改 signing secrets，保留的 Profile 订阅地址不变。
-
-如果工具输出与预期不符，不应用候选 head。不要用清空 bucket、重置口令或直接改写旧 revision 代替升级。
-
-## 回退
-
-代码回滚与数据格式恢复必须配套。v2 Worker 不能读取 v3 current，不能只回滚代码。若新版本已发生写入，禁止直接恢复 head.backup.json，以免丢失新数据。
-
-需要回退时保持维护状态，先备份 v3 current，再根据已保存的 v2 revision 准备符合目标 Worker 格式的新恢复 revision，previousRevisionId 指向回退前的 current，重算 head 内容哈希，以当前 head ETag 条件发布，再切换对应旧 Worker。私有凭据和 SRS 二进制不要删除；同步基线需重新确认。此流程不由升级工具自动执行。
+scripts/upgrade-workspace.mjs 仍可用于离线审阅备份、生成删除清单和转换结果，但正常更新不需要运行，也无需手工上传其输出。
