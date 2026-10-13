@@ -84,3 +84,5 @@
 - 包体积、依赖审计、迁移任务、验证结果和 Agent 工作记录只写入 `docs/agent`。
 - 长期部署、更新和恢复操作写入 `docs/operations`；发布历史使用 Git tag、GitHub Release 或 Git 历史，不建立 Wiki 版本页面。
 
+
+资源时间功能按 ADR-064 独立授权：摘要可扩展可选时间，拉取保留未变资源元数据；不改变 revision/CAS、同步覆盖或 SRS 语义。所有资源卡片统一显示配置修改时间，来源时间只在规则集 SOURCE 区域显示。

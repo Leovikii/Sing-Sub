@@ -18,7 +18,9 @@ editable-sync manifest 使用 schema v2，只导入 configs、nodes、templates�
 
 `.github/workflows/compile-srs.yml` 只由 SRS provisioner 管理。README、源码、其他 workflow 和任意非受管路径在同步 push 中通过 Git base tree 原样保留。SRS 二进制、build/job 状态、PAT、Cookie、订阅 Token 和短期 ticket 不进入同步树。
 
-业务 JSON 保留对象字段与数组顺序，使用、两空格缩进、LF 和单个末尾换行。远端文件在比较前先解析并重新规范化，因此只修改缩进或 key 顺序不会产生业务冲突。
+业务 JSON 保留对象字段与数组顺序，使用两空格缩进、LF 和单个末尾换行。远端文件在比较前先解析并重新规范化，因此只修改缩进或 key 顺序不会产生业务冲突。
+
+拉取时，未变资源保留已知的配置修改时间；新增或变更资源没有可信的原始修改时间，因此显示“未记录”，不将导入时间当作手动修改时间。来源抓取记录仍随规则集内容保留。
 
 ## 连接与权限
 

@@ -1,6 +1,6 @@
 # Cloudflare 部署、更新与恢复
 
-适用版本：`v3.1.3`；代码回滚基线：`v3.0.0`。
+适用版本：`v3.1.4`；代码回滚基线：`v3.0.0`。
 
 部署前必须保留上一可用 Worker version，并完成本文的发布前检查。现有 workspace schema v2 必须先通过 3.1.2 完成自动迁移，再更新至本版本，详见 [工作区升级路径](./workspace-upgrade.md)。
 
@@ -13,38 +13,9 @@
 - 私有配置订阅 Token 为 `s2.<22-char-tag>`；旧格式不兼容。
 - 规则集公开 JSON/SRS URL、GitHub editable sync 与 SRS compiler 均不属于网站部署初始化。
 
-## 新用户从零部署
+## 部署
 
-前提：Node.js 22 由 Cloudflare 构建环境提供；用户只需 Cloudflare 与 GitHub 账户，并在 Cloudflare 中启用 R2 subscription。
-
-1. Fork 官方 Sing-Sub 仓库。
-2. 在 Cloudflare `Workers & Pages` 中创建 Worker 或打开目标 Worker，进入 `Settings > Builds` 并连接 GitHub。
-3. 选择自己的 fork，生产分支 `main`，关闭非生产分支构建。
-4. Build command：`npm run build`。
-5. Deploy command：`npm run deploy:cloudflare`。
-6. 根目录留空；API Token 选择 Cloudflare 自动创建。
-7. 在 Build variables 中新增 `SING_SUB_ADMIN_PASSWORD`，输入至少 12 bytes 的管理员口令并点击“加密”。不得使用示例值或把口令截图、写入仓库。
-8. 连接并等待 Build 成功。初始化器自动创建/复用 `sing-sub-data`、生成两个 signing secrets，并部署 Worker。
-9. 打开 `<worker>.<account>.workers.dev`，用相同管理员口令登录；首次登录只创建空 workspace。
-10. 首次成功后可删除 Build Secret；后续部署只保留 runtime secrets。
-
-首次部署不需要手动创建 bucket、Cloudflare API Token、Account ID、GitHub Actions Secret、signing secret、数据仓库或 PAT。
-
-## 维护者生产切换
-
-现有 `sing-sub` Worker 必须从该 Worker 的 `Settings > Builds` 连接 `Leovikii/Sing-Sub`，不要通过导入流程创建第二个 Worker。
-
-- Production branch：`main`
-- Non-production branch builds：关闭
-- Build command：`npm run build`
-- Deploy command：`npm run deploy:cloudflare`
-- Root directory：空
-- API token：Cloudflare 自动创建
-- Build Secret：不需要；现有三个 runtime secrets 会被检测并保留
-
-首次 Build 只读取 Secret 名称和 R2 bucket 状态，不读取或轮换现有 Secret，不修改 R2 对象。确认 `ss.vkio.org` 登录、Profile、订阅、规则集和 GitHub sync 正常后，网站部署完全由 Workers Builds 承担。
-
-2026-07-16 生产验证完成：官方仓库 `main` 新 commit 已自动触发构建和部署，WebUI 与 R2/GitHub 功能正常。fresh-account 从零部署因暂无独立 Cloudflare 账户尚未执行，不影响现有生产 Worker 的控制面切换结论。
+新安装与 Workers Builds 配置见[部署指南](../wiki/DeploymentZH.md)。更新既有安装时复用同一个 Worker、R2 bucket 和运行时 Secret；不要重复创建或清空资源。
 
 ## 更新
 
@@ -87,12 +58,10 @@ GitHub 站外恢复使用显式 pull，并先完成 diff、schema/name/reference
 跨 workspace v2/v3 的回滚必须同时处理数据格式，不能仅切换 Worker；详见 [工作区升级与回退](./workspace-upgrade.md)。
 
 1. 优先 revert 错误的源码 commit，让 `main` 的新 commit 触发可审计的 Cloudflare Build。
-2. Cloudflare 账户提供 Worker version rollback 入口时，可选择已验证版本重新部署；当前维护者控制台未提供该入口，正式版不以破坏生产的方式强制演练。
+2. Cloudflare 账户提供 Worker version rollback 入口时，可选择已验证版本重新部署。
 3. 相同数据格式内，只有业务数据确实错误时才单独执行 workspace revision restore；跨 v2/v3 必须按升级文档配套转换数据。
 4. 不删除或清空 R2，不使用 GitHub force push 模拟数据回滚。
 5. 回滚后检查登录、Profile 预览、私有订阅、公开规则集和可选 GitHub sync。
-
-独立 Cloudflare 账户的全新部署、普通用户 `Sync fork` 和实际 Worker rollback 延期到首次外部部署、获得第二账户或真实故障时验证。生产自动更新、Wrangler version discovery、配置检查和本地 R2 restore 已通过；延期项不改变代码回滚与数据恢复的边界。
 
 ## Secret 恢复
 

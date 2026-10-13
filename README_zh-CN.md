@@ -4,13 +4,14 @@
 
 [English](README.md) · [Wiki](https://github.com/Leovikii/Sing-Sub/wiki/HomeZH) · [许可证](LICENSE)
 
-![版本 3.1.2](https://img.shields.io/badge/version-3.1.2-e64980)
+![版本 3.1.4](https://img.shields.io/badge/version-3.1.4-e64980)
 
 Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org/) 配置的自托管控制台。
 
 ## 功能特色
 
 - 在响应式双语 WebUI 中管理配置、节点集、模板和规则集。
+- 在资源卡片查看配置修改时间，在规则集编辑器查看远程来源刷新时间。
 - 使用一份模板和筛选后的节点动态构建配置。
 - 使用私有 Cloudflare R2 bucket 保存 workspace、不可变 revision 和 SRS 产物。
 - 通过简短签名 Token 分发私有配置订阅，以 JSON 或 SRS 公开分发规则集。
@@ -38,6 +39,8 @@ Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org
 请阅读[完整部署指南](https://github.com/Leovikii/Sing-Sub/wiki/DeploymentZH)或其[仓库内源文件](docs/wiki/DeploymentZH.md)。
 
 用户与运维文档统一见 [docs](docs/README.md)。
+
+日常操作见[使用指南](docs/wiki/UsageZH.md)。仍使用旧工作区格式的安装须[先经过 3.1.2 升级](docs/operations/workspace-upgrade.md)，再更新至后续版本。
 
 ## 许可证
 

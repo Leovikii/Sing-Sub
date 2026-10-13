@@ -50,6 +50,8 @@
 
 ## 更新
 
+仍使用旧 v2 工作区格式时，必须先部署 3.1.2 完成转换，再更新后续版本；详见[升级路径](https://github.com/Leovikii/Sing-Sub/blob/main/docs/operations/workspace-upgrade.md)。新安装不需要此步骤。
+
 - 维护者部署跟踪官方 `main`。
 - 普通用户部署跟踪自己的 fork `main`。
 - 更新 fork 时使用 GitHub **Sync fork**；新 commit 会触发 Cloudflare Workers Builds。
@@ -62,18 +64,6 @@
 - 对错误源码 commit 执行 revert，并由 `main` 的新 commit 触发 Cloudflare 构建。
 - Cloudflare 账户提供 Worker version rollback 时，选择已验证版本重新部署。
 - 业务数据恢复必须把选定的不可变 workspace revision 发布成新 revision；不要清空 R2，也不要手工把 `head.json` 指回旧 revision。
-
-维护者生产环境自动更新已经验证。独立 Cloudflare 账户的全新部署、普通用户 **Sync fork** 路径和实际 Worker 回滚，在获得第二账户或真实故障演练条件前延期验证。
-
-## 本地验证
-
-```powershell
-npm ci
-npm run verify
-npm run worker:dry-run
-```
-
-维护者仍可使用 `npm run deploy` 本地部署，但普通用户安装不需要该流程。
 
 完整恢复模型见 [release-and-recovery.md](https://github.com/Leovikii/Sing-Sub/blob/main/docs/operations/release-and-recovery.md)。
 
