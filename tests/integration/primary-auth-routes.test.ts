@@ -52,6 +52,42 @@ async function data(response: Response) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('primary workspace auth routes', () => {
+  it('exposes persisted configuration times for every resource kind and leaves them unchanged on conflicts and reads', async () => {
+    const bucket = new InMemoryR2Bucket();
+    const store = new R2WorkspaceStore(bucket);
+    await store.create({ workspaceId: 'primary', snapshot: snapshot() });
+    const env = environment(bucket);
+    const login = await handleLogin(new Request('https://example.com/api/login', {
+      method: 'POST', body: JSON.stringify({ adminPassword: 'correct-password' }),
+    }), env);
+    const cookie = login.headers.get('Set-Cookie')!.split(';')[0];
+    let revision = 'revision-1';
+    for (const kind of ['nodes', 'templates', 'rulesets'] as const) {
+      const path = `sing-sub/${kind}/timed.json`;
+      const content = kind === 'rulesets' ? { version: 2, rules: [], _sing_sub: { sources: [] } } : { outbounds: [] };
+      const response = await worker.fetch(new Request('https://example.com/api/file', {
+        method: 'PUT', headers: { Cookie: cookie },
+        body: JSON.stringify({ path, content: JSON.stringify(content), expectedRevision: revision }),
+      }), env);
+      expect(response.status).toBe(200);
+      revision = (await data(response) as { revision: string }).revision;
+      const saved = await store.read('primary');
+      expect(saved.snapshot.assets[kind].timed.updatedAt).toBe(saved.snapshot.createdAt);
+    }
+    const before = await store.read('primary');
+    const list = await worker.fetch(new Request('https://example.com/api/assets', { headers: { Cookie: cookie } }), env);
+    const summaries = await data(list) as Record<string, Array<{ updatedAt?: string }>>;
+    for (const kind of ['nodes', 'templates', 'rulesets'] as const) {
+      expect(summaries[kind][0].updatedAt).toBe(before.snapshot.assets[kind].timed.updatedAt);
+    }
+    const conflict = await worker.fetch(new Request('https://example.com/api/file', {
+      method: 'PUT', headers: { Cookie: cookie },
+      body: JSON.stringify({ path: 'sing-sub/nodes/timed.json', content: '{}', expectedRevision: 'revision-1' }),
+    }), env);
+    expect(conflict.status).toBe(409);
+    expect((await store.read('primary')).snapshot).toEqual(before.snapshot);
+  });
+
   it('reports setupRequired for an empty bucket', async () => {
     const response = await handleBootstrap(new Request('https://example.com/api/bootstrap'), environment(new InMemoryR2Bucket()));
 

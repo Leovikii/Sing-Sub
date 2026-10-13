@@ -26,3 +26,9 @@ http://127.0.0.1:8787/#/connect
 - 不得为方便测试静默放开写请求；真实数据写入需要用户对具体操作重新授权。
 
 验证完成后使用 `Ctrl+C` 停止服务。该工具不替代隔离 staging，也不改变 Worker、Cookie、R2 或 revision 语义。
+
+## 新版后端的隔离保存验收
+
+正式后端未部署新增摘要字段时，只读预览会显示时间未记录。验证保存后的修改时间应使用新版 Worker 的本地模式，不放开正式代理写入。
+
+本轮独立预览位于 http://127.0.0.1:8788 ，使用 .wrangler/resource-preview/wrangler.json、该目录下独立 .dev.vars 以及 state；绑定只运行 local 模拟，不读取原有 .wrangler/state 或生产 R2。示例数据为合成的节点、模板与手写规则。该目录已由 Git 和 lint 忽略，不提交测试口令与密钥。

@@ -4,13 +4,14 @@
 
 [简体中文](README_zh-CN.md) · [Wiki](https://github.com/Leovikii/Sing-Sub/wiki) · [License](LICENSE)
 
-![Version 3.1.2](https://img.shields.io/badge/version-3.1.2-e64980)
+![Version 3.1.4](https://img.shields.io/badge/version-3.1.4-e64980)
 
 Sing-Sub is a self-hosted control plane for editing and distributing [sing-box](https://sing-box.sagernet.org/) configurations.
 
 ## Features
 
 - Edit profiles, node sets, templates, and rule sets in a responsive bilingual WebUI.
+- See when resource configurations were last modified; inspect remote source refresh times in the rule set editor.
 - Build profiles dynamically from one template and filtered nodes.
 - Store the workspace, immutable revisions, and SRS artifacts in a private Cloudflare R2 bucket.
 - Distribute private configuration subscriptions with compact signed tokens and public rule sets as JSON or SRS.
@@ -38,6 +39,8 @@ The initializer creates or reuses `sing-sub-data`, generates missing runtime sig
 See the [complete deployment guide](https://github.com/Leovikii/Sing-Sub/wiki/Deployment) or its [version-controlled source](docs/wiki/Deployment.md).
 
 User and operator documentation is indexed in [docs](docs/README.md).
+
+Start with the [usage guide](docs/wiki/Usage.md). Existing installations with the old workspace format must [upgrade through 3.1.2](docs/operations/workspace-upgrade.md) before following newer code.
 
 ## License
 

@@ -486,6 +486,17 @@ export async function pullWorkspaceFromGithub(
   const createdAt = new Date().toISOString();
   const revisionId = crypto.randomUUID();
   const builds = await pulledBuilds(context.current.snapshot, context.importedRemote, revisionId, createdAt);
+  // GitHub business files carry no reliable manual modification timestamp.
+  // Preserve it only when this exact resource version is already known locally.
+  for (const kind of ['nodes', 'templates', 'rulesets'] as const) {
+    for (const [id, asset] of Object.entries(context.importedRemote.assets[kind])) {
+      const previous = context.current.snapshot.assets[kind][id];
+      if (previous?.updatedAt && previous.path === asset.path
+          && JSON.stringify(previous.content) === JSON.stringify(asset.content)) {
+        asset.updatedAt = previous.updatedAt;
+      }
+    }
+  }
   const result = await dependencies.workspaceStore.publish({
     workspaceId: command.workspaceId,
     expectedRevision: context.current.revision,

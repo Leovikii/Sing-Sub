@@ -7,6 +7,7 @@ Sing Sub is a self-hosted control plane for editing and distributing sing-box co
 ## Guides
 
 - [Deploy on Cloudflare](Deployment)
+- [Resources, profiles and sync](Usage)
 - [Release and recovery](https://github.com/Leovikii/Sing-Sub/blob/main/docs/operations/release-and-recovery.md)
 - [GitHub synchronization](https://github.com/Leovikii/Sing-Sub/blob/main/docs/operations/github-sync.md)
 - [SRS compiler](https://github.com/Leovikii/Sing-Sub/blob/main/docs/operations/srs-compiler.md)

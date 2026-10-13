@@ -76,6 +76,37 @@ const connection: SyncRepositoryConnection = {
 };
 
 describe('safe directional GitHub sync', () => {
+  it('preserves manual timestamps only for unchanged imported assets, including missing legacy times', async () => {
+    const local = snapshotWithTemplate('route-first');
+    const modifiedAt = '2026-07-15T04:00:00.000Z';
+    local.assets.templates.default.updatedAt = modifiedAt;
+    local.assets.nodes.legacy = { path: 'sing-sub/nodes/legacy.json', content: {} };
+    local.assets.rulesets.manual = {
+      path: 'sing-sub/rulesets/manual.json', content: { version: 2, rules: [], _sing_sub: { sources: [] } }, updatedAt: modifiedAt,
+    };
+    const store = new InMemoryWorkspaceStore('primary', local);
+    const gateway = new FakeSyncGateway();
+    const remote = structuredClone(local);
+    remote.profiles[0].note = 'changed elsewhere';
+    remote.assets.nodes.new = { path: 'sing-sub/nodes/new.json', content: {} };
+    await gateway.setRemote(remote);
+    const dependencies = { workspaceStore: store, gateway, connection };
+    const result = await pullWorkspaceFromGithub(dependencies, {
+      workspaceId: 'primary', expectedRevision: 'revision-1', overwrite: true,
+    });
+    const imported = (await store.read('primary')).snapshot;
+    expect(imported.assets.templates.default.updatedAt).toBe(modifiedAt);
+    expect(imported.assets.rulesets.manual.updatedAt).toBe(modifiedAt);
+    expect(imported.assets.nodes.legacy.updatedAt).toBeUndefined();
+    expect(imported.assets.nodes.new.updatedAt).toBeUndefined();
+    remote.assets.templates.default.content = { log: { level: 'info' }, route: {} };
+    await gateway.setRemote(remote, 'commit-2');
+    await pullWorkspaceFromGithub(dependencies, {
+      workspaceId: 'primary', expectedRevision: result.revision, overwrite: true,
+    });
+    expect((await store.read('primary')).snapshot.assets.templates.default.updatedAt).toBeUndefined();
+  });
+
   it('only allows an explicit R2 overwrite when the remote tree has an invalid profile schema', async () => {
     const store = new InMemoryWorkspaceStore('primary', snapshot());
     const gateway = new FakeSyncGateway();

@@ -6,7 +6,7 @@ import type { Env } from '../types';
 
 function summaries(assets: Record<string, JsonAsset>) {
   return Object.values(assets)
-    .map(asset => ({ path: asset.path, note: asset.note || '' }))
+    .map(asset => ({ path: asset.path, note: asset.note || '', ...(asset.updatedAt ? { updatedAt: asset.updatedAt } : {}) }))
     .sort((left, right) => left.path.localeCompare(right.path));
 }
 

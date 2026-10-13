@@ -16,6 +16,8 @@ import { EntityEditorHeader } from '../../components/EntityEditorChrome';
 import { useAssetsStore } from '../../stores/assets';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { RulesetEditor } from './RulesetEditor';
+import { ResourceTime } from './ResourceTime';
+import { useResourceClock } from './use-resource-clock';
 
 const CodeEditor = lazy(() => import('../../components/CodeEditor/CodeEditor'));
 
@@ -54,6 +56,7 @@ function initialContent(type: ResourceType) {
 }
 
 export function ResourcesPage({ type }: { type: ResourceType }) {
+  const now = useResourceClock();
   const { t } = useTranslation();
   const mobile = useMediaQuery('(max-width: 48em)');
   const assets = useAssetsStore((state) => state.items);
@@ -271,7 +274,6 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
                 <Group justify="space-between" align="flex-start" wrap="nowrap">
                   <Stack gap={4} miw={0}>
                     <Text fw={700} truncate>{basename(file.path)}</Text>
-                    {file.note && <Text size="sm" c="dimmed" truncate>{file.note}</Text>}
                   </Stack>
                   <Group gap={4} wrap="nowrap" pos="relative" style={{ zIndex: 2 }}>
                     <Tooltip label={t('common.edit')}>
@@ -283,13 +285,18 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
                     </Menu>
                   </Group>
                 </Group>
+                <Text size="sm" c="dimmed" lineClamp={2} mt={4} mih="2.9em" style={{ overflowWrap: 'anywhere' }}>
+                  {file.note}
+                </Text>
+                <Group mt="auto" pt="sm" justify="space-between" gap="xs">
+                  <ResourceTime value={file.updatedAt} now={now} compact />
                 {type === 'ruleset' && (() => {
                   const id = basename(file.path);
                   const build = builds[id];
                   const format = build?.formats.binary ? 'srs' : 'json';
                   const copyLabel = t(format === 'srs' ? 'assets.copySrs' : 'assets.copyJson');
                   return (
-                    <Group mt="md" justify="space-between">
+                    <Group gap="xs" wrap="wrap">
                       <Badge color={build?.status === 'failed' ? 'red' : build?.formats.binary ? 'teal' : 'gray'} variant="light">
                         {buildLabel(file)}
                       </Badge>
@@ -315,6 +322,7 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
                     </Group>
                   );
                 })()}
+                </Group>
               </Card>
             ))}
           </SimpleGrid>
@@ -347,6 +355,7 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
               />
               <Modal.Body>
                 <Stack gap="md">
+                  {!editor.file.isNew && <ResourceTime value={editor.file.updatedAt} now={now} full />}
                   <SegmentedControl
                     fullWidth data-testid="resource-mode-control"
                     value={editor.mode}
@@ -357,6 +366,7 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
                     editor.content ? (
                       <ScrollArea h="52dvh" type="auto">
                         <RulesetEditor
+                          now={now}
                           key={`${editor.file.path}-${editor.sha ?? 'new'}`} value={editor.content}
                           onChange={(content) => setEditor((current) => current ? { ...current, content, structuredDirty: true } : current)}
                           onValidityChange={(structuredValid) => setEditor((current) => current ? { ...current, structuredValid, structuredDirty: true } : current)}

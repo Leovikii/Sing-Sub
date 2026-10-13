@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RuleBucket, RulesetSource } from '../../../shared';
+import { ResourceTime } from './ResourceTime';
 
 type ManualKey = keyof RuleBucket;
 
@@ -86,20 +87,15 @@ function latestSourceUpdate(sources: RulesetSource[]) {
   }, undefined);
 }
 
-function formatSourceUpdate(value: string, locale: string) {
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-  }).format(new Date(value));
-}
-
 export function RulesetEditor({
-  value, onChange, onValidityChange,
+  value, now, onChange, onValidityChange,
 }: {
   value: string;
+  now: number;
   onChange: (value: string) => void;
   onValidityChange: (valid: boolean) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [{ document, draft: initialDraft }] = useState(() => readDraft(value));
   const [draft, setDraft] = useState(initialDraft);
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -170,11 +166,9 @@ export function RulesetEditor({
               onChange={(event) => write({ ...draft, sourceUrls: event.currentTarget.value })}
             />
             <Group gap="xs" align="center" wrap="wrap" data-testid="ruleset-source-controls">
-              <Text size="xs" c="dimmed" flex="1 1 10rem" miw={0}>
-                {lastUpdated
-                  ? t('rulesets.sourceUpdated', { time: formatSourceUpdate(lastUpdated, i18n.resolvedLanguage ?? i18n.language) })
-                  : t('rulesets.sourceNeverUpdated')}
-              </Text>
+              <Stack gap={2} flex="1 1 10rem" miw={0}>
+                <ResourceTime value={lastUpdated} now={now} labelKey="rulesets.sourceUpdated" />
+              </Stack>
               <Select
                 size="xs" w="8rem" flex="0 0 8rem" aria-label={t('rulesets.sourceInterval')}
                 value={String(draft.intervalHours)}
@@ -195,6 +189,13 @@ export function RulesetEditor({
                 </Tooltip>
               )}
             </Group>
+            <Text size="xs" c="dimmed">{t('rulesets.sourceRefreshHint')}</Text>
+            {lines(draft.sourceUrls).length > 1 && lines(draft.sourceUrls).map((url, index) => (
+              <Stack key={`${index}-${url}`} gap={2}>
+                <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{url}</Text>
+                <ResourceTime value={sourceMap.get(url)?.last_updated} now={now} labelKey="rulesets.sourceUpdated" />
+              </Stack>
+            ))}
           </Stack>
         </Accordion.Panel>
       </Accordion.Item>

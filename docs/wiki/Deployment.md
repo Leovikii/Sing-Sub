@@ -50,6 +50,8 @@ When SRS is enabled, Sing Sub provisions the compiler workflow in the connected 
 
 ## Updates
 
+Existing installations using the old v2 workspace format must deploy 3.1.2 to complete conversion before updating further. See the [upgrade guide](https://github.com/Leovikii/Sing-Sub/blob/main/docs/operations/workspace-upgrade.md). New installations do not need this step.
+
 - The maintainer deployment tracks the official `main` branch.
 - A user deployment tracks the `main` branch of that user's fork.
 - To update a fork, use GitHub **Sync fork**. The resulting commit triggers Cloudflare Workers Builds.
@@ -62,17 +64,5 @@ Code and data recovery are separate operations:
 - Revert a faulty source commit on `main` to produce a new Cloudflare build.
 - Where the Cloudflare account exposes Worker version rollback, select a known-good version and redeploy it.
 - Restore business data by publishing a selected immutable workspace revision as a new revision. Never clear R2 or move `head.json` backward manually.
-
-The maintainer's production automatic update path is verified. A clean deployment under an independent Cloudflare account, the ordinary-user **Sync fork** path, and an actual Worker rollback remain deferred until a second account or a real incident provides a safe test target.
-
-## Local verification
-
-```powershell
-npm ci
-npm run verify
-npm run worker:dry-run
-```
-
-Local deployment remains available to maintainers with `npm run deploy`, but it is not required for ordinary installation.
 
 For the complete recovery model, see [release-and-recovery.md](https://github.com/Leovikii/Sing-Sub/blob/main/docs/operations/release-and-recovery.md).
