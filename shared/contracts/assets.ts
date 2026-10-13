@@ -1,6 +1,7 @@
 export interface AssetSummary {
   path: string;
   note: string;
+  updatedAt?: string;
 }
 
 export interface AssetSnapshot {

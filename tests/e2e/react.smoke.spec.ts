@@ -15,10 +15,10 @@ interface ReactApiMock {
   connectionRequests: Request[];
   compilerRequests: Request[];
   fileRequests: Request[];
-  assets: Array<{ path: string; note: string }>;
-  templates: Array<{ path: string; note: string }>;
+  assets: Array<{ path: string; note: string; updatedAt?: string }>;
+  templates: Array<{ path: string; note: string; updatedAt?: string }>;
   previewRequests: Request[];
-  rulesets: Array<{ path: string; note: string }>;
+  rulesets: Array<{ path: string; note: string; updatedAt?: string }>;
   contents: Record<string, string>;
   syncRequests: Request[];
   syncStatus: 'never' | 'conflict' | 'local-ahead' | 'remote-ahead';
@@ -226,7 +226,7 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
 
     if (pathname === '/api/file' && request.method() === 'GET') {
       const path = new URL(request.url()).searchParams.get('path') ?? '';
-      const asset = [...state.assets, ...state.rulesets].find((item) => item.path === path);
+      const asset = [...state.assets, ...state.templates, ...state.rulesets].find((item) => item.path === path);
       if (!asset) {
         await route.fulfill({
           status: 404,
@@ -249,7 +249,7 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
       const isRuleset = payload.path.startsWith('sing-sub/rulesets/');
       const target = isRuleset ? state.rulesets : state.assets;
       const next = target.filter((item) => item.path !== payload.oldPath && item.path !== payload.path);
-      next.push({ path: payload.path, note: isRuleset ? document._sing_sub?.note ?? '' : document.note ?? '' });
+      next.push({ path: payload.path, note: isRuleset ? document._sing_sub?.note ?? '' : document.note ?? '', updatedAt: new Date().toISOString() });
       if (isRuleset) state.rulesets = next; else state.assets = next;
       if (payload.oldPath) delete state.contents[payload.oldPath];
       state.contents[payload.path] = payload.content;
@@ -302,7 +302,87 @@ test('React entry initializes with a password-only request and guarded route', a
   expect(brandIconBox!.width).toBe(36);
   expect(brandIconBox!.height).toBe(36);
   await page.goto('/#/settings/about');
-  await expect(page.getByText('v3.1.3', { exact: true })).toBeVisible();
+  await expect(page.getByText('v3.1.4', { exact: true })).toBeVisible();
+});
+
+test('React resource times separate configuration edits from source refreshes across viewports', async ({ page }, testInfo) => {
+  const state = await mockReactApi(page);
+  const now = new Date('2026-10-13T06:30:00Z');
+  await page.clock.install({ time: now });
+  const updatedAt = '2026-10-13T06:28:00Z';
+  state.assets = [
+    { path: 'sing-sub/nodes/recent.json', note: '备注说明 '.repeat(30), updatedAt },
+    { path: 'sing-sub/nodes/legacy.json', note: '' },
+    { path: 'sing-sub/nodes/old.json', note: '', updatedAt: '2026-08-01T00:00:00Z' },
+  ];
+  state.templates = [{ path: 'sing-sub/templates/template.json', note: '', updatedAt }];
+  const path = 'sing-sub/rulesets/timed.json';
+  state.rulesets = [{ path, note: '', updatedAt }];
+  state.contents[path] = JSON.stringify({ version: 2, rules: [], _sing_sub: { sources: [
+    { url: 'https://example.com/a.json', interval_hours: 24, last_updated: '2026-10-13T05:30:00Z' },
+    { url: 'https://example.com/b.json', interval_hours: 24 },
+  ] } });
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => consoleErrors.push(error.message));
+  await login(page, state);
+  await page.goto('/#/resources/nodes');
+  const card = page.getByRole('article', { name: 'recent', exact: true });
+  await expect(card).toContainText('2分钟前');
+  await expect(card).not.toContainText('上次修改');
+  await expect(page.getByRole('article', { name: 'legacy', exact: true })).toContainText('时间未记录');
+  await expect(page.getByRole('article', { name: 'old', exact: true })).toContainText('2026');
+  await page.clock.fastForward(60_000);
+  await expect(card).toContainText('3分钟前');
+  const timestamp = card.locator('time');
+  await card.getByRole('button', { name: '更多操作', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(timestamp).toBeFocused();
+  await expect(page.getByRole('tooltip')).toContainText(/GMT|UTC/);
+  if (testInfo.project.name === 'mobile-chromium') {
+    await timestamp.blur();
+    await timestamp.tap();
+    await expect(page.getByRole('tooltip')).toContainText('2026');
+  }
+  await card.getByRole('button', { name: '预览 recent', exact: true }).click();
+  await expect(page.getByRole('dialog').locator('time')).toContainText(/2026.*(GMT|UTC)/);
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await page.goto('/#/resources/templates');
+  await expect(page.getByRole('article', { name: 'template' })).toContainText('3分钟前');
+  await page.goto('/#/resources/rulesets');
+  const ruleCard = page.getByRole('article', { name: 'timed', exact: true });
+  await expect(ruleCard).toContainText('3分钟前');
+  await expect(ruleCard).not.toContainText('来源更新');
+  for (const width of [320, 390, 412, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  }
+  await ruleCard.getByRole('button', { name: '编辑', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const controls = dialog.getByTestId('ruleset-source-controls');
+  await expect(controls).toContainText('来源更新：1小时前');
+  await expect(dialog.getByText('来源更新：未记录', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('https://example.com/b.json', { exact: true })).toBeVisible();
+  for (const width of [320, 390, 412, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => dialog.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+  }
+  await page.screenshot({ path: testInfo.outputPath('ruleset-times.png'), fullPage: true });
+  await page.setViewportSize({ width: 320, height: 900 });
+  await expect.poll(() => dialog.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+  await controls.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('ruleset-times-320.png'), fullPage: true });
+  await dialog.getByRole('textbox', { name: '备注', exact: true }).fill('Modified manually');
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(ruleCard.locator('time')).not.toHaveAttribute('datetime', updatedAt);
+  await page.getByRole('button', { name: '切换语言', exact: true }).click();
+  await expect(ruleCard.locator('time')).toHaveAttribute('aria-label', /Last modified:/);
+  await expect(ruleCard).not.toContainText('Last modified:');
+  await page.getByRole('button', { name: 'Switch color scheme', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-mantine-color-scheme', 'dark');
+  await expect(ruleCard.locator('time')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('resource-times-dark-en.png'), fullPage: true });
+  expect(state.fileRequests).toHaveLength(1);
+  expect(consoleErrors).toEqual([]);
 });
 
 test('React entry persists language and color scheme with native Mantine controls', async ({ page }) => {
@@ -888,7 +968,7 @@ test('React rulesets edit structured sources and manual rules, retry builds, and
   const sourceControls = dialog.getByTestId('ruleset-source-controls');
   const intervalSelect = dialog.getByRole('combobox', { name: '更新周期', exact: true });
   const sourceDelete = dialog.getByRole('button', { name: '删除 SOURCE', exact: true });
-  await expect(sourceControls.getByText('最近更新', { exact: false })).toContainText('2026');
+  await expect(sourceControls.getByText('来源更新', { exact: false })).toContainText('2026');
   expect(await intervalSelect.evaluate((element) => Boolean(element.closest('[data-testid="ruleset-source-controls"]')))).toBe(true);
   expect(await sourceDelete.evaluate((element) => Boolean(element.closest('[data-testid="ruleset-source-controls"]')))).toBe(true);
   await intervalSelect.click();
