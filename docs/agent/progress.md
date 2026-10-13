@@ -6,7 +6,7 @@
 |---|---|---|
 | FE-3190–3191 | DONE | 3.1.3 迁移退场、手动同步与拉取刷新已进入 main |
 | FE-3192–3197 | DONE | 资源时间、卡片层级、同步元数据、用户文档与隔离保存验收 |
-| FE-3198 | IN_PROGRESS | 3.1.4 版本收束、文档压缩、无用词条清理、dev 推送及 PR |
+| FE-3198 | DONE | 3.1.4 版本收束、清理并推送 dev；[PR #60](https://github.com/Leovikii/Sing-Sub/pull/60) → main |
 | FE-3181/3196 | BLOCKED | Windows Firefox spawn UNKNOWN；待 Linux PR CI |
 
 ## 验证基线
