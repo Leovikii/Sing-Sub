@@ -32,9 +32,9 @@ export const router = createHashRouter([
           children: [
             { index: true, element: <Navigate replace to="/profiles" /> },
             { path: 'profiles', element: deferred(<ProfilesPage />) },
-            { path: 'resources/nodes', element: deferred(<ResourcesPage type="node" />) },
-            { path: 'resources/templates', element: deferred(<ResourcesPage type="template" />) },
-            { path: 'resources/rulesets', element: deferred(<ResourcesPage type="ruleset" />) },
+            { path: 'resources/nodes', element: deferred(<ResourcesPage key="node" type="node" />) },
+            { path: 'resources/templates', element: deferred(<ResourcesPage key="template" type="template" />) },
+            { path: 'resources/rulesets', element: deferred(<ResourcesPage key="ruleset" type="ruleset" />) },
             { path: 'sync', element: deferred(<SyncPage />) },
             {
               path: 'settings',

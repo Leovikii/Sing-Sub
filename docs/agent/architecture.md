@@ -56,7 +56,7 @@ worker/                    # 后端保持分层结构
 
 - CodeMirror 6 官方模块：通用 JSON 编辑的行号、高亮、括号匹配、lint、历史和原生查找/替换；由 Mantine 提供外层工具栏与加载态，不使用第三方 React wrapper。
 - Lucide React：统一语义图标。
-- dnd-kit：Profile 排序；Mantine 不提供拖拽排序。
+- dnd-kit：配置、资源与编辑器展示排序；Mantine 不提供拖拽排序。
 - Zod：共享运行时 schema 和表单验证。
 
 
