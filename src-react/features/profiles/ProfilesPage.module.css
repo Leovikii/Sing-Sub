@@ -1,27 +1,3 @@
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  gap: var(--mantine-spacing-lg);
-}
-
-.sortableCard {
-  min-width: 0;
-  touch-action: manipulation;
-}
-
-.dragging {
-  opacity: 0.72;
-}
-
-.dragHandle {
-  cursor: grab;
-  touch-action: none;
-}
-
-.dragHandle:active {
-  cursor: grabbing;
-}
-
 .nodeList {
   display: flex;
   min-width: 0;

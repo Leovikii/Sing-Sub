@@ -293,7 +293,7 @@ async function login(page: Page, state: ReactApiMock) {
 test('React entry initializes with a password-only request and guarded route', async ({ page }) => {
   const state = await mockReactApi(page);
   await login(page, state);
-  await expect(page.getByRole('navigation', { name: '主导航' })).toBeAttached();
+  await expect(page.getByRole('navigation', { name: '主导航', includeHidden: true }).first()).toBeAttached();
   const brandIcon = page.getByTestId('app-brand-icon');
   await expect(brandIcon).toBeVisible();
   await expect(brandIcon).toHaveAttribute('src', '/favicon.svg');
@@ -302,7 +302,7 @@ test('React entry initializes with a password-only request and guarded route', a
   expect(brandIconBox!.width).toBe(36);
   expect(brandIconBox!.height).toBe(36);
   await page.goto('/#/settings/about');
-  await expect(page.getByText('v3.1.4', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('v3.1.5', { exact: true })).toBeVisible();
 });
 
 test('React resource times separate configuration edits from source refreshes across viewports', async ({ page }, testInfo) => {
@@ -438,9 +438,9 @@ test('React entry opens mobile navigation and confirms sign out', async ({ page 
 
   await page.getByRole('button', { name: '打开导航', exact: true }).click();
   await expect(page.getByRole('link', { name: '同步', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await page.getByRole('dialog', { name: '主导航' }).getByRole('button', { name: '退出登录', exact: true }).click();
 
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('dialog', { name: '退出登录', exact: true });
   await expect(dialog.getByText('只退出当前设备，不影响数据和其他设备。')).toBeVisible();
   await dialog.getByRole('button', { name: '退出登录', exact: true }).click();
 
@@ -526,6 +526,10 @@ test('React settings rotate tokens and connect repository with validated Mantine
 });
 
 test('React resources edit validated JSON with lazy CodeMirror search and replace', async ({ page }) => {
+  const editorRequests: string[] = [];
+  page.on('request', request => {
+    if (/\/(?:assets\/CodeEditor-[^/]+\.js|src-react\/components\/CodeEditor\/CodeEditor\.tsx)(?:\?|$)/.test(request.url())) editorRequests.push(request.url());
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   const state = await mockReactApi(page);
   const noNotePath = 'sing-sub/nodes/client.json';
@@ -549,6 +553,7 @@ test('React resources edit validated JSON with lazy CodeMirror search and replac
   await expect(noNoteDialog.getByText('备注', { exact: true })).toHaveCount(0);
   await expect(noNoteDialog.getByText('无备注', { exact: true })).toHaveCount(0);
   await expect(noNoteDialog.getByTestId('code-editor-shell')).toHaveCount(0);
+  expect(editorRequests).toHaveLength(0);
   await noNoteDialog.getByRole('button', { name: '关闭', exact: true }).click();
   await expect(noNoteDialog).toBeHidden();
   await page.getByRole('button', { name: '新建', exact: true }).click();
@@ -566,6 +571,7 @@ test('React resources edit validated JSON with lazy CodeMirror search and replac
     await page.keyboard.insertText(content);
   };
   await expect(editorShell).toBeVisible();
+  expect(editorRequests.length).toBeGreaterThan(0);
   await expect(editorToolbar).toBeVisible();
   await expect(jsonEditor).toHaveAttribute('contenteditable', 'true');
   await expect(editorShell.getByText('1', { exact: true }).first()).toBeVisible();
@@ -751,19 +757,17 @@ test('React profiles create, preview, copy, duplicate, and delete through Mantin
   await expect.poll(() => page.evaluate(() => (
     document.documentElement.scrollWidth - document.documentElement.clientWidth
   ))).toBeLessThanOrEqual(0);
-  const [dragBox, titleBox, editBox, moreBox] = await Promise.all([
-    profileCard.getByRole('button', { name: '调整配置顺序', exact: true }).boundingBox(),
+  await expect(profileCard.getByRole('button', { name: /调整.*顺序/ })).toHaveCount(0);
+  const [titleBox, editBox, moreBox] = await Promise.all([
     profileCard.getByText('smoke-profile', { exact: true }).boundingBox(),
     profileCard.getByRole('button', { name: '编辑', exact: true }).boundingBox(),
     profileCard.getByRole('button', { name: '更多操作', exact: true }).boundingBox(),
   ]);
-  expect(dragBox).not.toBeNull();
   expect(titleBox).not.toBeNull();
   expect(editBox).not.toBeNull();
   expect(moreBox).not.toBeNull();
-  expect(dragBox!.x).toBeLessThan(titleBox!.x);
   expect(editBox!.x).toBeGreaterThan(titleBox!.x);
-  for (const box of [dragBox!, editBox!, moreBox!]) {
+  for (const box of [editBox!, moreBox!]) {
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);
   }
@@ -838,7 +842,8 @@ test('React profiles create, preview, copy, duplicate, and delete through Mantin
   expect(shortEditorActionsBox!.y - (shortEditorViewportBox!.y + shortEditorViewportBox!.height)).toBeLessThanOrEqual(24);
   expect(shortDialogBox!.y + shortDialogBox!.height - (shortEditorActionsBox!.y + shortEditorActionsBox!.height)).toBeLessThanOrEqual(32);
   expect(await dialog.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
-  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
 
   await page.getByRole('button', { name: '订阅', exact: true }).click();
   await expect(page.getByRole('button', { name: '已复制', exact: true })).toBeVisible();
@@ -1111,3 +1116,234 @@ for (const syncStatus of ['never', 'conflict', 'local-ahead', 'remote-ahead'] as
     });
   }
 }
+
+
+test('React shared card sorting saves browser preferences, cancels, guards navigation, and stays reachable', async ({ page }) => {
+  const state = await mockReactApi(page);
+  state.assets = Array.from({ length: 8 }, (_, i) => ({ path: `sing-sub/nodes/node-${i}.json`, note: i ? '备注' : '首张卡片' }));
+  await login(page, state);
+  await page.goto('/#/resources/nodes');
+  await page.getByRole('button', { name: '排序', exact: true }).click();
+  await expect(page.getByRole('button', { name: '保存顺序', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '下移 node-0', exact: true }).click();
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('node-1');
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(page.getByRole('button', { name: '保存顺序', exact: true })).toBeInViewport();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('node-0');
+  await page.getByRole('button', { name: '排序', exact: true }).click();
+  const handle = page.getByRole('button', { name: '调整 node-0 顺序', exact: true });
+  await handle.scrollIntoViewIfNeeded();
+  await handle.focus(); await page.keyboard.press('Space');
+  await expect(handle).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('status')).toHaveText(/已移至第 [2-8] 位，共 8 项。/);
+  await page.keyboard.press('Space');
+  await expect(page.getByRole('button', { name: '保存顺序', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '保存顺序', exact: true }).click();
+  const names = await page.getByRole('article').evaluateAll(items => items.map(item => item.getAttribute('aria-label')));
+  await page.reload();
+  await expect(page.getByRole('article')).toHaveCount(8);
+  expect(await page.getByRole('article').evaluateAll(items => items.map(item => item.getAttribute('aria-label')))).toEqual(names);
+  expect(state.fileRequests).toHaveLength(0); expect(state.stateRequests).toHaveLength(0);
+  await page.getByRole('button', { name: '排序', exact: true }).click();
+  await page.getByRole('article').first().getByRole('button', { name: /^下移 / }).click();
+  if (await page.getByRole('button', { name: '打开导航', exact: true }).isVisible()) await page.getByRole('button', { name: '打开导航', exact: true }).click();
+  await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '配置', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: '未保存的修改' });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page).toHaveURL(/resources\/nodes/);
+  await page.getByRole('button', { name: '保存顺序', exact: true }).click();
+  for (const width of [320, 390, 412, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  }
+});
+
+test('React navigation collapses on desktop and uses a bounded mobile Drawer', async ({ page }) => {
+  const state = await mockReactApi(page); await login(page, state);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: '折叠导航', exact: true }).click();
+  await expect(page.getByRole('button', { name: '展开导航', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: '展开导航', exact: true })).toBeVisible();
+  await page.goto('/#/settings/about');
+  await expect(page.getByRole('link', { name: '设置', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.getByRole('link', { name: '规则集', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '规则集', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const menu = page.getByRole('button', { name: '打开导航', exact: true }); await menu.click();
+  const drawer = page.getByRole('dialog', { name: '主导航' }); await expect(drawer).toBeVisible();
+  expect((await drawer.boundingBox())!.width).toBeLessThanOrEqual(342);
+  await page.keyboard.press('Escape'); await expect(drawer).toBeHidden(); await expect(menu).toBeFocused();
+  await menu.click();
+  await drawer.getByRole('button', { name: '退出登录', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(drawer).toContainText('配置');
+  expect(await drawer.evaluate(element => element.contains(document.activeElement))).toBe(true);
+  await page.mouse.click(370, 420); await expect(drawer).toBeHidden();
+  await menu.click(); await drawer.getByRole('link', { name: '模板', exact: true }).click();
+  await expect(drawer).toBeHidden(); await expect(page.getByRole('heading', { name: '模板', exact: true })).toBeVisible();
+});
+
+
+test('React cards support pointer and touch dragging and preserve failed local saves', async ({ page, isMobile }) => {
+  const state = await mockReactApi(page);
+  state.assets = [0, 1, 2].map(i => ({ path: `sing-sub/nodes/node-${i}.json`, note: '统一卡片' }));
+  await login(page, state); await page.goto('/#/resources/nodes');
+  if (isMobile) await page.getByRole('button', { name: '排序', exact: true }).click();
+  const handle = page.getByRole('button', { name: '调整 node-0 顺序', exact: true });
+  const target = page.getByRole('article', { name: 'node-1', exact: true });
+  await handle.scrollIntoViewIfNeeded();
+  const from = (await handle.boundingBox())!, to = (await target.boundingBox())!;
+  const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+  const end = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
+  if (isMobile) {
+    const touch = await page.context().newCDPSession(page);
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: start.x, y: start.y + 12 }] });
+    await expect(handle).toHaveAttribute('aria-pressed', 'true');
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [end] });
+    await expect(page.getByRole('status')).toHaveText('已移至第 2 位，共 3 项。');
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await touch.detach();
+  } else {
+    await page.mouse.move(start.x, start.y); await page.mouse.down();
+    await page.mouse.move(start.x + 12, start.y);
+    await expect(handle).toHaveAttribute('aria-pressed', 'true');
+    await page.mouse.move(end.x, end.y, { steps: 8 });
+    await expect(page.getByRole('status')).toHaveText('已移至第 2 位，共 3 项。');
+    await page.mouse.up();
+  }
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('node-1');
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Object.defineProperty(window, 'restoreOrderStorage', { value: () => { Storage.prototype.setItem = original; } });
+    Storage.prototype.setItem = function(key, value) {
+      if (key.startsWith('sing-sub.order:')) throw new DOMException('Storage unavailable', 'QuotaExceededError');
+      original.call(this, key, value);
+    };
+  });
+  const save = page.getByRole('button', { name: '保存顺序', exact: true }); await save.click();
+  await expect(page.getByRole('alert').filter({ hasText: '无法保存顺序' })).toBeVisible();
+  await expect(save).toBeEnabled();
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('node-1');
+  await page.evaluate(() => (window as unknown as { restoreOrderStorage: () => void }).restoreOrderStorage());
+  await save.click(); await expect(page.getByRole('button', { name: '排序', exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByRole('article').first()).toHaveAccessibleName('node-1');
+  expect(state.fileRequests).toHaveLength(0); expect(state.stateRequests).toHaveLength(0);
+});
+
+test('React profile order keeps revisions, retains failed drafts, and resolves conflicts explicitly', async ({ page }) => {
+  const state = await mockReactApi(page);
+  state.profiles = ['alpha', 'beta', 'gamma'].map((name, order) => ({ name, order, note: '备注', templateUrl: '', nodesPath: '', rules: [], inboundRules: [] }));
+  await login(page, state);
+  await page.getByRole('button', { name: '排序', exact: true }).click();
+  await page.getByRole('button', { name: '下移 alpha', exact: true }).click();
+  let failure = 500;
+  await page.route('**/api/state', async route => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    if (failure) return route.fulfill({ status: failure, contentType: 'application/json', body: JSON.stringify({ error: { code: failure === 409 ? 'REVISION_CONFLICT' : 'INTERNAL_ERROR' } }) });
+    return route.fallback();
+  });
+  const save = page.getByRole('button', { name: '保存顺序', exact: true });
+  await save.click(); await expect(save).toBeEnabled();
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('beta');
+  expect(state.stateRequests).toHaveLength(0);
+  failure = 409; await save.click();
+  const conflict = page.getByRole('dialog', { name: '内容已被修改' }); await expect(conflict).toBeVisible();
+  await conflict.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(save).toBeEnabled();
+  failure = 0; await save.click();
+  await expect.poll(() => state.stateRequests.length).toBe(1);
+  expect(state.stateRequests[0].postDataJSON()).toMatchObject({ expectedRevision: 'revision-1', state: { profiles: [{ name: 'beta', order: 0 }, { name: 'alpha', order: 1 }, { name: 'gamma', order: 2 }] } });
+  await expect(page.getByRole('button', { name: '排序', exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByRole('article').first()).toHaveAccessibleName('beta');
+});
+
+test('React outbound display order persists without rewriting filter semantics and guards editor close', async ({ page }) => {
+  const state = await mockReactApi(page);
+  const template = 'sing-sub/templates/groups.json';
+  state.templates = [{ path: template, note: '' }];
+  state.contents[template] = JSON.stringify({ outbounds: ['one', 'two'].map(tag => ({ type: 'selector', tag })) });
+  const rules = [{ group: 'one', filters: [{ action: 'include', keyword: 'HK' }] }, { group: 'two', filters: [{ action: 'exclude', keyword: 'JP' }] }];
+  state.profiles = [{ name: 'filter-order', templateUrl: template, nodesPath: '', rules, inboundRules: [] }];
+  await login(page, state);
+  await page.getByRole('article').getByRole('button', { name: '编辑', exact: true }).click();
+  const editor = page.getByRole('dialog');
+  await editor.getByRole('button', { name: '排序', exact: true }).click();
+  await editor.getByRole('button', { name: '下移 one', exact: true }).click();
+  await editor.getByRole('button', { name: '关闭', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: '未保存的修改' }); await expect(confirmation).toBeVisible();
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+  await editor.getByRole('button', { name: '保存顺序', exact: true }).click();
+  await editor.getByText('预览', { exact: true }).click();
+  await expect.poll(() => state.previewRequests.length).toBeGreaterThan(0);
+  expect(state.previewRequests.at(-1)!.postDataJSON().rules).toEqual(rules);
+  await page.keyboard.press('Escape'); await expect(editor).toBeHidden();
+  await page.getByRole('article').getByRole('button', { name: '编辑', exact: true }).click();
+  await expect(editor.getByRole('article').nth(1)).toHaveAccessibleName('two');
+  expect(state.stateRequests).toHaveLength(0);
+});
+
+
+test('React resource orders stay independent and reconcile rename, creation, deletion, and responsive cards', async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const state = await mockReactApi(page);
+  const note = '这是一段用于验证两行截断的较长备注。'.repeat(15);
+  for (const [key, directory] of [['assets', 'nodes'], ['templates', 'templates'], ['rulesets', 'rulesets']] as const) {
+    state[key] = ['first', 'second'].map(name => ({ path: `sing-sub/${directory}/${name}.json`, note, updatedAt: '2026-10-14T12:00:00Z' }));
+    for (const file of state[key]) state.contents[file.path] = JSON.stringify({ note, inbounds: [], outbounds: [] });
+  }
+  await login(page, state);
+  for (const directory of ['nodes', 'templates', 'rulesets']) {
+    await page.goto(`/#/resources/${directory}`);
+    await expect(page.getByRole('article')).toHaveCount(2);
+    await page.getByRole('button', { name: '排序', exact: true }).click();
+    await page.getByRole('button', { name: '下移 first', exact: true }).click();
+    await page.getByRole('button', { name: '保存顺序', exact: true }).click();
+    await expect(page.getByRole('button', { name: '排序', exact: true })).toBeVisible();
+    await expect(page.getByRole('article').first()).toHaveAccessibleName('second');
+  }
+  await page.goto('/#/resources/nodes');
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('second');
+  await page.getByRole('article').first().getByRole('button', { name: '编辑', exact: true }).click();
+  const editor = page.getByRole('dialog');
+  await expect(editor.getByRole('textbox', { name: 'JSON 编辑器', exact: true })).toBeVisible();
+  await editor.getByRole('textbox', { name: '名称', exact: true }).fill('renamed');
+  await editor.getByRole('button', { name: '保存', exact: true }).click(); await expect(editor).toBeHidden();
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('renamed');
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  await editor.getByRole('textbox', { name: '名称', exact: true }).fill('new');
+  await editor.getByRole('button', { name: '保存', exact: true }).click(); await expect(editor).toBeHidden();
+  await expect(page.getByRole('article').last()).toHaveAccessibleName('new');
+  await page.getByRole('article', { name: 'first', exact: true }).getByRole('button', { name: '更多操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '删除文件', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
+  await expect(page.getByRole('article')).toHaveCount(2);
+  await page.reload(); await expect(page.getByRole('article').first()).toHaveAccessibleName('renamed');
+  await expect(page.getByRole('article').last()).toHaveAccessibleName('new');
+  for (const width of [320, 390, 412, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const directory of ['nodes', 'templates', 'rulesets']) {
+      await page.goto(`/#/resources/${directory}`);
+      await expect(page.getByRole('article')).toHaveCount(2);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+      await expect(async () => {
+        const cards = await page.getByRole('article').evaluateAll(elements => elements.map(item => ({ width: item.getBoundingClientRect().width, height: item.getBoundingClientRect().height, overflow: item.scrollWidth - item.clientWidth })));
+        expect(Math.abs(cards[0].width - cards[1].width)).toBeLessThanOrEqual(1);
+        expect(Math.abs(cards[0].height - cards[1].height)).toBeLessThanOrEqual(1);
+        expect(cards.every(card => card.overflow <= 0 && card.height >= 194), JSON.stringify({ width, directory, cards })).toBe(true);
+      }).toPass({ timeout: 5000 });
+    }
+    if (width === 390 || width === 1440) await page.screenshot({ path: testInfo.outputPath(`cards-${width}-light.png`), fullPage: true });
+  }
+  await page.getByRole('button', { name: '切换颜色模式', exact: true }).click();
+  await page.getByRole('button', { name: '切换语言', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Rule sets', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('cards-desktop-dark-en.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Reorder', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('cards-mobile-dark-en-sorting.png'), fullPage: true });
+});

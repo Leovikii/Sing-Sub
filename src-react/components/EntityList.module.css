@@ -1,0 +1,42 @@
+.toolbar {
+  position: sticky;
+  top: var(--entity-toolbar-top, var(--app-shell-header-height, 64px));
+  z-index: 5;
+  padding-block: var(--mantine-spacing-sm);
+  background: var(--mantine-color-body);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: var(--mantine-spacing-md);
+}
+.stack { display: grid; gap: var(--mantine-spacing-sm); }
+.card {
+  min-width: 0;
+  min-height: 194px;
+  padding: 16px 16px 16px 48px;
+  touch-action: manipulation;
+}
+.formCard { min-height: 0; }
+.dragging { opacity: 0.65; z-index: 6; }
+.handle {
+  position: absolute;
+  top: 16px;
+  left: 0;
+  z-index: 2;
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.handle:active { cursor: grabbing; }
+.card:hover .handle, .card:focus-within .handle, .sorting .handle { opacity: 1; }
+.single { padding-left: 16px; }
+.preview { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.action { position: relative; z-index: 2; }
+.note { min-height: 2.9em; overflow-wrap: anywhere; }
+.footer { margin-top: auto; padding-top: 12px; min-height: 56px; }
+@media (hover: none) {
+  .handle { visibility: hidden; }
+  .sorting .handle { visibility: visible; }
+}

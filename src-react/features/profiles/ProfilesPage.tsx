@@ -1,24 +1,16 @@
 import {
-  ActionIcon, Badge, Box, Button, Card, Center, Code, Container, CopyButton, EmptyState, Group,
-  Loader, Menu, Modal, Paper, ScrollArea, SegmentedControl, Select, SimpleGrid, Stack,
-  Text, TextInput, Title, Tooltip, UnstyledButton,
+  ActionIcon, Badge, Box, Button, Center, Code, Container, CopyButton, EmptyState, Group,
+  Loader, Menu, Modal, ScrollArea, SegmentedControl, Select, SimpleGrid, Stack,
+  Text, TextInput, Title, Tooltip,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useMediaQuery } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
-  closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove, rectSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import {
-  Check, Copy, FileCog, GripVertical, Link2, MoreHorizontal, Pencil, Plus, Save, Trash2,
+  Check, Copy, FileCog, Link2, MoreHorizontal, Pencil, Plus, Save, Trash2,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { profileSchema, type FilterAction, type Profile, type StateData } from '../../../shared';
@@ -29,6 +21,8 @@ import { useAssetsStore } from '../../stores/assets';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import classes from './ProfilesPage.module.css';
+import { EntityCard, EntityList } from '../../components/EntityList';
+import { reconcileOrder, useBrowserOrder } from '../../components/entity-order';
 
 interface JsonNode {
   tag?: string;
@@ -174,16 +168,10 @@ function FilterRow({
   const value = filter ?? { action: 'include', keyword: '' };
 
   return (
-    <Paper withBorder radius="md" p="md">
+    <EntityCard id={label} name={label} actions={filter && <Tooltip label={t('common.delete')}>
+      <ActionIcon size={44} variant="subtle" color="red" aria-label={t('common.delete')} onClick={onClear}><Trash2 size={17} /></ActionIcon>
+    </Tooltip>}>
       <Stack gap="sm">
-        <Group justify="space-between" align="flex-start">
-          <Text fw={600}>{label}</Text>
-          {filter && (
-            <Button size="compact-sm" variant="subtle" color="red" onClick={onClear}>
-              {t('common.delete')}
-            </Button>
-          )}
-        </Group>
         <Group align="flex-start" grow>
           <Select
             label={t('profiles.filterMode')}
@@ -213,8 +201,17 @@ function FilterRow({
           </div>
         )}
       </Stack>
-    </Paper>
+    </EntityCard>
   );
+}
+
+function OutboundFilterList({ groups, preferenceKey, onDirtyChange, children }: {
+  groups: string[]; preferenceKey: string; onDirtyChange: (dirty: boolean) => void; children: (tag: string) => ReactNode;
+}) {
+  const { t } = useTranslation();
+  const { order, save } = useBrowserOrder(preferenceKey);
+  return <EntityList title={t('profiles.outbounds')} layout="stack" guard={false} localOrder
+    items={reconcileOrder(groups, order)} onSave={save} onDirtyChange={onDirtyChange}>{children}</EntityList>;
 }
 
 function ProfileEditorModal({
@@ -230,6 +227,8 @@ function ProfileEditorModal({
   const mobile = useMediaQuery('(max-width: 48em)');
   const assets = useAssetsStore((state) => state.items);
   const [mode, setMode] = useState<'edit' | 'preview'>(editor.initialMode);
+  const [filterOrderDirty, setFilterOrderDirty] = useState(false);
+  const userLogin = useSessionStore(state => state.settings?.userLogin ?? '');
   const [loadedTemplate, setLoadedTemplate] = useState<{ path: string; data: Record<string, unknown> } | null>(null);
   const [loadedNodes, setLoadedNodes] = useState<{ path: string; data: Record<string, unknown> } | null>(null);
   const [preview, setPreview] = useState('');
@@ -289,6 +288,7 @@ function ProfileEditorModal({
   }, [mode, previewProfile, t]);
 
   const changeMode = (value: string) => {
+    if (filterOrderDirty) { notifications.show({ color: 'yellow', message: t('sorting.finishFirst') }); return; }
     const nextMode = value as 'edit' | 'preview';
     if (nextMode === 'preview') {
       setPreviewLoading(true);
@@ -299,7 +299,7 @@ function ProfileEditorModal({
   };
 
   const requestClose = () => {
-    if (!form.isDirty()) return onClose();
+    if (!form.isDirty() && !filterOrderDirty) return onClose();
     modals.openConfirmModal({
       title: t('common.unsavedTitle'),
       children: <Text size="sm">{t('common.unsavedMessage')}</Text>,
@@ -320,6 +320,7 @@ function ProfileEditorModal({
   };
 
   const handleValidSubmit = async (values: Profile) => {
+    if (filterOrderDirty) return;
     if (existingNames.some((name) => name === values.name && name !== editor.oldName)) {
       form.setFieldError('name', t('profiles.duplicateName'));
       return;
@@ -373,7 +374,7 @@ function ProfileEditorModal({
                   <Stack gap="xl" pe="xs">
                     <SimpleGrid cols={{ base: 1, sm: 2 }}>
                       <Select
-                        label={t('profiles.template')} placeholder={t('profiles.chooseTemplate')} searchable clearable
+                        disabled={filterOrderDirty} label={t('profiles.template')} placeholder={t('profiles.chooseTemplate')} searchable clearable
                         data={assets.templates.map((item) => ({ value: item.path, label: basename(item.path) }))}
                         value={form.values.templateUrl || null}
                         error={form.errors.templateUrl}
@@ -399,25 +400,19 @@ function ProfileEditorModal({
                       />
                     </Stack>
 
-                    <Stack gap="sm">
+                    {!form.values.templateUrl || selectorGroups.length === 0 ? <Stack gap="sm">
                       <Title order={3}>{t('profiles.outbounds')}</Title>
-                      {!form.values.templateUrl ? (
-                        <Text c="dimmed">{t('profiles.chooseTemplateFirst')}</Text>
-                      ) : selectorGroups.length === 0 ? (
-                        <Text c="dimmed">{t('profiles.noSelector')}</Text>
-                      ) : selectorGroups.map((group) => {
-                        const tag = group.tag as string;
-                        const filter = form.values.rules.find((rule) => rule.group === tag)?.filters[0];
-                        return (
-                          <FilterRow
-                            key={tag} label={tag} filter={filter}
-                            matched={applyFilters(outboundNodes, filter ? [filter] : [])}
-                            onChange={(value) => setOutboundFilter(tag, value)}
-                            onClear={() => setOutboundFilter(tag)}
-                          />
-                        );
-                      })}
-                    </Stack>
+                      <Text c="dimmed">{t(!form.values.templateUrl ? 'profiles.chooseTemplateFirst' : 'profiles.noSelector')}</Text>
+                    </Stack> : <OutboundFilterList key={form.values.templateUrl}
+                      preferenceKey={`sing-sub.order:${userLogin}:filters:${form.values.templateUrl}`}
+                      groups={selectorGroups.map(group => group.tag as string)} onDirtyChange={setFilterOrderDirty}>
+                      {tag => {
+                        const filter = form.values.rules.find(rule => rule.group === tag)?.filters[0];
+                        return <FilterRow label={tag} filter={filter}
+                          matched={applyFilters(outboundNodes, filter ? [filter] : [])}
+                          onChange={value => setOutboundFilter(tag, value)} onClear={() => setOutboundFilter(tag)} />;
+                      }}
+                    </OutboundFilterList>}
                   </Stack>
                 </ScrollArea>
               )}
@@ -427,7 +422,7 @@ function ProfileEditorModal({
                   {t(mode === 'preview' ? 'common.done' : 'common.cancel')}
                 </Button>
                 {mode === 'edit' && (
-                  <Button type="submit" leftSection={<Save size={17} />} loading={saving}>{t('common.save')}</Button>
+                  <Button type="submit" leftSection={<Save size={17} />} loading={saving} disabled={filterOrderDirty}>{t('common.save')}</Button>
                 )}
               </Group>
             </Stack>
@@ -438,73 +433,29 @@ function ProfileEditorModal({
   );
 }
 
-function SortableProfileCard({
-  profile, subscriptionUrl, onOpen, onDuplicate, onRemove,
-}: {
-  profile: Profile;
-  subscriptionUrl: string;
-  onOpen: (mode: 'edit' | 'preview') => void;
-  onDuplicate: () => void;
-  onRemove: () => void;
+function ProfileCard({ profile, subscriptionUrl, onOpen, onDuplicate, onRemove }: {
+  profile: Profile; subscriptionUrl: string; onOpen: (mode: 'edit' | 'preview') => void;
+  onDuplicate: () => void; onRemove: () => void;
 }) {
   const { t } = useTranslation();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: profile.name });
-
-  return (
-    <Card
-      ref={setNodeRef} className={`${classes.sortableCard} ${isDragging ? classes.dragging : ''}`}
-      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 2 : undefined }}
-      role="article" aria-label={profile.name}
-      withBorder radius="lg" padding="lg" pos="relative"
-    >
-      <UnstyledButton
-        aria-label={t('profiles.previewProfile', { name: profile.name })}
-        onClick={() => onOpen('preview')}
-        pos="absolute" top={0} right={0} bottom={0} left={0}
-        style={{ zIndex: 1 }}
-      />
-      <Stack gap="md">
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <Tooltip label={t('profiles.reorder')}>
-            <ActionIcon
-              className={classes.dragHandle} size={44} variant="subtle" aria-label={t('profiles.reorder')}
-              pos="relative" style={{ zIndex: 2 }}
-              {...attributes} {...listeners}
-            ><GripVertical size={18} /></ActionIcon>
-          </Tooltip>
-          <Stack gap={4} miw={0} flex={1}>
-            <Text fw={700} size="lg" truncate>{profile.name}</Text>
-            <Text size="sm" c="dimmed" truncate>{profile.note || t('common.noNote')}</Text>
-          </Stack>
-          <Group gap={4} wrap="nowrap" pos="relative" style={{ zIndex: 2 }}>
-            <Tooltip label={t('common.edit')}>
-              <ActionIcon size={44} variant="subtle" aria-label={t('common.edit')} onClick={() => onOpen('edit')}>
-                <Pencil size={18} />
-              </ActionIcon>
-            </Tooltip>
-            <Menu position="bottom-end" shadow="md" transitionProps={{ transition: 'pop', duration: 120 }}>
-              <Menu.Target>
-                <ActionIcon size={44} variant="subtle" aria-label={t('common.moreActions')}><MoreHorizontal size={18} /></ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Item leftSection={<Copy size={16} />} onClick={onDuplicate}>{t('profiles.duplicate')}</Menu.Item>
-                <Menu.Item color="red" leftSection={<Trash2 size={16} />} onClick={onRemove}>{t('profiles.remove')}</Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-          </Group>
-        </Group>
-        <CopyButton value={subscriptionUrl} timeout={1800}>
-          {({ copied, copy }) => (
-            <Button
-              variant="light" color={copied ? 'teal' : 'pink'} fullWidth
-              leftSection={copied ? <Check size={17} /> : <Link2 size={17} />}
-              h={44} pos="relative" style={{ zIndex: 2 }} onClick={copy}
-            >{copied ? t('common.copied') : t('profiles.subscription')}</Button>
-          )}
-        </CopyButton>
-      </Stack>
-    </Card>
-  );
+  return <EntityCard id={profile.name} name={profile.name} note={profile.note}
+    onPreview={() => onOpen('preview')} previewLabel={t('profiles.previewProfile', { name: profile.name })}
+    actions={<>
+      <Tooltip label={t('common.edit')}><ActionIcon size={44} variant="subtle" aria-label={t('common.edit')} onClick={() => onOpen('edit')}><Pencil size={18} /></ActionIcon></Tooltip>
+      <Menu position="bottom-end" shadow="md" transitionProps={{ transition: 'pop', duration: 120 }}>
+        <Menu.Target><ActionIcon size={44} variant="subtle" aria-label={t('common.moreActions')}><MoreHorizontal size={18} /></ActionIcon></Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<Copy size={16} />} onClick={onDuplicate}>{t('profiles.duplicate')}</Menu.Item>
+          <Menu.Item color="red" leftSection={<Trash2 size={16} />} onClick={onRemove}>{t('profiles.remove')}</Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+    </>}
+    footer={<Group justify="flex-end"><CopyButton value={subscriptionUrl} timeout={1800}>
+      {({ copied, copy }) => <Button variant="light" color={copied ? 'teal' : 'pink'} h={44}
+        leftSection={copied ? <Check size={17} /> : <Link2 size={17} />} onClick={copy}>
+        {copied ? t('common.copied') : t('profiles.subscription')}
+      </Button>}
+    </CopyButton></Group>} />;
 }
 
 export function ProfilesPage() {
@@ -517,14 +468,9 @@ export function ProfilesPage() {
   const setAssetsLoading = useAssetsStore((state) => state.setLoading);
   const replaceAssets = useAssetsStore((state) => state.replace);
   const [profiles, setProfiles] = useState<Profile[]>(() => workspaceState?.profiles ?? []);
-  const [orderDirty, setOrderDirty] = useState(false);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState<ConflictState | null>(null);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
 
   useEffect(() => {
     if (assetsLoaded) return;
@@ -538,7 +484,6 @@ export function ProfilesPage() {
   const acceptSave = useCallback((nextState: StateData, nextRevision: string, warning?: string, closeEditor = false) => {
     replaceWorkspace(nextState, nextRevision);
     setProfiles(nextState.profiles);
-    setOrderDirty(false);
     if (closeEditor) setEditor(null);
     notifications.show({ color: warning ? 'yellow' : 'green', message: warning ?? t('workspace.saved') });
   }, [replaceWorkspace, t]);
@@ -599,24 +544,12 @@ export function ProfilesPage() {
     },
   });
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    if (!event.over || event.active.id === event.over.id) return;
-    const oldIndex = profiles.findIndex((profile) => profile.name === event.active.id);
-    const newIndex = profiles.findIndex((profile) => profile.name === event.over?.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-    const next = arrayMove(profiles, oldIndex, newIndex).map(cloneProfile);
-    next.forEach((profile, index) => { profile.order = index; });
-    setProfiles(next);
-    setOrderDirty(true);
-  };
-
   const reloadConflict = async () => {
     setSaving(true);
     try {
       const latest = await api.getState();
       replaceWorkspace(latest.state, latest.revision);
       setProfiles(latest.state.profiles);
-      setOrderDirty(false);
       setConflict(null);
       setEditor(null);
       notifications.show({ color: 'yellow', message: t('workspace.reloadNotice') });
@@ -644,43 +577,20 @@ export function ProfilesPage() {
 
   return (
     <Container size="lg">
-      <Stack gap="lg">
-        <Group justify="space-between" align="flex-start">
-          <Stack gap={2}>
-            <Title order={1}>{t('nav.profiles')}</Title>
-            <Text c="dimmed">{t('profiles.description')}</Text>
-          </Stack>
-          <Group>
-            {orderDirty && (
-              <Button variant="light" leftSection={<Save size={17} />} loading={saving} onClick={() => void persist({ profiles })}>
-                {t('profiles.saveOrder')}
-              </Button>
-            )}
-            <Button leftSection={<Plus size={17} />} onClick={() => createProfile()}>{t('profiles.newProfile')}</Button>
-          </Group>
-        </Group>
-
-        {profiles.length === 0 ? (
-          <EmptyState icon={<FileCog />} title={t('profiles.empty')} variant="light" color="pink">
-            <EmptyState.Actions><Button onClick={() => createProfile()}>{t('profiles.newProfile')}</Button></EmptyState.Actions>
-          </EmptyState>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={profiles.map((profile) => profile.name)} strategy={rectSortingStrategy}>
-              <div className={classes.grid}>
-                {profiles.map((profile) => (
-                  <SortableProfileCard
-                    key={profile.name} profile={profile}
-                    subscriptionUrl={`${window.location.origin}/sub/${settings?.subToken ?? ''}/${profile.name}.json`}
-                    onOpen={(initialMode) => setEditor({ profile: cloneProfile(profile), oldName: profile.name, isNew: false, initialMode })}
-                    onDuplicate={() => createProfile(profile)} onRemove={() => removeProfile(profile)}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        )}
-      </Stack>
+      <EntityList key={revision} title={t('nav.profiles')} items={profiles.map(profile => profile.name)}
+        onSave={order => persist({ profiles: order.map((name, index) => ({ ...cloneProfile(profiles.find(profile => profile.name === name)!), order: index })) })}
+        actions={<Button h={44} leftSection={<Plus size={17} />} onClick={() => createProfile()}>{t('profiles.newProfile')}</Button>}
+        empty={<EmptyState icon={<FileCog />} title={t('profiles.empty')} variant="light" color="pink">
+          <EmptyState.Actions><Button onClick={() => createProfile()}>{t('profiles.newProfile')}</Button></EmptyState.Actions>
+        </EmptyState>}>
+        {name => {
+          const profile = profiles.find(item => item.name === name)!;
+          return <ProfileCard profile={profile}
+            subscriptionUrl={`${window.location.origin}/sub/${settings?.subToken ?? ''}/${profile.name}.json`}
+            onOpen={initialMode => setEditor({ profile: cloneProfile(profile), oldName: profile.name, isNew: false, initialMode })}
+            onDuplicate={() => createProfile(profile)} onRemove={() => removeProfile(profile)} />;
+        }}
+      </EntityList>
 
       {editor && (
         <ProfileEditorModal

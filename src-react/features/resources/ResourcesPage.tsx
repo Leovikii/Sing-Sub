@@ -1,7 +1,6 @@
 import {
-  ActionIcon, Badge, Button, Card, Center, Code, Container, CopyButton, EmptyState, Group, Loader,
-  Menu, Modal, ScrollArea, SegmentedControl, SimpleGrid, Stack, Text, Title, Tooltip,
-  UnstyledButton,
+  ActionIcon, Badge, Button, Center, Code, Container, CopyButton, EmptyState, Group, Loader,
+  Menu, Modal, ScrollArea, SegmentedControl, Stack, Text, Tooltip,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
@@ -12,6 +11,9 @@ import { useTranslation } from 'react-i18next';
 import type { AssetSummary, RulesetBuildStatusResult, StateData } from '../../../shared';
 import { api } from '../../../src/api/endpoints';
 import { ApiClientError } from '../../../src/api/client';
+import { useSessionStore } from '../../stores/session';
+import { EntityCard, EntityList } from '../../components/EntityList';
+import { reconcileOrder, useBrowserOrder } from '../../components/entity-order';
 import { EntityEditorHeader } from '../../components/EntityEditorChrome';
 import { useAssetsStore } from '../../stores/assets';
 import { useWorkspaceStore } from '../../stores/workspace';
@@ -72,6 +74,9 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
   const [builds, setBuilds] = useState<Record<string, RulesetBuildStatusResult>>({});
   const [retryingRuleset, setRetryingRuleset] = useState('');
   const files = assets[directoryByType[type]];
+  const userLogin = useSessionStore(state => state.settings?.userLogin ?? '');
+  const { order: displayOrder, save: saveOrder } = useBrowserOrder(`sing-sub.order:${userLogin}:${type}`);
+  const paths = reconcileOrder(files.map(file => file.path), displayOrder);
 
   const refresh = useCallback(async () => {
     setAssetsLoading(true);
@@ -178,6 +183,10 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
         oldPath: rename ? editor.file.path : undefined,
         message: `${editor.file.isNew ? 'Create' : rename ? 'Rename' : 'Update'} ${editor.name}.json`,
       });
+      if (rename) {
+        try { saveOrder(paths.map(item => item === editor.file.path ? path : item)); }
+        catch { notifications.show({ color: 'yellow', message: t('sorting.saveFailed') }); }
+      }
       replaceWorkspace(workspaceState, result.revision);
       await refresh();
       closeEditor();
@@ -247,49 +256,24 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
 
   return (
     <Container size="lg">
-      <Stack gap="lg">
-        <Group justify="space-between">
-          <Title order={1}>{t(titleKeyByType[type])}</Title>
-          <Button leftSection={<Plus size={17} />} onClick={createFile}>{t('common.add')}</Button>
-        </Group>
-        {loading && !loaded ? (
-          <Center py={80}><Loader /></Center>
-        ) : files.length === 0 ? (
-          <EmptyState icon={<Boxes />} title={t(emptyKeyByType[type])} variant="light" color="pink">
-            <EmptyState.Actions><Button onClick={createFile}>{t('assets.newFile')}</Button></EmptyState.Actions>
-          </EmptyState>
-        ) : (
-          <SimpleGrid cols={{ base: 1, sm: 2 }}>
-            {files.map((file) => (
-              <Card
-                key={file.path} role="article" aria-label={basename(file.path)}
-                withBorder radius="lg" padding="lg" pos="relative"
-              >
-                <UnstyledButton
-                  aria-label={t('assets.previewFile', { name: basename(file.path) })}
-                  onClick={() => void openFile(file, 'preview')}
-                  pos="absolute" top={0} right={0} bottom={0} left={0}
-                  style={{ zIndex: 1 }}
-                />
-                <Group justify="space-between" align="flex-start" wrap="nowrap">
-                  <Stack gap={4} miw={0}>
-                    <Text fw={700} truncate>{basename(file.path)}</Text>
-                  </Stack>
-                  <Group gap={4} wrap="nowrap" pos="relative" style={{ zIndex: 2 }}>
-                    <Tooltip label={t('common.edit')}>
-                      <ActionIcon size={44} variant="subtle" aria-label={t('common.edit')} onClick={() => void openFile(file)}><Pencil size={18} /></ActionIcon>
-                    </Tooltip>
-                    <Menu position="bottom-end" shadow="md" transitionProps={{ transition: 'pop', duration: 120 }}>
-                      <Menu.Target><ActionIcon size={44} variant="subtle" aria-label={t('common.moreActions')}><MoreHorizontal size={18} /></ActionIcon></Menu.Target>
-                      <Menu.Dropdown><Menu.Item color="red" leftSection={<Trash2 size={16} />} onClick={() => remove(file)}>{t('assets.removeFile')}</Menu.Item></Menu.Dropdown>
-                    </Menu>
-                  </Group>
-                </Group>
-                <Text size="sm" c="dimmed" lineClamp={2} mt={4} mih="2.9em" style={{ overflowWrap: 'anywhere' }}>
-                  {file.note}
-                </Text>
-                <Group mt="auto" pt="sm" justify="space-between" gap="xs">
-                  <ResourceTime value={file.updatedAt} now={now} compact />
+      <EntityList localOrder title={t(titleKeyByType[type])} items={paths} onSave={saveOrder}
+        actions={<Button h={44} leftSection={<Plus size={17} />} onClick={createFile}>{t('common.add')}</Button>}
+        empty={loading && !loaded ? <Center py={80}><Loader /></Center> : <EmptyState icon={<Boxes />} title={t(emptyKeyByType[type])} variant="light" color="pink">
+          <EmptyState.Actions><Button onClick={createFile}>{t('assets.newFile')}</Button></EmptyState.Actions>
+        </EmptyState>}>
+        {path => {
+          const file = files.find(item => item.path === path)!;
+          return <EntityCard id={file.path} name={basename(file.path)} note={file.note}
+            onPreview={() => void openFile(file, 'preview')} previewLabel={t('assets.previewFile', { name: basename(file.path) })}
+            actions={<>
+              <Tooltip label={t('common.edit')}><ActionIcon size={44} variant="subtle" aria-label={t('common.edit')} onClick={() => void openFile(file)}><Pencil size={18} /></ActionIcon></Tooltip>
+              <Menu position="bottom-end" shadow="md" transitionProps={{ transition: 'pop', duration: 120 }}>
+                <Menu.Target><ActionIcon size={44} variant="subtle" aria-label={t('common.moreActions')}><MoreHorizontal size={18} /></ActionIcon></Menu.Target>
+                <Menu.Dropdown><Menu.Item color="red" leftSection={<Trash2 size={16} />} onClick={() => remove(file)}>{t('assets.removeFile')}</Menu.Item></Menu.Dropdown>
+              </Menu>
+            </>}
+            footer={<Group justify="space-between" gap="xs">
+              <ResourceTime value={file.updatedAt} now={now} compact />
                 {type === 'ruleset' && (() => {
                   const id = basename(file.path);
                   const build = builds[id];
@@ -322,12 +306,9 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
                     </Group>
                   );
                 })()}
-                </Group>
-              </Card>
-            ))}
-          </SimpleGrid>
-        )}
-      </Stack>
+            </Group>} />;
+        }}
+      </EntityList>
 
       <Modal.Root
         opened={Boolean(editor)} onClose={requestClose}

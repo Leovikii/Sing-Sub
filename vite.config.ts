@@ -13,5 +13,17 @@ export default defineConfig({
   plugins: [react()],
   build: {
     chunkSizeWarningLimit: 1000,
+    rolldownOptions: {
+      output: {
+        strictExecutionOrder: true,
+        // Merge small shared UI chunks without pulling deferred features into the entry.
+        codeSplitting: {
+          groups: [{
+            name: 'mantine', test: /node_modules[\\/]@mantine[\\/]core/,
+            entriesAware: true, entriesAwareMergeThreshold: 30_000,
+          }],
+        },
+      },
+    },
   },
 });
