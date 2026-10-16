@@ -1,8 +1,9 @@
 import {
-  workspaceSnapshotSchema,
+  persistedWorkspaceSnapshotSchema,
   type WorkspaceSnapshot,
 } from '../../../../shared';
 import type { WorkspaceStore } from '../../ports/workspace-store';
+import { projectWorkspace } from '../../../lib/workspace-metadata';
 
 export interface InitializeEmptyWorkspaceCommand {
   workspaceId: string;
@@ -14,8 +15,8 @@ export function initializeEmptyWorkspace(
   store: WorkspaceStore<WorkspaceSnapshot>,
   command: InitializeEmptyWorkspaceCommand,
 ) {
-  const snapshot = workspaceSnapshotSchema.parse({
-    schemaVersion: 3,
+  const snapshot = persistedWorkspaceSnapshotSchema.parse({
+    schemaVersion: 4,
     workspaceId: command.workspaceId,
     revisionId: command.revisionId,
     previousRevisionId: null,
@@ -33,7 +34,8 @@ export function initializeEmptyWorkspace(
       rulesets: {},
     },
     builds: {},
+    metadata: { schemaVersion: 1, entities: {} },
     sync: { status: 'never' },
   });
-  return store.create({ workspaceId: command.workspaceId, snapshot });
+  return store.create({ workspaceId: command.workspaceId, snapshot: projectWorkspace(snapshot) });
 }

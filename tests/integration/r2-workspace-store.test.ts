@@ -95,11 +95,11 @@ describe('R2WorkspaceStore', () => {
     const stored = await bucket.get(r2ObjectKeys.revision('workspace-1', 'revision-profile-order'));
     const raw = JSON.parse(await stored!.text());
     expect(Object.keys(raw.profiles[0])).toEqual([
-      'order', 'inboundRules', 'rules', 'nodesPath', 'templateUrl', 'name',
+      'inboundRules', 'rules', 'nodesPath', 'templateUrl', 'name',
     ]);
     const read = await store.read('workspace-1');
     expect(Object.keys(read.snapshot.profiles[0])).toEqual([
-      'order', 'inboundRules', 'rules', 'nodesPath', 'templateUrl', 'name',
+      'inboundRules', 'rules', 'nodesPath', 'templateUrl', 'name', 'order',
     ]);
   });
 

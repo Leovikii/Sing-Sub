@@ -1,6 +1,6 @@
 # Cloudflare 部署、更新与恢复
 
-适用版本：`v3.1.5`；代码回滚基线：`v3.0.0`。
+适用版本：`v3.1.6`；代码回滚基线：`v3.0.0`。
 
 部署前必须保留上一可用 Worker version，并完成本文的发布前检查。现有 workspace schema v2 必须先通过 3.1.2 完成自动迁移，再更新至本版本，详见 [工作区升级路径](./workspace-upgrade.md)。
 
@@ -9,7 +9,7 @@
 - Worker `compatibility_date` 为 `2026-07-15`。
 - 运行时只需要 `WORKSPACE_BUCKET` R2 binding 和 `ADMIN_PASSWORD`、`SESSION_SIGNING_SECRET`、`SUBSCRIPTION_SIGNING_SECRET`。
 - Workers observability 与 Turnstile 暂不启用。
-- 当前业务只读取 workspace schema v3，v2 current 不再自动转换；`workspaces/primary/head.json` 使用独立 head schema v1，GitHub sync manifest 保持 v2，但不再接受适配器路径。
+- 3.1.6 新写 workspace v4，临时兼容读 v3；v2 current 不转换。head schema v1 不变，GitHub sync manifest v3 加单一 metadata schema v1，旧同步 v2 只用于本次兼容。3.1.7 删除兼容前须完成活跃引用检查，详见升级说明。
 - 私有配置订阅 Token 为 `s2.<22-char-tag>`；旧格式不兼容。
 - 规则集公开 JSON/SRS URL、GitHub editable sync 与 SRS compiler 均不属于网站部署初始化。
 
@@ -55,11 +55,11 @@ GitHub 站外恢复使用显式 pull，并先完成 diff、schema/name/reference
 
 ## 代码回滚
 
-跨 workspace v2/v3 的回滚必须同时处理数据格式，不能仅切换 Worker；详见 [工作区升级与回退](./workspace-upgrade.md)。
+跨 workspace v2/v3/v4 的回滚必须同时处理数据格式，不能仅切换 Worker；详见 [工作区升级与回退](./workspace-upgrade.md)。
 
 1. 优先 revert 错误的源码 commit，让 `main` 的新 commit 触发可审计的 Cloudflare Build。
 2. Cloudflare 账户提供 Worker version rollback 入口时，可选择已验证版本重新部署。
-3. 相同数据格式内，只有业务数据确实错误时才单独执行 workspace revision restore；跨 v2/v3 必须按升级文档配套转换数据。
+3. 相同数据格式内，只有业务数据确实错误时才单独执行 workspace revision restore；跨 v2/v3/v4 必须按升级文档配套转换数据。
 4. 不删除或清空 R2，不使用 GitHub force push 模拟数据回滚。
 5. 回滚后检查登录、Profile 预览、私有订阅、公开规则集和可选 GitHub sync。
 

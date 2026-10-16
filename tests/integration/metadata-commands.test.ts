@@ -1,0 +1,111 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import worker from '../../worker/index';
+import { handleLogin } from '../../worker/routes/auth';
+import type { Env } from '../../worker/types';
+import { legacySnapshot } from '../fakes/metadata-fixture';
+import { R2WorkspaceStore } from '../../worker/infrastructure/r2/r2-workspace-store';
+import { InMemoryR2Bucket } from '../fakes/in-memory-r2-bucket';
+import { r2ObjectKeys } from '../../worker/infrastructure/r2/r2-object-keys';
+import { canonicalJson, sha256Hex } from '../../worker/domain/revisions/canonical-json';
+import { saveMetadata } from '../../worker/application/commands/save-metadata';
+import { saveAsset, deleteAsset } from '../../worker/application/commands/assets/mutate-asset';
+import { saveProfiles } from '../../worker/application/commands/profiles/save-profiles';
+import { persistWorkspace } from '../../worker/lib/workspace-metadata';
+
+const now = '2026-10-16T12:00:00.000Z';
+afterEach(() => vi.unstubAllGlobals());
+describe('metadata atomic commands and upgrade recovery', () => {
+  it('checks the original v3 hash before conversion and leaves history untouched during read/recovery/restore', async () => {
+    const source = legacySnapshot(); const bucket = new InMemoryR2Bucket(); const store = new R2WorkspaceStore(bucket);
+    const raw = JSON.stringify(source);
+    bucket.forcePut(r2ObjectKeys.revision('primary', 'r1'), raw);
+    bucket.forcePut(r2ObjectKeys.head('primary'), JSON.stringify({ schemaVersion: 1, workspaceId: 'primary', currentRevision: 'r1', previousRevision: null, updatedAt: source.createdAt, contentHash: await sha256Hex(canonicalJson(source)) }));
+    const put = vi.spyOn(bucket, 'put'); const get = vi.spyOn(bucket, 'get');
+    expect((await store.read('primary')).snapshot.schemaVersion).toBe(4); expect(put).not.toHaveBeenCalled();
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(await (await bucket.get(r2ObjectKeys.revision('primary', 'r1')))!.text()).toBe(raw);
+    await bucket.delete(r2ObjectKeys.head('primary'));
+    await store.recoverHead('primary', 'r1');
+    expect((await store.read('primary')).revision).toBe('r1');
+    await store.restore({ workspaceId: 'primary', targetRevision: 'r1', newRevision: 'r2', expectedRevision: 'r1', createdAt: now });
+    expect(JSON.parse(await (await bucket.get(r2ObjectKeys.revision('primary', 'r2')))!.text())).toEqual({ ...persistWorkspace(source), revisionId: 'r2', previousRevisionId: 'r1', createdAt: now });
+    await bucket.delete(r2ObjectKeys.head('primary'));
+    await store.recoverHead('primary', 'r2');
+    expect((await store.read('primary')).snapshot.metadata).toEqual(persistWorkspace(source).metadata);
+    bucket.forcePut(r2ObjectKeys.revision('primary', 'r2'), JSON.stringify({ ...persistWorkspace(source), revisionId: 'r2', previousRevisionId: 'r1', createdAt: now, profiles: [] }));
+    await expect(store.read('primary')).rejects.toMatchObject({ name: 'WorkspaceStorageCorruptError' });
+  });
+  it('sorts only the requested kind, keeps times/body and rejects stale/incomplete commands', async () => {
+    const bucket = new InMemoryR2Bucket(); const store = new R2WorkspaceStore(bucket); const source = legacySnapshot();
+    await store.create({ workspaceId: 'primary', snapshot: source });
+    const before = await store.read('primary'); const path = 'sing-sub/templates/base.json';
+    await saveMetadata(store, { workspaceId: 'primary', revisionId: 'r2', createdAt: now, expectedRevision: 'r1', operation: 'order', kind: 'templates', paths: [path] });
+    const after = (await store.read('primary')).snapshot;
+    expect(after.metadata!.entities[path]).toEqual({ ...before.snapshot.metadata!.entities[path], order: 0 });
+    expect(after.assets).toEqual(before.snapshot.assets); expect(after.builds).toEqual(before.snapshot.builds);
+    await expect(saveMetadata(store, { workspaceId: 'primary', revisionId: 'r3', createdAt: now, expectedRevision: 'r1', operation: 'order', kind: 'templates', paths: [path] })).rejects.toMatchObject({ actualRevision: 'r2' });
+    await expect(saveMetadata(store, { workspaceId: 'primary', revisionId: 'r3', createdAt: now, expectedRevision: 'r2', operation: 'order', kind: 'templates', paths: [] })).rejects.toThrow('every entity');
+  });
+  it('owns profile timestamps, preserves them for order/no-op saves and carries metadata across renames/deletes', async () => {
+    const store = new R2WorkspaceStore(new InMemoryR2Bucket()); await store.create({ workspaceId: 'primary', snapshot: legacySnapshot() });
+    const profile = (await store.read('primary')).snapshot.profiles[0];
+    const reordered = await saveProfiles(store, { workspaceId: 'primary', revisionId: 'r2', expectedRevision: 'r1', createdAt: now, state: { profiles: [{ ...profile, order: 0, updated_at: Date.now(), created_at: Date.now() }] } });
+    expect(reordered.state.profiles[0].updated_at).toBe(profile.updated_at); expect(reordered.state.profiles[0].created_at).toBe(profile.created_at);
+    const renamed = await saveProfiles(store, { workspaceId: 'primary', revisionId: 'r3', expectedRevision: 'r2', createdAt: now, state: { profiles: [{ ...profile, name: 'renamed' }] }, profileName: 'renamed', oldProfileName: 'home' });
+    expect(renamed.state.profiles[0].created_at).toBe(profile.created_at); expect(renamed.state.profiles[0].updated_at).toBe(Date.parse(now));
+    const snapshot = (await store.read('primary')).snapshot;
+    expect(snapshot.metadata!.entities['sing-sub/configs/home.json']).toBeUndefined();
+    expect(snapshot.metadata!.entities['sing-sub/templates/base.json'].note).toBe('private-root');
+  });
+  it('saves body and metadata once, keeps no-op time, and moves/removes the record atomically', async () => {
+    const bucket = new InMemoryR2Bucket(); const store = new R2WorkspaceStore(bucket); await store.create({ workspaceId: 'primary', snapshot: legacySnapshot() });
+    const asset = (await store.read('primary')).snapshot.assets.templates.base;
+    const put = vi.spyOn(bucket, 'put');
+    await saveAsset(store, { workspaceId: 'primary', revisionId: 'r2', expectedRevision: 'r1', createdAt: now, path: asset.path, asset, metadata: { note: 'private-root' } });
+    expect(put).toHaveBeenCalledTimes(2);
+    expect((await store.read('primary')).snapshot.assets.templates.base.updatedAt).toBe(asset.updatedAt);
+    await saveAsset(store, { workspaceId: 'primary', revisionId: 'r3', expectedRevision: 'r2', createdAt: now, path: 'sing-sub/templates/new.json', oldPath: asset.path, asset, metadata: { note: 'new-note' } });
+    const moved = (await store.read('primary')).snapshot;
+    expect(moved.metadata!.entities[asset.path]).toBeUndefined();
+    expect(moved.metadata!.entities['sing-sub/templates/new.json'].editor).toBeDefined();
+    expect(moved.assets.templates.new.updatedAt).toBe(now);
+    await deleteAsset(store, { workspaceId: 'primary', revisionId: 'r4', expectedRevision: 'r3', createdAt: now, path: 'sing-sub/templates/new.json' });
+    expect((await store.read('primary')).snapshot.metadata!.entities['sing-sub/templates/new.json']).toBeUndefined();
+  });
+  it('does not fetch or compile on note/no-op/order saves and rejects stale writes before fetching', async () => {
+    const source = legacySnapshot();
+    source.assets.rulesets.ad = { path: 'sing-sub/rulesets/ad.json', content: { version: 2, rules: [{ domain: ['old.com'] }],
+      _sing_sub: { manual: { domain: ['old.com'] }, sources: [{ url: 'https://example.com/rules.json', interval_hours: 24, last_updated: now }] } } };
+    const bucket = new InMemoryR2Bucket(); const store = new R2WorkspaceStore(bucket);
+    await store.create({ workspaceId: 'primary', snapshot: source });
+    const env = { WORKSPACE_BUCKET: bucket, ADMIN_PASSWORD: 'test-password', SESSION_SIGNING_SECRET: 'test-session-secret-at-least-32-bytes', SUBSCRIPTION_SIGNING_SECRET: 'test-sub-secret-at-least-32-bytes' } as unknown as Env;
+    const login = await handleLogin(new Request('https://example.com/api/login', { method: 'POST', body: JSON.stringify({ adminPassword: 'test-password' }) }), env);
+    const cookie = login.headers.get('Set-Cookie')!.split(';')[0];
+    const fetchMock = vi.fn(async () => new Response('{"version":2,"rules":[{"domain":["remote.com"]}]}')); vi.stubGlobal('fetch', fetchMock);
+    let saved = await store.read('primary'); const path = source.assets.rulesets.ad.path;
+    const submit = (body: unknown, url = '/api/file') => worker.fetch(new Request(`https://example.com${url}`, { method: 'PUT', headers: { Cookie: cookie }, body: JSON.stringify(body) }), env);
+    const editor = structuredClone(saved.snapshot.metadata!.entities[path].editor!);
+    editor.ruleset!.sources[0].lastFetchedAt = '2099-01-01T00:00:00.000Z';
+    const payload = { path, content: JSON.stringify(saved.snapshot.assets.rulesets.ad.content), metadata: { note: 'changed', editor }, expectedRevision: saved.revision };
+    expect((await submit(payload)).status).toBe(200);
+    saved = await store.read('primary'); const time = saved.snapshot.metadata!.entities[path].updatedAt;
+    expect(saved.snapshot.metadata!.entities[path].editor!.ruleset!.sources[0].lastFetchedAt).toBe(now);
+    expect((await submit({ ...payload, expectedRevision: saved.revision })).status).toBe(200);
+    saved = await store.read('primary'); expect(saved.snapshot.metadata!.entities[path].updatedAt).toBe(time);
+    expect((await submit({ operation: 'order', kind: 'rulesets', paths: [path], expectedRevision: saved.revision }, '/api/metadata')).status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+    saved = await store.read('primary'); editor.ruleset!.manual.domain = ['new.com'];
+    expect((await submit({ ...payload, metadata: { editor }, expectedRevision: 'r1' })).status).toBe(409);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await submit({ ...payload, metadata: { editor }, expectedRevision: saved.revision })).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    saved = await store.read('primary');
+    expect(saved.snapshot.assets.rulesets.ad.content).toEqual({ version: 2, rules: [{ domain: ['new.com', 'remote.com'] }] });
+    expect(saved.snapshot.metadata!.entities[path].editor!.ruleset!.sources[0].lastFetchedAt).not.toBe('2099-01-01T00:00:00.000Z');
+    const put = vi.spyOn(bucket, 'put'); put.mockClear();
+    for (const bad of [{ ...payload, metadata: { order: 99 } }, { ...payload, content: '{"version":2,"version":3,"rules":[]}' }]) {
+      expect((await submit({ ...bad, expectedRevision: saved.revision })).status).toBe(400);
+    }
+    expect(put).not.toHaveBeenCalled(); expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

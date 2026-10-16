@@ -7,13 +7,13 @@ const syncPathSchema = z.string().regex(
 );
 
 export const syncManifestFileSchema = z.object({
-  path: syncPathSchema,
+  path: z.union([syncPathSchema, z.literal('sing-sub/metadata.json')]),
   contentHash: sha256Schema,
   size: z.number().int().nonnegative(),
 }).strict();
 
 export const syncManifestSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.union([z.literal(2), z.literal(3)]),
   format: z.literal('sing-sub-editable-sync'),
   workspaceId: opaqueIdSchema,
   workspaceRevision: opaqueIdSchema,
@@ -22,6 +22,9 @@ export const syncManifestSchema = z.object({
   contentHash: sha256Schema,
   files: z.array(syncManifestFileSchema),
 }).strict().superRefine((manifest, context) => {
+  if (manifest.files.some(file => file.path === 'sing-sub/metadata.json') !== (manifest.schemaVersion === 3)) {
+    context.addIssue({ code: 'custom', path: ['files'], message: 'Metadata control file must match the sync format' });
+  }
   const paths = new Set<string>();
   for (const [index, file] of manifest.files.entries()) {
     if (paths.has(file.path)) {

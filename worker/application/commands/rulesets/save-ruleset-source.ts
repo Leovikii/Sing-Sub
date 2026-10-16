@@ -1,3 +1,5 @@
+import { normalizeWorkspace, updateAssetMetadata } from '../../../lib/workspace-metadata';
+import type { EntityEditMetadata } from '../../../../shared';
 import {
   jsonAssetSchema,
   type BuildJob,
@@ -26,6 +28,7 @@ export interface SaveRulesetSourceCommand {
   path: string;
   oldPath?: string;
   asset: JsonAsset;
+  metadata?: EntityEditMetadata;
   compilerEnabled: boolean;
 }
 
@@ -47,7 +50,6 @@ export async function saveRulesetSource(
   const asset = jsonAssetSchema.parse({
     ...command.asset,
     path: command.path,
-    updatedAt: command.createdAt,
   });
   const compilerSource = await createCompilerSource(asset.content);
   const jobId = await createSrsJobId({
@@ -93,7 +95,8 @@ export async function saveRulesetSource(
   const published = await executeWorkspaceCommand(workspaceStore, {
     workspaceId: command.workspaceId,
     expectedRevision: command.expectedRevision,
-    update: snapshot => {
+    update: sourceSnapshot => {
+      const snapshot = normalizeWorkspace(sourceSnapshot);
       const collection = snapshot.assets.rulesets;
       if (command.oldPath && isRename && !collection[source.entityId]) {
         throw new AssetNotFoundError(command.oldPath);
@@ -101,11 +104,12 @@ export async function saveRulesetSource(
       if (command.oldPath && isRename && collection[target.entityId]) {
         throw new AssetAlreadyExistsError(command.path);
       }
+      const prepared = updateAssetMetadata(snapshot, command.path, command.oldPath, asset, command.metadata, command.createdAt);
       if (isRename) {
         delete collection[source.entityId];
         delete snapshot.builds[source.entityId];
       }
-      collection[target.entityId] = asset;
+      collection[target.entityId] = prepared;
       snapshot.builds[target.entityId] = build;
       return {
         ...snapshot,

@@ -14,10 +14,10 @@ const OrderContext = createContext<{
   items: string[]; sorting: boolean; saving: boolean; move: (id: string, delta: number) => void;
 }>({ items: [], sorting: false, saving: false, move: () => {} });
 
-export function EntityList({ items, title, actions, onSave, children, empty, layout = 'grid', onDirtyChange, guard = true, localOrder = false }: {
+export function EntityList({ items, title, actions, onSave, children, empty, layout = 'grid', onDirtyChange, guard = true }: {
   items: string[]; title: string; actions?: ReactNode;
   onSave: (order: string[]) => boolean | Promise<boolean>;
-  children: (id: string) => ReactNode; empty?: ReactNode; layout?: 'grid' | 'stack'; onDirtyChange?: (dirty: boolean) => void; guard?: boolean; localOrder?: boolean;
+  children: (id: string) => ReactNode; empty?: ReactNode; layout?: 'grid' | 'stack'; onDirtyChange?: (dirty: boolean) => void; guard?: boolean;
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<string[] | null>(null);
@@ -65,7 +65,7 @@ export function EntityList({ items, title, actions, onSave, children, empty, lay
             </>}
           </Group>
         </Group>
-        {active && <Text size="sm" c="dimmed">{t('sorting.hint')} {localOrder && t('sorting.local')}</Text>}
+        {active && <Text size="sm" c="dimmed">{t('sorting.hint')}</Text>}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={endDrag}
           accessibility={{ screenReaderInstructions: { draggable: t('sorting.keyboard') }, announcements: {
             onDragStart: () => t('sorting.picked'),

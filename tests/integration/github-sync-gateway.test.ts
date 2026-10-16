@@ -57,6 +57,7 @@ describe('GitHub editable sync gateway', () => {
   it('downloads only the actual managed tree and keeps manifest informational', async () => {
     const profile = '{"name":"default","templateUrl":"","nodesPath":"","rules":[],"inboundRules":[],"order":0}';
     const manifest = '{"format":"stale"}';
+    const metadata = '{"schemaVersion":1,"entities":{}}';
     const github = fakeGitHub([
       json(repository()),
       json(ref()),
@@ -67,10 +68,12 @@ describe('GitHub editable sync gateway', () => {
           { path: '.github/workflows/compile-srs.yml', type: 'blob', sha: 'workflow', size: 10 },
           { path: 'sing-sub/configs/default.json', type: 'blob', sha: 'profile', size: Buffer.byteLength(profile) },
           { path: 'sing-sub/manifest.json', type: 'blob', sha: 'manifest', size: Buffer.byteLength(manifest) },
+          { path: 'sing-sub/metadata.json', type: 'blob', sha: 'metadata', size: Buffer.byteLength(metadata) },
         ],
       }),
       json(blob(profile)),
       json(blob(manifest)),
+      json(blob(metadata)),
     ]);
     const gateway = new GitHubSyncGateway({
       owner: 'owner', repo: 'private-data', pat: 'private-token', defaultBranch: 'main', fetch: github.request,
@@ -82,10 +85,10 @@ describe('GitHub editable sync gateway', () => {
         path: 'sing-sub/configs/default.json',
         content: profile,
         contentHash: await sha256Hex(profile),
-      }],
+      }, { path: 'sing-sub/metadata.json', content: metadata, contentHash: await sha256Hex(metadata) }],
       manifestContent: manifest,
     });
-    expect(github.requests).toHaveLength(6);
+    expect(github.requests).toHaveLength(7);
     expect(github.requests.every(request => !String(request.init?.body || '').includes('private-token'))).toBe(true);
   });
 
@@ -111,6 +114,7 @@ describe('GitHub editable sync gateway', () => {
     });
     const profileContent = '{}\n';
     const manifestContent = '{"format":"sing-sub-editable-sync"}\n';
+    const metadataContent = '{"schemaVersion":1,"entities":{}}\n';
 
     await expect(gateway.push({
       expectedRemoteRevision: 'commit-1',
@@ -118,6 +122,7 @@ describe('GitHub editable sync gateway', () => {
       files: [
         { path: 'sing-sub/configs/default.json', content: profileContent, contentHash: await sha256Hex(profileContent) },
         { path: 'sing-sub/manifest.json', content: manifestContent, contentHash: await sha256Hex(manifestContent) },
+        { path: 'sing-sub/metadata.json', content: metadataContent, contentHash: await sha256Hex(metadataContent) },
       ],
     })).resolves.toEqual({ remoteRevision: 'commit-2' });
 
@@ -127,6 +132,7 @@ describe('GitHub editable sync gateway', () => {
     expect(treeBody.tree).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: 'sing-sub/configs/default.json', content: profileContent }),
       expect.objectContaining({ path: 'sing-sub/manifest.json', content: manifestContent }),
+      expect.objectContaining({ path: 'sing-sub/metadata.json', content: metadataContent }),
       expect.objectContaining({ path: 'sing-sub/nodes/obsolete.json', sha: null }),
     ]));
     expect(JSON.stringify(treeBody)).not.toContain('README.md');

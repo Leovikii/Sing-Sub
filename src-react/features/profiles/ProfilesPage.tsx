@@ -13,7 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
-import { profileSchema, type FilterAction, type Profile, type StateData } from '../../../shared';
+import { profileSchema, type EntityMetadata, type FilterAction, type Profile, type StateData } from '../../../shared';
 import { ApiClientError } from '../../../src/api/client';
 import { api } from '../../../src/api/endpoints';
 import { EntityEditorHeader } from '../../components/EntityEditorChrome';
@@ -22,7 +22,8 @@ import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import classes from './ProfilesPage.module.css';
 import { EntityCard, EntityList } from '../../components/EntityList';
-import { reconcileOrder, useBrowserOrder } from '../../components/entity-order';
+import { reconcileOrder } from '../../components/entity-order';
+import { LegacyOrderImport } from '../../components/LegacyOrderImport';
 
 interface JsonNode {
   tag?: string;
@@ -205,13 +206,32 @@ function FilterRow({
   );
 }
 
-function OutboundFilterList({ groups, preferenceKey, onDirtyChange, children }: {
-  groups: string[]; preferenceKey: string; onDirtyChange: (dirty: boolean) => void; children: (tag: string) => ReactNode;
+function OutboundFilterList({ groups, path, preferenceKey, metadata, onDirtyChange, children }: {
+  groups: string[]; path: string; preferenceKey: string; metadata?: EntityMetadata; onDirtyChange: (dirty: boolean) => void; children: (tag: string) => ReactNode;
 }) {
   const { t } = useTranslation();
-  const { order, save } = useBrowserOrder(preferenceKey);
-  return <EntityList title={t('profiles.outbounds')} layout="stack" guard={false} localOrder
-    items={reconcileOrder(groups, order)} onSave={save} onDirtyChange={onDirtyChange}>{children}</EntityList>;
+  const [order, setOrder] = useState(metadata?.display?.outboundOrder ?? []);
+  const save = async (outboundOrder: string[]) => {
+    const workspace = useWorkspaceStore.getState();
+    if (!workspace.revision) return false;
+    try {
+      const result = await api.saveMetadata({ operation: 'display', path, outboundOrder, expectedRevision: workspace.revision });
+      workspace.replace(workspace.state, result.revision);
+      setOrder(outboundOrder);
+      return true;
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 409) modals.openConfirmModal({
+        title: t('common.conflictTitle'), children: <Text size="sm">{t('common.conflictMessage')}</Text>,
+        labels: { confirm: t('common.reload'), cancel: t('common.cancel') }, onConfirm: () => window.location.reload(),
+      });
+      else notifications.show({ color: 'red', message: t('sorting.saveFailed') });
+      return false;
+    }
+  };
+  const items = reconcileOrder(groups, order);
+  return <EntityList title={t('profiles.outbounds')} layout="stack" guard={false}
+    actions={<LegacyOrderImport storageKey={preferenceKey} items={items} onImport={save} />}
+    items={items} onSave={save} onDirtyChange={onDirtyChange}>{children}</EntityList>;
 }
 
 function ProfileEditorModal({
@@ -229,7 +249,7 @@ function ProfileEditorModal({
   const [mode, setMode] = useState<'edit' | 'preview'>(editor.initialMode);
   const [filterOrderDirty, setFilterOrderDirty] = useState(false);
   const userLogin = useSessionStore(state => state.settings?.userLogin ?? '');
-  const [loadedTemplate, setLoadedTemplate] = useState<{ path: string; data: Record<string, unknown> } | null>(null);
+  const [loadedTemplate, setLoadedTemplate] = useState<{ path: string; data: Record<string, unknown>; metadata?: EntityMetadata } | null>(null);
   const [loadedNodes, setLoadedNodes] = useState<{ path: string; data: Record<string, unknown> } | null>(null);
   const [preview, setPreview] = useState('');
   const [previewLoading, setPreviewLoading] = useState(editor.initialMode === 'preview');
@@ -253,7 +273,7 @@ function ProfileEditorModal({
     if (form.values.templateUrl) {
       void api.getTemplate(form.values.templateUrl).then((result) => {
         if (active && result.content && typeof result.content === 'object') {
-          setLoadedTemplate({ path: form.values.templateUrl, data: result.content as Record<string, unknown> });
+          setLoadedTemplate({ path: form.values.templateUrl, data: result.content as Record<string, unknown>, metadata: result.metadata });
         }
       }).catch(() => {
         if (active) notifications.show({ color: 'red', message: t('profiles.templateFailed') });
@@ -404,6 +424,7 @@ function ProfileEditorModal({
                       <Title order={3}>{t('profiles.outbounds')}</Title>
                       <Text c="dimmed">{t(!form.values.templateUrl ? 'profiles.chooseTemplateFirst' : 'profiles.noSelector')}</Text>
                     </Stack> : <OutboundFilterList key={form.values.templateUrl}
+                      path={form.values.templateUrl} metadata={loadedTemplate?.metadata}
                       preferenceKey={`sing-sub.order:${userLogin}:filters:${form.values.templateUrl}`}
                       groups={selectorGroups.map(group => group.tag as string)} onDirtyChange={setFilterOrderDirty}>
                       {tag => {
@@ -498,7 +519,7 @@ export function ProfilesPage() {
     setSaving(true);
     try {
       const result = await api.saveState(nextState, revision, profileName, oldProfileName);
-      acceptSave(nextState, result.revision, result.warning, closeEditor);
+      acceptSave(result.state ?? nextState, result.revision, result.warning, closeEditor);
       return true;
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 409) {
@@ -566,7 +587,7 @@ export function ProfilesPage() {
     try {
       const latest = await api.getState();
       const result = await api.saveState(conflict.state, latest.revision, conflict.profileName, conflict.oldProfileName);
-      acceptSave(conflict.state, result.revision, result.warning, conflict.closeEditor);
+      acceptSave(result.state ?? conflict.state, result.revision, result.warning, conflict.closeEditor);
       setConflict(null);
     } catch {
       notifications.show({ color: 'red', message: t('workspace.saveFailed') });

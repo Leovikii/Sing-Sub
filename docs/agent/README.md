@@ -7,7 +7,11 @@
 1. [工程标准](./engineering-standards.md)
 2. [架构决策](./decisions.md)
 3. [当前进度](./progress.md)
-4. [当前交付范围](./v3.1.5-plan.md)；已完成计划不重复保留，历史使用 Git。
+4. [当前交付范围](./v3.1.6-plan.md)；已完成计划不重复保留，历史使用 Git。
+
+当前实施：[3.1.6 计划](./v3.1.6-plan.md)与[元数据分类及文件保存设计](./metadata-storage-design.md)。用户已批准实施、隔离测试及提交推送 dev；到 main 的 PR 由用户手动创建，不授权合并、部署、发布或生产数据操作。
+
+兼容代码仅用于本次升级，3.1.7 必须按[退场清单](./metadata-compat-retirement.md)移除。
 
 按需阅读：
 

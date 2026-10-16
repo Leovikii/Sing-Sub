@@ -44,11 +44,7 @@ async function data<T>(response: Response): Promise<T> {
   return (await response.json() as { data: T }).data;
 }
 
-function profile(note: string): string {
-  return JSON.stringify({
-    name: 'default', note, templateUrl: '', nodesPath: '', rules: [], inboundRules: [], order: 0,
-  }, null, 2) + '\n';
-}
+
 
 class StatefulGitHub {
   private commitNumber = 1;
@@ -132,7 +128,10 @@ class StatefulGitHub {
   private readonly blobs = new Map<string, string>();
 
   editProfile(note: string): void {
-    this.managed.set('sing-sub/configs/default.json', profile(note));
+    const path = 'sing-sub/metadata.json';
+    const metadata = JSON.parse(this.managed.get(path)!);
+    metadata.entities['sing-sub/configs/default.json'].note = note;
+    this.managed.set(path, JSON.stringify(metadata));
     this.commitNumber += 1;
     this.treeNumber += 1;
     this.currentCommit = `commit-${this.commitNumber}`;

@@ -8,12 +8,12 @@ import { notifications } from '@mantine/notifications';
 import { Boxes, Check, Link2, MoreHorizontal, Pencil, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AssetSummary, RulesetBuildStatusResult, StateData } from '../../../shared';
+import type { EntityMetadata, AssetSummary, RulesetBuildStatusResult, StateData } from '../../../shared';
 import { api } from '../../../src/api/endpoints';
 import { ApiClientError } from '../../../src/api/client';
 import { useSessionStore } from '../../stores/session';
 import { EntityCard, EntityList } from '../../components/EntityList';
-import { reconcileOrder, useBrowserOrder } from '../../components/entity-order';
+import { LegacyOrderImport } from '../../components/LegacyOrderImport';
 import { EntityEditorHeader } from '../../components/EntityEditorChrome';
 import { useAssetsStore } from '../../stores/assets';
 import { useWorkspaceStore } from '../../stores/workspace';
@@ -44,6 +44,7 @@ interface EditorState {
   originalNote: string;
   sha: string | null;
   mode: 'edit' | 'preview';
+  metadata?: EntityMetadata;
   structuredValid: boolean;
   structuredDirty: boolean;
 }
@@ -53,7 +54,7 @@ function basename(path: string) {
 }
 
 function initialContent(type: ResourceType) {
-  if (type === 'ruleset') return '{\n  "version": 2,\n  "rules": [],\n  "_sing_sub": {\n    "sources": []\n  }\n}';
+  if (type === 'ruleset') return '{\n  "version": 2,\n  "rules": []\n}';
   return '{\n  "inbounds": [],\n  "outbounds": []\n}';
 }
 
@@ -75,8 +76,24 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
   const [retryingRuleset, setRetryingRuleset] = useState('');
   const files = assets[directoryByType[type]];
   const userLogin = useSessionStore(state => state.settings?.userLogin ?? '');
-  const { order: displayOrder, save: saveOrder } = useBrowserOrder(`sing-sub.order:${userLogin}:${type}`);
-  const paths = reconcileOrder(files.map(file => file.path), displayOrder);
+  const paths = files.map(file => file.path);
+  const saveOrder = async (paths: string[]) => {
+    if (!revision) return false;
+    try {
+      const result = await api.saveMetadata({ operation: 'order', kind: directoryByType[type], paths, expectedRevision: revision });
+      replaceWorkspace(workspaceState, result.revision);
+      replaceAssets({ ...assets, [directoryByType[type]]: paths.map((path, order) => ({ ...files.find(file => file.path === path)!, order })) });
+      return true;
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 409) modals.openConfirmModal({
+        title: t('common.conflictTitle'), children: <Text size="sm">{t('common.conflictMessage')}</Text>,
+        labels: { confirm: t('common.reload'), cancel: t('common.cancel') },
+        onConfirm: async () => { const state = await api.getState(); replaceWorkspace(state.state, state.revision); await refresh(); },
+      });
+      else notifications.show({ color: 'red', message: t('sorting.saveFailed') });
+      return false;
+    }
+  };
 
   const refresh = useCallback(async () => {
     setAssetsLoading(true);
@@ -110,17 +127,9 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
     setEditor({ file, name: basename(file.path), note: file.note, content: '', originalContent: '', originalNote: file.note, sha: null, mode, structuredValid: true, structuredDirty: false });
     try {
       const data = await api.getFile(file.path);
-      let note = file.note;
-      try {
-        const document = JSON.parse(data.content) as Record<string, unknown>;
-        note = type === 'ruleset'
-          ? String((document._sing_sub as Record<string, unknown> | undefined)?.note ?? '')
-          : String(document.note ?? '');
-      } catch {
-        // Keep the summary note for malformed legacy documents.
-      }
+      const note = data.metadata?.note ?? file.note;
       setEditor((current) => current?.file.path === file.path ? {
-        ...current, content: data.content, originalContent: data.content, note, originalNote: note, sha: data.sha, structuredValid: true, structuredDirty: false,
+        ...current, metadata: data.metadata, content: data.content, originalContent: data.content, note, originalNote: note, sha: data.sha, structuredValid: true, structuredDirty: false,
       } : current);
     } catch (error) {
       setEditor(null);
@@ -133,6 +142,7 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
     const content = initialContent(type);
     setEditor({
       file: { path: `sing-sub/${directoryByType[type]}/untitled.json`, note: '', isNew: true },
+      metadata: type === 'ruleset' ? { editor: { ruleset: { manual: {}, sources: [] } } } : {},
       name: '', note: '', content, originalContent: content, originalNote: '', sha: null, mode: 'edit', structuredValid: true, structuredDirty: false,
     });
   };
@@ -166,27 +176,16 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
     setSaving(true);
     try {
       const document = JSON.parse(editor.content) as Record<string, unknown>;
-      if (type === 'ruleset') {
-        const metadata = document._sing_sub && typeof document._sing_sub === 'object' && !Array.isArray(document._sing_sub)
-          ? { ...(document._sing_sub as Record<string, unknown>) } : {};
-        if (editor.note) metadata.note = editor.note; else delete metadata.note;
-        if (Object.keys(metadata).length) document._sing_sub = metadata; else delete document._sing_sub;
-      } else {
-        if (editor.note) document.note = editor.note; else delete document.note;
-      }
       const content = JSON.stringify(document, null, 2);
       const path = `sing-sub/${directoryByType[type]}/${editor.name}.json`;
       const rename = !editor.file.isNew && path !== editor.file.path;
       const result = await api.putFile({
+        metadata: { note: editor.note, editor: editor.metadata?.editor },
         path, content, expectedRevision: editor.sha ?? revision as string,
         sha: rename ? null : editor.sha,
         oldPath: rename ? editor.file.path : undefined,
         message: `${editor.file.isNew ? 'Create' : rename ? 'Rename' : 'Update'} ${editor.name}.json`,
       });
-      if (rename) {
-        try { saveOrder(paths.map(item => item === editor.file.path ? path : item)); }
-        catch { notifications.show({ color: 'yellow', message: t('sorting.saveFailed') }); }
-      }
       replaceWorkspace(workspaceState, result.revision);
       await refresh();
       closeEditor();
@@ -256,8 +255,8 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
 
   return (
     <Container size="lg">
-      <EntityList localOrder title={t(titleKeyByType[type])} items={paths} onSave={saveOrder}
-        actions={<Button h={44} leftSection={<Plus size={17} />} onClick={createFile}>{t('common.add')}</Button>}
+      <EntityList title={t(titleKeyByType[type])} items={paths} onSave={saveOrder}
+        actions={<><LegacyOrderImport key={type} storageKey={`sing-sub.order:${userLogin}:${type}`} items={paths} onImport={saveOrder} /><Button h={44} leftSection={<Plus size={17} />} onClick={createFile}>{t('common.add')}</Button></>}
         empty={loading && !loaded ? <Center py={80}><Loader /></Center> : <EmptyState icon={<Boxes />} title={t(emptyKeyByType[type])} variant="light" color="pink">
           <EmptyState.Actions><Button onClick={createFile}>{t('assets.newFile')}</Button></EmptyState.Actions>
         </EmptyState>}>
@@ -348,8 +347,8 @@ export function ResourcesPage({ type }: { type: ResourceType }) {
                       <ScrollArea h="52dvh" type="auto">
                         <RulesetEditor
                           now={now}
-                          key={`${editor.file.path}-${editor.sha ?? 'new'}`} value={editor.content}
-                          onChange={(content) => setEditor((current) => current ? { ...current, content, structuredDirty: true } : current)}
+                          key={`${editor.file.path}-${editor.sha ?? 'new'}`} value={editor.content} metadata={editor.metadata?.editor}
+                          onChange={(content, metadata) => setEditor((current) => current ? { ...current, content, metadata: { ...current.metadata, editor: metadata }, structuredDirty: true } : current)}
                           onValidityChange={(structuredValid) => setEditor((current) => current ? { ...current, structuredValid, structuredDirty: true } : current)}
                         />
                       </ScrollArea>

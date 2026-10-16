@@ -1,4 +1,6 @@
+import type { EntityMetadata } from '../schemas/metadata.schema';
 export interface AssetSummary {
+  order?: number;
   path: string;
   note: string;
   updatedAt?: string;
@@ -11,6 +13,7 @@ export interface AssetSnapshot {
 }
 
 export interface FileContent {
+  metadata?: EntityMetadata;
   content: string;
   sha: string;
 }

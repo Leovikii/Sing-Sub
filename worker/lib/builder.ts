@@ -1,4 +1,4 @@
-import type { Profile } from '../../shared';
+import type { ProfileDefinition } from '../../shared';
 
 interface Outbound {
   tag?: string;
@@ -48,7 +48,7 @@ export interface BuildResourceLoader {
 }
 
 export async function buildProfile(
-  profile: Profile,
+  profile: ProfileDefinition,
   resources: BuildResourceLoader,
 ): Promise<string> {
   const templateUrl = profile.templateUrl;

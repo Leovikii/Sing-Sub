@@ -132,7 +132,7 @@ describe('SRS build pipeline', () => {
     expect(saved.build.status).toBe('none');
     await expect(dependencies.jobStore.read('primary', saved.build.jobId)).resolves.toBeNull();
     await expect(dependencies.workspaceStore.read('primary')).resolves.toMatchObject({
-      snapshot: { assets: { rulesets: { domains: ruleset('example.com') } }, builds: { domains: { status: 'none' } } },
+      snapshot: { assets: { rulesets: { domains: { content: { version: 2, rules: [{ domain_suffix: ['example.com'] }] } } } }, metadata: { entities: { 'sing-sub/rulesets/domains.json': { note: 'editor metadata' } } }, builds: { domains: { status: 'none' } } },
     });
   });
 

@@ -16,6 +16,7 @@ export interface StateResult {
 }
 
 export interface SaveResult {
+  state?: StateData;
   revision: string;
   warning?: string;
 }

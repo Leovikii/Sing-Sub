@@ -18,7 +18,7 @@ export const inboundRuleSchema = z.object({
 }).strict();
 
 export const profileSchema = z.object({
-  name: z.string().regex(SAFE_ENTITY_NAME),
+  name: z.string().max(128).regex(SAFE_ENTITY_NAME),
   note: z.string().optional(),
   templateUrl: z.string().refine(value => !/^https?:\/\//i.test(value), {
     message: 'External templates are not supported',
@@ -30,6 +30,12 @@ export const profileSchema = z.object({
   updated_at: z.number().optional(),
   order: z.number().int().nonnegative(),
 }).strict();
+
+// Persisted definition. Profile remains the form/API projection only.
+export const profileDefinitionSchema = profileSchema.omit({
+  note: true, order: true, created_at: true, updated_at: true,
+});
+export type ProfileDefinition = z.infer<typeof profileDefinitionSchema>;
 
 export const stateDataSchema = z.object({
   profiles: z.array(profileSchema),

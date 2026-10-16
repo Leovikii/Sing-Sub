@@ -39,13 +39,14 @@ export default {
     switchTheme: '切换颜色模式',
   },
   sorting: {
+    importLocal: '导入本机顺序',
+    importMessage: '将本机旧排序保存到工作区，供所有设备使用。保存成功后清除本机旧排序。',
     start: '排序', save: '保存顺序', toolbar: '列表操作', handle: '调整 {name} 顺序',
     up: '上移 {name}', down: '下移 {name}', hint: '拖动左侧手柄，或使用上下箭头调整顺序。',
     keyboard: '按空格拾起，方向键移动，空格放下，Escape 取消。', picked: '已拾起卡片。',
     moved: '已移至第 {position} 位，共 {count} 项。', dropped: '已放下卡片，保存后生效。',
     cancelled: '已取消本次拖动。', saved: '顺序已保存。', saveFailed: '无法保存顺序，调整已保留，请重试。',
     leaveMessage: '顺序尚未保存。离开将放弃本次调整。', finishFirst: '请先保存或取消排序。',
-    local: '展示顺序仅保存在当前浏览器。',
   },
   auth: {
     setupTitle: '初始化工作区',
@@ -116,6 +117,11 @@ export default {
     previewFile: '预览 {name}',
   },
   rulesets: {
+    reviewTitle: '正文已被外部修改',
+    reviewMessage: '原手写规则和来源可能与当前正文不一致。请选择后再继续编辑；采用原来源将在保存时重新生成正文。',
+    keepBody: '以当前正文作为手写规则',
+    useSources: '采用原手写规则和来源',
+    reviewUnsupported: '当前正文包含结构化编辑器不支持的规则，请保留正文或使用原来源定义。',
     jsonOnly: 'JSON',
     pending: '等待编译',
     dispatching: '正在分发',
@@ -222,6 +228,8 @@ export default {
     compilerError: 'SRS 编译器配置失败，请检查仓库设置后重试。',
   },
   sync: {
+    metadataWarnings: '已导入；{{count}} 处元数据需要核对，请检查规则集编辑提示及下次同步差异。',
+    metadataFileHint: '请恢复并修复 sing-sub/metadata.json，缺失或损坏时不能拉取，以免丢失备注和编辑定义。',
     status: '状态',
     refresh: '刷新',
     refreshing: '刷新中',

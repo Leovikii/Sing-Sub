@@ -8,7 +8,7 @@ import type {
 } from '../../application/ports/sync-gateway';
 import { sha256Hex } from '../../domain/revisions/canonical-json';
 import { parseSyncPath } from '../../domain/sync/sync-path';
-import { SYNC_MANIFEST_PATH } from '../../application/sync/export-workspace';
+import { SYNC_MANIFEST_PATH, SYNC_METADATA_PATH } from '../../application/sync/export-workspace';
 
 const GITHUB_API = 'https://api.github.com';
 const EMPTY_REMOTE_REVISION = 'empty';
@@ -196,9 +196,9 @@ export class GitHubSyncGateway implements SyncGateway {
     const branch = this.config.defaultBranch || repository.defaultBranch;
     const tree = await this.readTree(branch, repository.size === 0);
     const entries = tree.entries
-      .filter(entry => entry.type === 'blob' && (parseSyncPath(entry.path) || entry.path === SYNC_MANIFEST_PATH))
+      .filter(entry => entry.type === 'blob' && (parseSyncPath(entry.path) || entry.path === SYNC_MANIFEST_PATH || entry.path === SYNC_METADATA_PATH))
       .sort((left, right) => left.path.localeCompare(right.path));
-    if (entries.length > MAX_SYNC_FILES + 1) {
+    if (entries.filter(entry => parseSyncPath(entry.path)).length > MAX_SYNC_FILES) {
       throw new GitHubSyncError('TOO_MANY_FILES', 'GitHub managed file count exceeds the limit');
     }
     if (entries.some(entry => !entry.sha || (entry.size !== undefined && entry.size > MAX_FILE_BYTES))) {
@@ -241,7 +241,7 @@ export class GitHubSyncGateway implements SyncGateway {
     const desired = new Map<string, SyncFile>();
     let totalBytes = 0;
     for (const file of command.files) {
-      if ((!parseSyncPath(file.path) && file.path !== SYNC_MANIFEST_PATH) || desired.has(file.path)) {
+      if ((!parseSyncPath(file.path) && file.path !== SYNC_MANIFEST_PATH && file.path !== SYNC_METADATA_PATH) || desired.has(file.path)) {
         throw new Error('Sync push contains an invalid or duplicate path');
       }
       const size = new TextEncoder().encode(file.content).byteLength;
@@ -251,8 +251,9 @@ export class GitHubSyncGateway implements SyncGateway {
       }
       desired.set(file.path, file);
     }
+    if ([...desired.keys()].filter(path => parseSyncPath(path)).length > MAX_SYNC_FILES) throw new GitHubSyncError('TOO_MANY_FILES', 'Too many sync entities');
     const currentManaged = current.entries.filter(entry =>
-      entry.type === 'blob' && (parseSyncPath(entry.path) || entry.path === SYNC_MANIFEST_PATH));
+      entry.type === 'blob' && (parseSyncPath(entry.path) || entry.path === SYNC_MANIFEST_PATH || entry.path === SYNC_METADATA_PATH));
     const treeEntries: Array<Record<string, unknown>> = [
       ...Array.from(desired.values()).map(file => ({
         path: file.path,

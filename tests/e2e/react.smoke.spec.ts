@@ -1,3 +1,4 @@
+import type { EntityMetadata } from '../../shared';
 import { expect, test, type Page, type Request } from '@playwright/test';
 
 const settings = {
@@ -23,6 +24,8 @@ interface ReactApiMock {
   syncRequests: Request[];
   syncStatus: 'never' | 'conflict' | 'local-ahead' | 'remote-ahead';
   stateRequests: Request[];
+  metadataRequests: Request[];
+  metadata: Record<string, EntityMetadata>;
   profiles: Array<Record<string, unknown>>;
   revision: number;
   buildStatus: 'none' | 'failed' | 'ready';
@@ -52,10 +55,24 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
     syncRequests: [],
     syncStatus: 'local-ahead',
     stateRequests: [],
+    metadataRequests: [], metadata: {},
     profiles: [],
     revision: 1,
     buildStatus: 'none',
     buildRequests: [],
+  };
+
+  const assetData = (path: string) => {
+    const asset = [...state.assets, ...state.templates, ...state.rulesets].find(item => item.path === path);
+    const body = JSON.parse(state.contents[path] ?? '{"inbounds":[],"outbounds":[]}');
+    const metadata: EntityMetadata = structuredClone(state.metadata[path] ?? { note: asset?.note ?? '' });
+    // Fixtures from earlier versions are projected just as the Worker upgrade boundary does.
+    if (body._sing_sub) {
+      metadata.note ??= body._sing_sub.note;
+      metadata.editor = { ruleset: { manual: body._sing_sub.manual ?? {}, sources: (body._sing_sub.sources ?? []).map((source: { url: string; interval_hours: 0; last_updated?: string }) => ({ url: source.url, intervalHours: source.interval_hours, lastFetchedAt: source.last_updated })) } };
+    }
+    delete body.note; delete body._sing_sub;
+    return { content: JSON.stringify(body, null, 2), metadata };
   };
 
   const apiPattern = new URL('/api/**', process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:4173').toString();
@@ -213,6 +230,17 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
       return;
     }
 
+    if (pathname === '/api/metadata' && request.method() === 'PUT') {
+      state.metadataRequests.push(request);
+      const command = request.postDataJSON();
+      if (command.operation === 'order') {
+        const key = command.kind === 'nodes' ? 'assets' : command.kind as 'templates' | 'rulesets';
+        state[key] = command.paths.map((path: string, order: number) => ({ ...state[key].find(item => item.path === path)!, order }));
+      } else state.metadata[command.path] = { ...state.metadata[command.path], display: { outboundOrder: command.outboundOrder } };
+      state.revision += 1;
+      await respond({ revision: `revision-${state.revision}` }); return;
+    }
+
     if (pathname === '/api/assets' && request.method() === 'GET') {
       await respond({ nodes: state.assets, templates: state.templates, rulesets: state.rulesets });
       return;
@@ -220,7 +248,8 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
 
     if (pathname === '/api/template') {
       const path = new URL(request.url()).searchParams.get('source') ?? '';
-      await respond({ content: JSON.parse(state.contents[path] ?? '{}') });
+      const data = assetData(path);
+      await respond({ content: JSON.parse(data.content), metadata: data.metadata });
       return;
     }
 
@@ -236,7 +265,7 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
         return;
       }
       await respond({
-        content: state.contents[path] ?? JSON.stringify({ inbounds: [], outbounds: [], note: asset.note }, null, 2),
+        ...assetData(path),
         sha: `revision-${state.revision}`,
       });
       return;
@@ -245,14 +274,17 @@ async function mockReactApi(page: Page, setupRequired = true): Promise<ReactApiM
     if (pathname === '/api/file' && request.method() === 'PUT') {
       state.fileRequests.push(request);
       const payload = request.postDataJSON();
-      const document = JSON.parse(payload.content);
       const isRuleset = payload.path.startsWith('sing-sub/rulesets/');
-      const target = isRuleset ? state.rulesets : state.assets;
-      const next = target.filter((item) => item.path !== payload.oldPath && item.path !== payload.path);
-      next.push({ path: payload.path, note: isRuleset ? document._sing_sub?.note ?? '' : document.note ?? '', updatedAt: new Date().toISOString() });
-      if (isRuleset) state.rulesets = next; else state.assets = next;
-      if (payload.oldPath) delete state.contents[payload.oldPath];
+      const isTemplate = payload.path.startsWith('sing-sub/templates/');
+      const target = isRuleset ? state.rulesets : isTemplate ? state.templates : state.assets;
+      const oldIndex = target.findIndex(item => item.path === (payload.oldPath ?? payload.path));
+      const next = [...target];
+      const summary = { path: payload.path, note: payload.metadata?.note ?? '', updatedAt: new Date().toISOString() };
+      if (oldIndex < 0) next.push(summary); else next[oldIndex] = summary;
+      if (isRuleset) state.rulesets = next; else if (isTemplate) state.templates = next; else state.assets = next;
+      if (payload.oldPath) { delete state.contents[payload.oldPath]; delete state.metadata[payload.oldPath]; }
       state.contents[payload.path] = payload.content;
+      state.metadata[payload.path] = payload.metadata ?? {};
       state.revision += 1;
       await respond({ success: true, revision: `revision-${state.revision}`, content: payload.content });
       return;
@@ -302,7 +334,7 @@ test('React entry initializes with a password-only request and guarded route', a
   expect(brandIconBox!.width).toBe(36);
   expect(brandIconBox!.height).toBe(36);
   await page.goto('/#/settings/about');
-  await expect(page.getByRole('main').getByText('v3.1.5', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('v3.1.6', { exact: true })).toBeVisible();
 });
 
 test('React resource times separate configuration edits from source refreshes across viewports', async ({ page }, testInfo) => {
@@ -627,7 +659,9 @@ test('React resources edit validated JSON with lazy CodeMirror search and replac
     expectedRevision: 'revision-1',
     sha: null,
   });
-  expect(JSON.parse(payload.content)).toMatchObject({ note: 'Edge nodes', inbounds: [], outbounds: [] });
+  expect(JSON.parse(payload.content)).toMatchObject({ inbounds: [], outbounds: [] });
+  expect(JSON.parse(payload.content)).not.toHaveProperty('note');
+  expect(payload.metadata.note).toBe('Edge nodes');
   await expect(dialog).toBeHidden();
   await expect(page.getByText('edge-nodes', { exact: true })).toBeVisible();
 
@@ -998,17 +1032,12 @@ test('React rulesets edit structured sources and manual rules, retry builds, and
   await expect.poll(() => state.fileRequests.length).toBe(1);
   const payload = state.fileRequests[0].postDataJSON();
   expect(payload.path).toBe(path);
-  expect(JSON.parse(payload.content)).toMatchObject({
-    version: 2,
-    _sing_sub: {
-      note: 'Smoke rules',
-      sources: [{
-        url: 'https://example.com/rules.json',
-        interval_hours: 24,
-        last_updated: '2026-07-30T12:34:00.000Z',
-      }],
+  expect(JSON.parse(payload.content)).not.toHaveProperty('_sing_sub');
+  expect(payload.metadata).toMatchObject({
+    note: 'Smoke rules', editor: { ruleset: {
+      sources: [{ url: 'https://example.com/rules.json', intervalHours: 24, lastFetchedAt: '2026-07-30T12:34:00.000Z' }],
       manual: { domain: ['example.com', 'www.example.com'] },
-    },
+    } },
   });
 });
 
@@ -1118,7 +1147,7 @@ for (const syncStatus of ['never', 'conflict', 'local-ahead', 'remote-ahead'] as
 }
 
 
-test('React shared card sorting saves browser preferences, cancels, guards navigation, and stays reachable', async ({ page }) => {
+test('React shared card sorting saves workspace metadata, cancels, guards navigation, and stays reachable', async ({ page }) => {
   const state = await mockReactApi(page);
   state.assets = Array.from({ length: 8 }, (_, i) => ({ path: `sing-sub/nodes/node-${i}.json`, note: i ? '备注' : '首张卡片' }));
   await login(page, state);
@@ -1188,7 +1217,7 @@ test('React navigation collapses on desktop and uses a bounded mobile Drawer', a
 });
 
 
-test('React cards support pointer and touch dragging and preserve failed local saves', async ({ page, isMobile }) => {
+test('React cards support pointer and touch dragging and preserve failed server saves', async ({ page, isMobile }) => {
   const state = await mockReactApi(page);
   state.assets = [0, 1, 2].map(i => ({ path: `sing-sub/nodes/node-${i}.json`, note: '统一卡片' }));
   await login(page, state); await page.goto('/#/resources/nodes');
@@ -1217,19 +1246,15 @@ test('React cards support pointer and touch dragging and preserve failed local s
     await page.mouse.up();
   }
   await expect(page.getByRole('article').first()).toHaveAccessibleName('node-1');
-  await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    Object.defineProperty(window, 'restoreOrderStorage', { value: () => { Storage.prototype.setItem = original; } });
-    Storage.prototype.setItem = function(key, value) {
-      if (key.startsWith('sing-sub.order:')) throw new DOMException('Storage unavailable', 'QuotaExceededError');
-      original.call(this, key, value);
-    };
-  });
+  let failure = true;
+  await page.route('**/api/metadata', route => failure
+    ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'INTERNAL_ERROR' } }) })
+    : route.fallback());
   const save = page.getByRole('button', { name: '保存顺序', exact: true }); await save.click();
   await expect(page.getByRole('alert').filter({ hasText: '无法保存顺序' })).toBeVisible();
   await expect(save).toBeEnabled();
   await expect(page.getByRole('article').first()).toHaveAccessibleName('node-1');
-  await page.evaluate(() => (window as unknown as { restoreOrderStorage: () => void }).restoreOrderStorage());
+  failure = false;
   await save.click(); await expect(page.getByRole('button', { name: '排序', exact: true })).toBeVisible();
   await page.reload(); await expect(page.getByRole('article').first()).toHaveAccessibleName('node-1');
   expect(state.fileRequests).toHaveLength(0); expect(state.stateRequests).toHaveLength(0);
@@ -1346,4 +1371,53 @@ test('React resource orders stay independent and reconcile rename, creation, del
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Reorder', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('cards-mobile-dark-en-sorting.png'), fullPage: true });
+});
+
+
+test('React imports legacy device order only on confirmation and survives cleared local storage', async ({ page }) => {
+  const state = await mockReactApi(page);
+  state.assets = ['first', 'second'].map(name => ({ path: `sing-sub/nodes/${name}.json`, note: '' }));
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('legacy-order-seeded')) {
+      localStorage.setItem('sing-sub.order:sing-sub-user:node', JSON.stringify(['sing-sub/nodes/second.json', 'sing-sub/nodes/first.json']));
+      sessionStorage.setItem('legacy-order-seeded', 'true');
+    }
+  });
+  await login(page, state); await page.goto('/#/resources/nodes');
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('first');
+  expect(state.metadataRequests).toHaveLength(0);
+  await page.getByRole('button', { name: '导入本机顺序', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  expect(state.metadataRequests).toHaveLength(0);
+  await page.getByRole('button', { name: '导入本机顺序', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: '导入本机顺序', exact: true }).click();
+  await expect(page.getByRole('article').first()).toHaveAccessibleName('second');
+  expect(state.metadataRequests[0].postDataJSON()).toMatchObject({ operation: 'order', kind: 'nodes', expectedRevision: 'revision-1' });
+  expect(await page.evaluate(() => localStorage.getItem('sing-sub.order:sing-sub-user:node'))).toBeNull();
+  await page.evaluate(() => localStorage.clear());
+  await page.reload(); await expect(page.getByRole('article').first()).toHaveAccessibleName('second');
+});
+
+test('React asks before using stale rule-set editor definitions and keeps management data outside JSON', async ({ page }) => {
+  const state = await mockReactApi(page);
+  const path = 'sing-sub/rulesets/stale.json';
+  state.rulesets = [{ path, note: 'private-note' }];
+  state.contents[path] = JSON.stringify({ version: 2, rules: [{ domain: ['current.com'] }] });
+  state.metadata[path] = { note: 'private-note', editor: { ruleset: { manual: { domain: ['old.com'] }, sources: [], needsReview: true } } };
+  await login(page, state); await page.goto('/#/resources/rulesets');
+  await page.getByRole('article').getByRole('button', { name: '预览 stale', exact: true }).click();
+  const editor = page.getByRole('dialog');
+  await expect(editor.getByLabel('JSON 预览', { exact: true })).toContainText('current.com');
+  await expect(editor.getByLabel('JSON 预览', { exact: true })).not.toContainText('private-note');
+  await editor.getByText('编辑', { exact: true }).click();
+  await expect(editor.getByText('正文已被外部修改', { exact: true })).toBeVisible();
+  expect(state.fileRequests).toHaveLength(0);
+  await editor.getByRole('button', { name: '以当前正文作为手写规则', exact: true }).click();
+  await editor.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(editor).toBeHidden();
+  const payload = state.fileRequests[0].postDataJSON();
+  expect(JSON.parse(payload.content)).toEqual({ version: 2, rules: [{ domain: ['current.com'] }] });
+  expect(payload.metadata.editor.ruleset).toEqual({ manual: { domain: ['current.com'] }, sources: [] });
+  expect(state.buildRequests).toHaveLength(0);
 });

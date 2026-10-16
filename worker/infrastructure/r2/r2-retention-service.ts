@@ -1,9 +1,11 @@
-import { buildJobSchema, workspaceHeadSchema, workspaceSnapshotSchema, type WorkspaceSnapshot } from '../../../shared';
+import { buildJobSchema, workspaceHeadSchema, workspaceSnapshotSchema, type WorkspaceSnapshot as RuntimeSnapshot } from '../../../shared';
 import { r2ObjectKeys } from './r2-object-keys';
 import { WorkspaceStorageCorruptError } from './r2-workspace-errors';
 import type { R2BucketPort } from './r2-workspace-store';
 
 const DEFAULT_ORPHAN_GRACE_SECONDS = 86400;
+
+type WorkspaceSnapshot = Omit<RuntimeSnapshot, 'profiles'> & { profiles: unknown[] };
 
 export interface R2RetentionPolicy {
   revisionLimit: number;

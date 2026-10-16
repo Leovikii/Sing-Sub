@@ -1,4 +1,7 @@
-import { putFileRequestSchema, type JsonAsset } from '../../shared';
+import { WorkspaceConflictError } from '../application/errors/workspace-conflict';
+import { parseStrictJson } from '../lib/strict-json';
+import { editableMetadata, splitAsset } from '../lib/workspace-metadata';
+import { putFileRequestSchema, workspaceMetadataSchema, type JsonAsset, type EntityEditMetadata } from '../../shared';
 import { deleteAsset, saveAsset } from '../application/commands/assets/mutate-asset';
 import { saveRulesetSource } from '../application/commands/rulesets/save-ruleset-source';
 import { dispatchSrsBuild } from '../application/srs/manage-srs-build';
@@ -11,47 +14,35 @@ import {
 import { parseManagedAssetPath } from '../domain/assets/managed-asset-path';
 import { requirePrimaryWorkspaceAuth } from '../http/authenticate';
 import {
-  createRulesetDocument,
+  mergeRuleBuckets,
   fetchPublicRuleset,
   parseImportedRules,
   parseRulesetImportUrl,
   readResponseTextLimited,
-  readRulesetMetadata,
-  validateRulesetSource,
 } from '../lib/rulesets';
 import { errorResponse, jsonResponse } from '../lib/security';
 import { logEvent, requestIdFor } from '../lib/logging';
 import type { Env } from '../types';
 
-function noteFromJson(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  const metadata = record._sing_sub;
-  if (metadata && typeof metadata === 'object' && !Array.isArray(metadata) &&
-      typeof (metadata as Record<string, unknown>).note === 'string') {
-    return (metadata as Record<string, unknown>).note as string;
-  }
-  return typeof record.note === 'string' ? record.note : undefined;
-}
-
-async function refreshRulesetSources(content: string): Promise<string> {
-  const metadata = readRulesetMetadata(content);
+type RulesetDefinition = NonNullable<NonNullable<EntityEditMetadata['editor']>['ruleset']>;
+async function refreshRulesetSources(definition: RulesetDefinition) {
+  const urls = definition.sources.map(source => parseRulesetImportUrl(source.url));
   const refreshed = [];
-  for (const [index, source] of metadata.sources.entries()) {
+  for (const [index, source] of definition.sources.entries()) {
     try {
-      const response = await fetchPublicRuleset(parseRulesetImportUrl(source.url));
+      const response = await fetchPublicRuleset(urls[index]);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const bucket = parseImportedRules(await readResponseTextLimited(response));
       if (!Object.values(bucket).some(values => values.length)) throw new Error('source contains no supported rules');
-      refreshed.push({ source: { ...source, last_updated: new Date().toISOString() }, bucket });
+      refreshed.push({ source: { ...source, lastFetchedAt: new Date().toISOString() }, bucket });
     } catch (error) {
       throw new Error(`Source ${index + 1} (${source.url}) failed`, { cause: error });
     }
   }
-  return createRulesetDocument(
-    { ...metadata, sources: refreshed.map(result => result.source) },
-    refreshed.map(result => result.bucket),
-  );
+  const merged = mergeRuleBuckets([{ domain: [], domain_suffix: [], domain_keyword: [], domain_regex: [], ...definition.manual }, ...refreshed.map(result => result.bucket)]);
+  const rule = Object.fromEntries(Object.entries(merged).filter(([, values]) => values.length));
+  return { content: JSON.stringify({ version: 2, rules: Object.keys(rule).length ? [rule] : [] }, null, 2),
+    definition: { manual: definition.manual, sources: refreshed.map(result => result.source) } };
 }
 
 export async function handlePutFile(
@@ -63,6 +54,7 @@ export async function handlePutFile(
   if (auth instanceof Response) return auth;
   const parsed = putFileRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return errorResponse('Invalid asset request', 400, 'VALIDATION_FAILED');
+  if (parsed.data.expectedRevision !== auth.revision) throw new WorkspaceConflictError(parsed.data.expectedRevision, auth.revision);
   const target = parseManagedAssetPath(parsed.data.path);
   const oldTarget = parsed.data.oldPath ? parseManagedAssetPath(parsed.data.oldPath) : target;
   if (!target || !oldTarget || target.kind !== oldTarget.kind) {
@@ -70,18 +62,35 @@ export async function handlePutFile(
   }
 
   let preparedContent = parsed.data.content;
+  let metadata: EntityEditMetadata = parsed.data.metadata ?? {};
+  const previous = auth.snapshot.assets[target.kind][oldTarget.entityId];
+  const previousMeta = auth.snapshot.metadata?.entities[previous?.path ?? ''] ?? {};
   if (target.kind === 'rulesets') {
-    const validationError = validateRulesetSource(preparedContent);
-    if (validationError) return errorResponse(validationError, 400, 'VALIDATION_FAILED');
     try {
-      preparedContent = await refreshRulesetSources(preparedContent);
+      const split = splitAsset({ path: parsed.data.path, content: parseStrictJson(preparedContent) as JsonAsset['content'] }, { ...previousMeta, ...metadata });
+      metadata = { note: split.metadata.note, editor: split.metadata.editor };
+      const definition = metadata.editor?.ruleset;
+      if (definition?.needsReview) return errorResponse('Confirm stale ruleset editor before saving', 400, 'VALIDATION_FAILED');
+      // Fetch observations are server-owned, including when an editor submits
+      // unchanged sources alongside a note-only save.
+      if (definition) definition.sources = definition.sources.map(source => {
+        const observed = previousMeta.editor?.ruleset?.sources.find(item => item.url === source.url)?.lastFetchedAt;
+        return { url: source.url, intervalHours: source.intervalHours, ...(observed ? { lastFetchedAt: observed } : {}) };
+      });
+      const bodyChanged = !previous || JSON.stringify(previous.content) !== JSON.stringify(split.asset.content);
+      const editorChanged = JSON.stringify(editableMetadata({ editor: previousMeta.editor })) !== JSON.stringify(editableMetadata({ editor: metadata.editor }));
+      if (definition && (bodyChanged || editorChanged)) {
+        const refreshed = await refreshRulesetSources(definition);
+        metadata = { ...metadata, editor: { ...metadata.editor, ruleset: refreshed.definition } };
+        preparedContent = refreshed.content;
+      } else preparedContent = JSON.stringify(split.asset.content, null, 2);
     } catch (error) {
       return errorResponse(error instanceof Error ? error.message : 'Ruleset refresh failed', 400, 'VALIDATION_FAILED');
     }
   }
   let content: unknown;
   try {
-    content = JSON.parse(preparedContent);
+    content = parseStrictJson(preparedContent);
   } catch {
     return errorResponse('Asset is not valid JSON', 400, 'VALIDATION_FAILED');
   }
@@ -90,6 +99,15 @@ export async function handlePutFile(
     return errorResponse('Asset JSON root is invalid', 400, 'VALIDATION_FAILED');
   }
 
+  try {
+    const separated = splitAsset({ path: parsed.data.path, content: content as JsonAsset['content'] }, { ...previousMeta, ...metadata });
+    workspaceMetadataSchema.parse({ schemaVersion: 1, entities: { [parsed.data.path]: separated.metadata } });
+    content = separated.asset.content;
+    metadata = { note: separated.metadata.note, editor: separated.metadata.editor };
+    preparedContent = JSON.stringify(content, null, 2);
+  } catch {
+    return errorResponse('Invalid or ambiguous asset metadata', 400, 'VALIDATION_FAILED');
+  }
   const createdAt = new Date().toISOString();
   const baseCommand = {
     workspaceId: auth.workspaceId,
@@ -98,14 +116,13 @@ export async function handlePutFile(
     createdAt,
     path: parsed.data.path,
     oldPath: parsed.data.oldPath,
+    metadata,
     asset: {
       path: parsed.data.path,
       content: content as JsonAsset['content'],
-      note: noteFromJson(content),
-      updatedAt: createdAt,
     },
   };
-  if (target.kind === 'rulesets') {
+  if (target.kind === 'rulesets' && (!previous || previous.path !== parsed.data.path || JSON.stringify(previous.content) !== JSON.stringify(content))) {
     const compiler = await createOptionalCompilerDispatcher(env, auth.workspaceId);
     const result = await saveRulesetSource(
       createPrimaryWorkspaceServices(env).workspaceStore,

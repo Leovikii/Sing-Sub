@@ -21,6 +21,7 @@ export interface GithubSyncConnectionResult {
 }
 
 export interface SyncStatusResult extends GithubSyncConnectionResult {
+  validation?: { path: string; reason: string };
   status: SyncStatus;
   local: SyncSideState;
   remote?: SyncSideState;

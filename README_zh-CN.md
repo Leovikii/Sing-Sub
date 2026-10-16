@@ -4,7 +4,7 @@
 
 [English](README.md) · [Wiki](https://github.com/Leovikii/Sing-Sub/wiki/HomeZH) · [许可证](LICENSE)
 
-![版本 3.1.5](https://img.shields.io/badge/version-3.1.5-e64980)
+![版本 3.1.6](https://img.shields.io/badge/version-3.1.6-e64980)
 
 Sing-Sub 是一个用于编辑和分发 [sing-box](https://sing-box.sagernet.org/) 配置的自托管控制台。
 
