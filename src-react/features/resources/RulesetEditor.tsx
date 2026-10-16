@@ -1,8 +1,8 @@
-import { Accordion, ActionIcon, Badge, Group, Select, Stack, Text, Textarea, Tooltip } from '@mantine/core';
+import { Alert, Button, Accordion, ActionIcon, Badge, Group, Select, Stack, Text, Textarea, Tooltip } from '@mantine/core';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { RuleBucket, RulesetSource } from '../../../shared';
+import type { EntityMetadata, RuleBucket } from '../../../shared';
 import { ResourceTime } from './ResourceTime';
 
 type ManualKey = keyof RuleBucket;
@@ -19,37 +19,11 @@ function lines(value: string) {
   return value.split('\n').map((item) => item.trim()).filter(Boolean);
 }
 
-function readSources(document: Record<string, unknown>): RulesetSource[] {
-  const metadata = document._sing_sub;
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return [];
-  const sources = (metadata as Record<string, unknown>).sources;
-  if (!Array.isArray(sources)) return [];
-  return sources.filter((source): source is RulesetSource => Boolean(
-    source && typeof source === 'object' && !Array.isArray(source)
-    && typeof (source as Record<string, unknown>).url === 'string'
-    && Number.isInteger((source as Record<string, unknown>).interval_hours),
-  ));
-}
-
-function readDraft(content: string): { document: Record<string, unknown>; draft: Draft } {
-  const parsed = JSON.parse(content) as Record<string, unknown>;
-  const metadata = parsed._sing_sub && typeof parsed._sing_sub === 'object' && !Array.isArray(parsed._sing_sub)
-    ? parsed._sing_sub as Record<string, unknown> : {};
-  const manual = metadata.manual && typeof metadata.manual === 'object' && !Array.isArray(metadata.manual)
-    ? metadata.manual as Record<string, unknown> : {};
-  const sources = readSources(parsed);
-  return {
-    document: parsed,
-    draft: {
-      sourceUrls: sources.map((source) => source.url).join('\n'),
-      intervalHours: sources[0]?.interval_hours ?? 0,
-      manual: {
-        domain: Array.isArray(manual.domain) ? manual.domain.filter((item): item is string => typeof item === 'string').join('\n') : '',
-        domain_suffix: Array.isArray(manual.domain_suffix) ? manual.domain_suffix.filter((item): item is string => typeof item === 'string').join('\n') : '',
-        domain_keyword: Array.isArray(manual.domain_keyword) ? manual.domain_keyword.filter((item): item is string => typeof item === 'string').join('\n') : '',
-        domain_regex: Array.isArray(manual.domain_regex) ? manual.domain_regex.filter((item): item is string => typeof item === 'string').join('\n') : '',
-      },
-    },
+type RulesetSource = NonNullable<NonNullable<EntityMetadata['editor']>['ruleset']>['sources'][number];
+function readDraft(definition: NonNullable<EntityMetadata['editor']>['ruleset']): Draft {
+  return { sourceUrls: (definition?.sources ?? []).map(source => source.url).join('\n'),
+    intervalHours: definition?.sources[0]?.intervalHours ?? 0,
+    manual: Object.fromEntries(manualKeys.map(key => [key, (definition?.manual[key] ?? []).join('\n')])) as Draft['manual'],
   };
 }
 
@@ -82,22 +56,25 @@ function validateSources(value: string, messages: { publicOnly: string; invalid:
 
 function latestSourceUpdate(sources: RulesetSource[]) {
   return sources.reduce<string | undefined>((latest, source) => {
-    if (!source.last_updated || Number.isNaN(Date.parse(source.last_updated))) return latest;
-    return !latest || Date.parse(source.last_updated) > Date.parse(latest) ? source.last_updated : latest;
+    if (!source.lastFetchedAt || Number.isNaN(Date.parse(source.lastFetchedAt))) return latest;
+    return !latest || Date.parse(source.lastFetchedAt) > Date.parse(latest) ? source.lastFetchedAt : latest;
   }, undefined);
 }
 
 export function RulesetEditor({
-  value, now, onChange, onValidityChange,
+  value, metadata, now, onChange, onValidityChange,
 }: {
   value: string;
+  metadata?: EntityMetadata['editor'];
   now: number;
-  onChange: (value: string) => void;
+  onChange: (value: string, metadata: EntityMetadata['editor']) => void;
   onValidityChange: (valid: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const [{ document, draft: initialDraft }] = useState(() => readDraft(value));
-  const [draft, setDraft] = useState(initialDraft);
+  const [review, setReview] = useState(Boolean(metadata?.ruleset?.needsReview || (!metadata?.ruleset && (JSON.parse(value).rules?.length ?? 0))));
+  const [document] = useState(() => JSON.parse(value) as Record<string, unknown>);
+  const [sources] = useState(metadata?.ruleset?.sources ?? []);
+  const [draft, setDraft] = useState(() => readDraft(metadata?.ruleset));
   const [sourceError, setSourceError] = useState<string | null>(null);
 
   const write = (next: Draft) => {
@@ -113,26 +90,39 @@ export function RulesetEditor({
 
     const output = structuredClone(document);
     output.version = 2;
-    const previousSources = new Map(readSources(output).map((source) => [source.url, source]));
-    const sources = lines(next.sourceUrls).map((url) => {
+    const previousSources = new Map(sources.map(source => [source.url, source]));
+    const nextSources = lines(next.sourceUrls).map((url) => {
       const previous = previousSources.get(url);
       return previous
-        ? { ...previous, interval_hours: next.intervalHours }
-        : { url, interval_hours: next.intervalHours };
+        ? { ...previous, intervalHours: next.intervalHours as RulesetSource['intervalHours'] }
+        : { url, intervalHours: next.intervalHours as RulesetSource['intervalHours'] };
     });
     const manual: Partial<RuleBucket> = {};
     for (const key of manualKeys) {
       const entries = lines(next.manual[key]);
       if (entries.length) manual[key] = entries;
     }
-    const metadata = output._sing_sub && typeof output._sing_sub === 'object' && !Array.isArray(output._sing_sub)
-      ? structuredClone(output._sing_sub as Record<string, unknown>) : {};
-    metadata.sources = sources;
-    if (Object.keys(manual).length) metadata.manual = manual;
-    else delete metadata.manual;
-    output._sing_sub = metadata;
-    onChange(JSON.stringify(output, null, 2));
+    onChange(JSON.stringify(output, null, 2), { ...metadata, ruleset: { manual, sources: nextSources } });
   };
+
+  const resolveReview = (choice: 'body' | 'sources') => {
+    let next = draft;
+    if (choice === 'body') {
+      const rules = document.rules;
+      if (!Array.isArray(rules) || rules.some(rule => !rule || typeof rule !== 'object' || Object.entries(rule).some(([key, values]) => !manualKeys.includes(key as ManualKey) || !Array.isArray(values) || values.some(item => typeof item !== 'string')))) {
+        setSourceError(t('rulesets.reviewUnsupported')); return;
+      }
+      next = { sourceUrls: '', intervalHours: 0, manual: Object.fromEntries(manualKeys.map(key => [key, rules.flatMap(rule => (rule as Partial<RuleBucket>)[key] ?? []).join('\n')])) as Draft['manual'] };
+    }
+    setReview(false); write(next);
+  };
+  if (review) return <Alert color="yellow" title={t('rulesets.reviewTitle')}>
+    <Stack gap="sm"><Text size="sm">{t('rulesets.reviewMessage')}</Text>
+      {sourceError && <Text c="red" size="sm">{sourceError}</Text>}
+      <Group><Button onClick={() => resolveReview('body')}>{t('rulesets.keepBody')}</Button>
+        {metadata?.ruleset && <Button variant="default" onClick={() => resolveReview('sources')}>{t('rulesets.useSources')}</Button>}</Group>
+    </Stack>
+  </Alert>;
 
   const sections: Array<{ key: ManualKey; label: string; description: string; placeholder: string }> = [
     { key: 'domain', label: 'DOMAIN', description: t('rulesets.domainDescription'), placeholder: 'example.com\nwww.example.com' },
@@ -140,7 +130,7 @@ export function RulesetEditor({
     { key: 'domain_keyword', label: 'DOMAIN_KEYWORD', description: t('rulesets.domainKeywordDescription'), placeholder: 'google\nyoutube' },
     { key: 'domain_regex', label: 'DOMAIN_REGEX', description: t('rulesets.domainRegexDescription'), placeholder: '^www\\.example\\.com$' },
   ];
-  const sourceMap = new Map(readSources(document).map((source) => [source.url, source]));
+  const sourceMap = new Map(sources.map(source => [source.url, source]));
   const lastUpdated = latestSourceUpdate(lines(draft.sourceUrls).flatMap((url) => {
     const source = sourceMap.get(url);
     return source ? [source] : [];
@@ -193,7 +183,7 @@ export function RulesetEditor({
             {lines(draft.sourceUrls).length > 1 && lines(draft.sourceUrls).map((url, index) => (
               <Stack key={`${index}-${url}`} gap={2}>
                 <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{url}</Text>
-                <ResourceTime value={sourceMap.get(url)?.last_updated} now={now} labelKey="rulesets.sourceUpdated" />
+                <ResourceTime value={sourceMap.get(url)?.lastFetchedAt} now={now} labelKey="rulesets.sourceUpdated" />
               </Stack>
             ))}
           </Stack>

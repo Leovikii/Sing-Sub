@@ -16,9 +16,9 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         strictExecutionOrder: true,
-        // Merge small shared UI chunks without pulling deferred features into the entry.
+        // Keep the existing initial dependency set together; deferred routes/editor stay lazy.
         codeSplitting: {
-          groups: [{
+          groups: [{ name: 'initial', tags: ['$initial'], priority: 2 }, {
             name: 'mantine', test: /node_modules[\\/]@mantine[\\/]core/,
             entriesAware: true, entriesAwareMergeThreshold: 30_000,
           }],

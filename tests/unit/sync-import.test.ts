@@ -28,7 +28,7 @@ describe('sync tree import', () => {
     expect(Object.keys(formattedDifferently.assets.templates.default.content as Record<string, unknown>))
       .toEqual(['log', 'route']);
     expect(Object.keys(formattedDifferently.profiles[0])).toEqual([
-      'order', 'inboundRules', 'rules', 'nodesPath', 'templateUrl', 'name',
+      'inboundRules', 'rules', 'nodesPath', 'templateUrl', 'name', 'order',
     ]);
     expect(imported.files[1].content.indexOf('"route"'))
       .toBeLessThan(imported.files[1].content.indexOf('"log"'));

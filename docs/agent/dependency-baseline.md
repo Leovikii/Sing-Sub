@@ -102,3 +102,9 @@ ADR-058 重新引入官方 CodeMirror 6 模块，但只在非规则集资源进�
 干净安装后 `npm audit --omit=dev` 报告 2 个 high，均来自 `react-router-dom -> react-router` 的同一项 RSC Mode CSRF 通告。本项目仅使用浏览器端 `createHashRouter`，没有 React Server Components、server action 或 RSC endpoint，通告描述的攻击路径不可达；当前上游没有可用修复版本。
 
 包含开发依赖的 audit 报告 24 个 high，来源包括 Vite/PostCSS、ESLint/minimatch、Vitest、Wrangler/Miniflare/Sharp 及上述 React Router 通告。它们不进入 Worker 静态资源运行时，但 CI 与本地工具链仍需随上游修复持续升级。禁止使用 `npm audit fix --force` 破坏锁定版本。
+
+## 3.1.6 当前验证
+
+未新增/升级运行依赖。生产 gzip：普通应用 285.03 KiB、CodeMirror 114.80 KiB、总计 399.83 KiB，原预算 285.81/120/405.81 KiB 均通过。使用 Rolldown 原生 `$initial` tag 保持初始依赖聚合，路由和编辑器仍懒加载；Chromium/Firefox 生产交互通过。许可证扫描通过。
+
+隔离 Node codec 对照：14,000 个节点、v3 JSON 2,568,589 bytes、v4 2,568,796 bytes（+207 bytes）。5 轮预热后交替执行 15 轮，读取（JSON parse/schema/整体 hash/新投影）中位 69.36→69.77 ms（+0.6%），发布序列化（schema/JSON stringify/整体 hash/新分离）65.78→66.76 ms（+1.5%）。这是本机 CPU 样例，不代表 Cloudflare 线上延迟；不添加脆弱耗时阈值测试。普通读取仍为 head+revision 两次 get、零 put，保存仍为 revision+head 两次 put，不新增逐实体请求或普通读正文 hash。

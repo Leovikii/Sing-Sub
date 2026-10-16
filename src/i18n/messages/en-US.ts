@@ -39,13 +39,14 @@ export default {
     switchTheme: 'Switch color scheme',
   },
   sorting: {
+    importLocal: 'Import device order',
+    importMessage: 'Save this device’s previous order to the workspace for all devices. The old device order is removed after saving.',
     start: 'Reorder', save: 'Save order', toolbar: 'List actions', handle: 'Reorder {name}',
     up: 'Move {name} up', down: 'Move {name} down', hint: 'Drag the leading handle or use the arrows to reorder.',
     keyboard: 'Press Space to pick up, arrow keys to move, Space to drop, or Escape to cancel.', picked: 'Card picked up.',
     moved: 'Moved to position {position} of {count}.', dropped: 'Card dropped. Save to apply the order.',
     cancelled: 'Drag cancelled.', saved: 'Order saved.', saveFailed: 'Could not save the order. Your changes are kept. Try again.',
     leaveMessage: 'The order has not been saved. Leaving will discard these changes.', finishFirst: 'Save or cancel the order first.',
-    local: 'Display order is stored in this browser only.',
   },
   auth: {
     setupTitle: 'Initialize workspace',
@@ -116,6 +117,11 @@ export default {
     previewFile: 'Preview {name}',
   },
   rulesets: {
+    reviewTitle: 'Content changed externally',
+    reviewMessage: 'The saved manual rules and sources may differ from the current content. Choose before editing; using the saved sources regenerates content on save.',
+    keepBody: 'Use current content as manual rules',
+    useSources: 'Use saved manual rules and sources',
+    reviewUnsupported: 'The current content includes rules unsupported by this editor. Keep the content unchanged or use the saved source definition.',
     jsonOnly: 'JSON',
     pending: 'Build pending',
     dispatching: 'Dispatching',
@@ -222,6 +228,8 @@ export default {
     compilerError: 'SRS compiler setup failed. Check the repository settings and try again.',
   },
   sync: {
+    metadataWarnings: 'Imported with {{count}} metadata warnings. Review rule-set editor notices and the next sync diff.',
+    metadataFileHint: 'Restore and repair sing-sub/metadata.json before pulling to preserve notes and editor definitions.',
     status: 'Status',
     refresh: 'Refresh',
     refreshing: 'Refreshing',

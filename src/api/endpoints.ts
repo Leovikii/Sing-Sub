@@ -1,5 +1,5 @@
 import type {
-  AssetSnapshot,
+  AssetSnapshot, EntityMetadata, MetadataCommand,
   BootstrapResult,
   FileContent,
   LoginResult,
@@ -37,9 +37,10 @@ export const api = {
     }),
   getPreview: (name: string) => apiRequest<PreviewResult>(`/api/preview/${encodeURIComponent(name)}.json`),
   postPreview: (profile: Profile) => apiRequest<PreviewResult>('/api/preview', { method: 'POST', body: JSON.stringify(profile) }),
+  saveMetadata: (data: MetadataCommand) => apiRequest<{ revision: string }>('/api/metadata', { method: 'PUT', body: JSON.stringify(data) }),
   getAssets: () => apiRequest<AssetSnapshot>('/api/assets'),
   getFile: (path: string) => apiRequest<FileContent>(`/api/file?path=${encodeURIComponent(path)}`),
-  getTemplate: (source: string) => apiRequest<{ content: unknown }>(`/api/template?source=${encodeURIComponent(source)}`),
+  getTemplate: (source: string) => apiRequest<{ content: unknown; metadata?: EntityMetadata }>(`/api/template?source=${encodeURIComponent(source)}`),
   putFile: (data: PutFileRequest) => apiRequest<PutFileResult>('/api/file', { method: 'PUT', body: JSON.stringify(data) }),
   deleteFile: (path: string, expectedRevision: string) => apiRequest<{ success: true; revision: string }>(
     `/api/file?path=${encodeURIComponent(path)}&expectedRevision=${encodeURIComponent(expectedRevision)}`,

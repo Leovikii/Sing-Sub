@@ -1,3 +1,4 @@
+import { normalizeWorkspace } from '../../worker/lib/workspace-metadata';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceSnapshot } from '../../shared';
 import {
@@ -334,7 +335,7 @@ describe('primary workspace auth routes', () => {
       path: 'sing-sub/templates/default.json',
       content: {
         note: 'Windows GUI',
-        _sing_sub: { note: 'Template metadata' },
+        _sing_sub: { note: 'Windows GUI' },
         outbounds: [{ type: 'direct', tag: 'direct', note: 'Outbound note' }],
         log: { level: 'info' },
         route: {
@@ -397,10 +398,11 @@ describe('primary workspace auth routes', () => {
     const source = await worker.fetch(new Request('https://example.com/api/file?path=sing-sub/templates/default.json', {
       headers: { Cookie: cookie },
     }), env);
-    expect(JSON.parse((await data(source) as { content: string }).content)).toMatchObject({
-      note: 'Windows GUI', _sing_sub: { note: 'Template metadata' },
-    });
-    expect((await new R2WorkspaceStore(bucket).read('primary')).snapshot).toEqual(configured);
+    const separated = await data(source) as { content: string; metadata: { note: string } };
+    expect(JSON.parse(separated.content)).not.toHaveProperty('note');
+    expect(JSON.parse(separated.content)).not.toHaveProperty('_sing_sub');
+    expect(separated.metadata.note).toBe('Windows GUI');
+    expect((await new R2WorkspaceStore(bucket).read('primary')).snapshot).toEqual(normalizeWorkspace(configured));
 
 
     const updated = await worker.fetch(new Request('https://example.com/api/file', {

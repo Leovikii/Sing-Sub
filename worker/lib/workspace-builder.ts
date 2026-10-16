@@ -1,4 +1,5 @@
-import type { Profile, WorkspaceSnapshot } from '../../shared';
+import { pureProfile } from './workspace-metadata';
+import type { ProfileDefinition, WorkspaceSnapshot } from '../../shared';
 import { buildProfile, type BuildResourceLoader } from './builder';
 
 const PUBLIC_RULESET_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.(?:json|srs)$/;
@@ -12,7 +13,7 @@ function localAsset(snapshot: WorkspaceSnapshot, path: string): unknown {
 }
 
 export async function buildProfileFromWorkspace(
-  profile: Profile,
+  profile: ProfileDefinition,
   snapshot: WorkspaceSnapshot,
   origin?: string,
 ): Promise<string> {
@@ -23,7 +24,7 @@ export async function buildProfileFromWorkspace(
     },
     loadRepoJson: async path => localAsset(snapshot, path),
   };
-  const config = await buildProfile(profile, resources);
+  const config = await buildProfile(pureProfile(profile), resources);
   return origin ? normalizeLegacyRulesetUrls(config, origin) : config;
 }
 

@@ -79,6 +79,7 @@ export function SyncPage() {
       } else {
         replaceWorkspace(workspaceState, result.revision);
       }
+      if (result.warnings?.length) notifications.show({ color: 'yellow', message: t('sync.metadataWarnings', { count: result.warnings.length }) });
       notifications.show({ color: 'green', message: t(direction === 'push' ? 'sync.push' : 'sync.pull') });
     } catch {
       notifications.show({ color: 'red', message: t('errors.generic') });
@@ -118,6 +119,7 @@ export function SyncPage() {
 
   return (
     <Container size="lg">
+      {status?.validation?.path === 'sing-sub/metadata.json' && <Alert color="yellow" mb="md">{t('sync.metadataFileHint')}</Alert>}
       <Stack gap="lg">
         <Title order={1}>{t('nav.sync')}</Title>
         <Paper withBorder radius="lg" p="lg" aria-busy={busy}>

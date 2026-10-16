@@ -38,6 +38,7 @@
 | ADR-064 | ACCEPTED | 资源卡片只显示配置修改时间；来源时间保留在 SOURCE 左下角，近期相对时间、满 30 天绝对时间。 |
 
 | ADR-066 | ACCEPTED | 3.1.5 共用卡片、排序工具栏与导航内容；资源/筛选卡片顺序为浏览器展示偏好。 |
+| ADR-067 | ACCEPTED | 3.1.6 用单一 metadata 文档分离 Profile/资源管理信息，按实体路径归集展示/编辑数据，保留部署与临时状态边界。 |
 
 ## ADR-050：React 19 + Mantine 9
 
@@ -114,3 +115,24 @@ Profile 定义仍位于 sing-sub/configs，模板、节点和规则集保持独�
 复用 Rolldown 原生 entries-aware 分组与 strictExecutionOrder，合并过小的 Mantine 公共 chunk 并保持模块初始化顺序；保留路由与 CodeMirror 二级懒加载，原三段 gzip 预算不变，不增加依赖。
 
 verify 的关键 E2E 默认针对生产构建执行，防止仅在打包后出现的模块初始化问题漏过；开发模式测试仍由同一 runner 提供。
+
+
+## ADR-067：统一元数据文档与正文隔离（ACCEPTED）
+
+2026-10-16 用户要求分类核对保存价值，并避免管理信息混入业务正文和零散文件增加维护成本。详细契约见 [统一元数据设计](./metadata-storage-design.md)，任务见 [3.1.6 计划](./v3.1.6-plan.md)。
+
+每个工作区只新增一个 GitHub metadata.json，按实体路径保存 Profile/资源 note/order/已知时间、display 和恢复编辑能力所需的 editor 定义；Profile 的同步 JSON 保留纯管理定义，资源 JSON 保留纯业务正文。在线 R2 使用同一 immutable revision 的 metadata 区，不额外写元数据对象，不保留原字段持久化副本，不创建逐实体/逐类型 sidecar。
+
+来源/手写规则和明确位置的管理注释在同一文件中类型化保存，不丢弃编辑能力；构建只接收纯定义/资源，合法业务同名字段保留。身份、安全版本、凭据、sync base、编译器部署状态及 build/job/artifact 仍走现有 R2 协议，设备偏好在浏览器，临时/可推导状态不新增持久化。
+
+用户已批准实施与隔离前端测试。本决策取代 ADR-064/066 的元数据格式和排序归属约束，保留其交互与时间语义。新写 v4、兼容读 v3/v4；同步 v3、旧基线按 v2 投影。不改变 revision/CAS、同步覆盖或 SRS 协议，不授权推送、部署或发布。
+
+性能约束：普通读取不新增逐实体哈希、请求或 R2 对象；继续一次快照读取/发布，不新增运行依赖，原三段 gzip 预算不变。
+
+同步导入的原树摘要与清理后的本地投影分开：`sync.baseContentHash` 保留远端原树 B；必要时 `baseWorkspaceContentHash` 校验已保存的本地基线投影，`baseFormatVersion` 指定该投影格式。陈旧时间/编辑定义的修正表现为 local-ahead，不伪造远端摘要或清空基线。内存中的 Profile/资源包装视图可组合管理字段，但只经统一编解码边界持久化为纯正文与唯一 metadata 区。
+
+用户追加约束：3.1.6 兼容转换为一次性代码，3.1.7 移除；集中于 `worker/compat/v3.1.6`，旧 schema/投影入口一并退场。移除前检查活跃 v4 引用，旧历史需要保留的 3.1.6 在隔离副本中恢复，详见 [退场清单](./metadata-compat-retirement.md)。
+
+3.1.6 使用 Rolldown 原生 `$initial` tag 合并本来已需首屏加载的依赖，减少小共享 chunk 的 import/包装开销；保持 strictExecutionOrder、路由与编辑器懒加载，原三段预算不变，不把延迟功能强拉入首屏。
+
+2026-10-16 用户追加授权提交并推送 3.1.6 到 dev；到 main 的 PR 由用户手动创建，仍不授权合并、部署、发布或生产数据操作。

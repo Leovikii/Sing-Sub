@@ -101,6 +101,11 @@ describe('safe directional GitHub sync', () => {
     expect(imported.assets.nodes.new.updatedAt).toBeUndefined();
     remote.assets.templates.default.content = { log: { level: 'info' }, route: {} };
     await gateway.setRemote(remote, 'commit-2');
+    // Simulate an IDE edit without rebinding metadata to the new body.
+    const metadataFile = gateway.files.find(file => file.path === 'sing-sub/metadata.json')!;
+    const metadata = JSON.parse(metadataFile.content);
+    metadata.entities['sing-sub/templates/default.json'].contentHash = '0'.repeat(64);
+    metadataFile.content = JSON.stringify(metadata);
     await pullWorkspaceFromGithub(dependencies, {
       workspaceId: 'primary', expectedRevision: result.revision, overwrite: true,
     });

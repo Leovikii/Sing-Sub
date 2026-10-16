@@ -26,12 +26,13 @@ interface WorkspaceSnapshot {
   createdAt: string
   previousRevisionId: string | null
   settings: WorkspaceSettings
-  profiles: Profile[]
+  profiles: ProfileDefinition[]
   assets: {
     nodes: Record<string, JsonAsset>
     templates: Record<string, JsonAsset>
     rulesets: Record<string, RulesetAsset>
   }
+  metadata: WorkspaceMetadata // schema v1，按实体路径归集管理信息
   builds: Record<string, BuildSummary>
   sync: SyncMetadata
 }
@@ -40,8 +41,8 @@ interface WorkspaceSnapshot {
 - 普通业务数据进入 immutable revision。
 - GitHub PAT、短期 job ticket 等敏感动态配置不得进入 revision、快照导出或 GitHub manifest。
 - SRS 二进制不嵌入 workspace JSON，只保存 artifact descriptor。
-- `schemaVersion` 必须由 shared schema 校验。workspace schema v3 是唯一业务持久化契约；3.1.3 按 ADR-063 移除一次性升级入口，current 与历史 readRevision 均只接受 v3；旧 v2 安装须先通过 3.1.2 完成迁移。
-- 版本号按文档类型独立演进：head schema v1、workspace snapshot schema v3、editable-sync manifest schema v2 之间没有继承或同步递增关系。
+- `schemaVersion` 必须由 shared schema 校验。新写 workspace schema v4：Profile 纯定义和资源纯 content 与唯一 metadata 区分离。3.1.6 在原始 v3 schema/hash 校验后做只读转换，明确保存才发布 v4；历史不改写。一次性兼容于 3.1.7 删除，见 [退场清单](./metadata-compat-retirement.md)。旧 v2 安装仍须先通过 3.1.2。
+- 版本号按文档类型独立演进：head schema v1、workspace snapshot schema v4、metadata schema v1、editable-sync manifest schema v3 之间没有继承或同步递增关系。
 - workspace 之外不维护需要事务同步的业务索引。
 
 ## R2 对象布局
@@ -128,7 +129,7 @@ HTTP route 只能调用 application use case，不得直接读取 R2、拼 key �
 
 ## Ruleset JSON 与 SRS 发布
 
-规则集始终提供公开 source URL `/rules/{rulesetId}.json`。Worker 从 current `primary` workspace revision 读取编辑源，移除 `_sing_sub`，只输出 sing-box `version` 与 `rules`。该路径不依赖 GitHub、build job 或私有配置订阅 Token。
+规则集始终提供公开 source URL `/rules/{rulesetId}.json`。Worker 从 current `primary` workspace revision 读取纯正文，只输出 sing-box `version` 与 `rules`。该路径不依赖 GitHub、build job 或私有配置订阅 Token。
 
 SRS 是可选公开派生产物，下载别名为 `/rules/{rulesetId}.srs`。只有 active artifact pointer 存在时提供。R2 bucket 保持 private，只有 Worker 响应公开。规则集名称可枚举是公开模型的既定结果，但 API 不提供列表；JSON 缺失和 SRS 缺失均使用不泄露内部状态的 404。
 
@@ -171,7 +172,7 @@ callback 发布：
 
 GitHub 只存在于 `GithubSyncGateway`，commit 代码不得被普通 CRUD 或编译流程导入。
 
-同步使用三个整体业务语义摘要：`B` 是 R2 中上次成功同步的 base content hash，`L` 是 current workspace 导出的 local content hash，`G` 是 GitHub 当前受管文件实际解析、规范化后的 remote content hash。语义摘要忽略对象字段顺序但保留数组顺序，以兼容既有 base 并避免空白格式制造冲突；标准化输出另有表示指纹，用于识别语义相同但对象字段顺序不同的情况。时间戳只用于展示和审计，不参与覆盖判断。R2 同时保留 base workspace revision 和 base GitHub commit；GitHub `sing-sub/manifest.json` 只描述最近一次 Worker 导出，用户从 IDE 修改文件后可以自然落后，不能把 manifest 当作远端真相。
+同步使用三个整体业务语义摘要：`B` 是 R2 中上次成功同步的 base content hash，`L` 是 current workspace 导出的 local content hash，`G` 是 GitHub 当前受管文件实际解析、规范化后的 remote content hash。语义摘要忽略对象字段顺序但保留数组顺序，以兼容既有 base 并避免空白格式制造冲突；标准化输出另有表示指纹，用于识别语义相同但对象字段顺序不同的情况。时间戳不用于选择覆盖方向；可移植实体时间属于管理数据，因此其实际变化可同步。R2 同时保留 base workspace revision 和 base GitHub commit；`baseFormatVersion` 标识基线投影（缺失为旧 v2），旧基线按原投影验 hash。`baseContentHash` 始终绑定原远端树；清理过期元数据后的本地基线用可选 `baseWorkspaceContentHash` 校验，修正呈现 local-ahead，不伪造 B。GitHub `sing-sub/manifest.json` 只描述最近一次 Worker 导出，用户从 IDE 修改文件后可以自然落后，不能把 manifest 当作远端真相。
 
 状态矩阵：
 
@@ -204,26 +205,17 @@ L = G         -> 内容已一致，更新 sync base 即可
 
 SRS artifact、build/job 状态、private credential、Cookie、subscription token 和短期 job ticket 不进入 GitHub。editable sync 可在 private repository 保存明文业务 JSON 以保留 IDE 体验。当前不额外创建加密时间快照；R2 revision 和 Git commit 分别承担站内与站外版本历史。
 
-## 现有数据迁移
+## 3.1.6 元数据与迁移边界
 
-以下流程是旧 GitHub + KV 生产部署迁入 R2 的一次性历史流程，不是新 Release 部署的默认初始化要求。
+GitHub 受管树新增且只新增 `sing-sub/metadata.json`，正文仍在 configs/nodes/templates/rulesets；现有 manifest 继续仅负责清单/hash/大小。正文绑定 contentHash 仅在同步时计算，不在普通读取时逐实体计算，不额外读取或写入 R2 metadata 对象。
 
-```text
-freeze legacy writes
--> export current GitHub files and KV settings
--> schema validation and dry-run report
--> create workspace ID and private credentials
--> write first immutable R2 revision
--> conditional create head.json
--> verify bootstrap/subscription/ruleset
--> switch routes to WorkspaceStore
--> remove legacy GitHub CRUD and KV binding
-```
+备注、同类 order、已知实体时间、模板 display、规则集 manual/sources 和有唯一 tag 的管理注释归入 metadata；凭据/身份/安全版本、sync base、build/job/artifact 保持原协议。设备偏好在浏览器，草稿和可推导状态不持久化。完整字段分类见 [元数据设计](./metadata-storage-design.md)。
 
-- 导入失败不得创建 head，因此不会出现半迁移可见状态。
-- migration record 写入首个 revision metadata，包含 source repo、branch、commit SHA 和时间。
-- 不实现长期 GitHub/R2 双写。
-- 切换前保留 GitHub commit 作为站外回滚点。
+正文+metadata 一次 immutable revision/head CAS 发布；客户端只能用 typed 局部命令。服务端维护正常修改及来源观测时间，排序/display/no-op 不改实体时间、不抓取来源、不触发 SRS。内存/API 可组合旧扁平 DTO，持久化只能经 codec。
+
+同步 v3 必须有完整 metadata，坏文件/缺记录阻断；孤立记录忽略并提示。IDE 改正文导致 hash 不匹配时清除旧时间、标记规则编辑定义待确认，不能自动覆盖正文。元数据与正文必须联合恢复，GitHub pull 不导入部署身份和运行基线。
+
+3.1.6 的 v3/v2 兼容边界只供本次升级；3.1.7 删除前检查 current/previous/sync base 全部已转新格式。原始历史保留；旧历史的隔离恢复与跨格式联合回滚见 [运维升级说明](../operations/workspace-upgrade.md)。
 
 ## 保留、预算与恢复
 

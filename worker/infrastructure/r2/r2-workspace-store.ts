@@ -1,3 +1,4 @@
+import { normalizeWorkspace, persistWorkspace, projectWorkspace } from '../../lib/workspace-metadata';
 import type { R2Bucket, R2PutOptions } from '@cloudflare/workers-types';
 import {
   workspaceHeadSchema,
@@ -22,6 +23,8 @@ import {
   WorkspaceRevisionNotFoundError,
   WorkspaceStorageCorruptError,
 } from './r2-workspace-errors';
+
+type StoredSnapshot = import('zod').infer<typeof workspaceSnapshotSchema>;
 
 export interface R2StoredObject {
   etag: string;
@@ -90,16 +93,17 @@ export class R2WorkspaceStore implements WorkspaceStore<WorkspaceSnapshot> {
 
   async read(workspaceId: string): Promise<WorkspaceRead<WorkspaceSnapshot>> {
     const head = await this.loadHead(workspaceId);
-    const snapshot = await this.readRevision(workspaceId, head.document.currentRevision);
+    const snapshot = this.parseSnapshot(await this.loadRevisionDocument(workspaceId, head.document.currentRevision), workspaceId, head.document.currentRevision);
     const hash = await sha256Hex(canonicalJson(snapshot));
     if (hash !== head.document.contentHash) {
       throw new WorkspaceStorageCorruptError('Head content hash does not match current revision');
     }
-    return { workspaceId, revision: snapshot.revisionId, snapshot };
+    return { workspaceId, revision: snapshot.revisionId, snapshot: snapshot.schemaVersion === 4 ? projectWorkspace(snapshot) : normalizeWorkspace(snapshot) };
   }
 
   async readRevision(workspaceId: string, revisionId: string): Promise<WorkspaceSnapshot> {
-    return this.parseSnapshot(await this.loadRevisionDocument(workspaceId, revisionId), workspaceId, revisionId);
+    const raw = this.parseSnapshot(await this.loadRevisionDocument(workspaceId, revisionId), workspaceId, revisionId);
+    return raw.schemaVersion === 4 ? projectWorkspace(raw) : raw;
   }
 
   private async loadRevisionDocument(workspaceId: string, revisionId: string): Promise<unknown> {
@@ -176,7 +180,7 @@ export class R2WorkspaceStore implements WorkspaceStore<WorkspaceSnapshot> {
     if (await this.bucket.get(r2ObjectKeys.head(workspaceId))) {
       throw new WorkspaceAlreadyExistsError(workspaceId);
     }
-    const snapshot = await this.readRevision(workspaceId, revisionId);
+    const snapshot = this.parseSnapshot(await this.loadRevisionDocument(workspaceId, revisionId), workspaceId, revisionId);
     const { hash } = await this.serializeSnapshot(snapshot);
     const recovered = await this.bucket.put(
       r2ObjectKeys.head(workspaceId),
@@ -203,34 +207,34 @@ export class R2WorkspaceStore implements WorkspaceStore<WorkspaceSnapshot> {
     return { document: parsed.data, etag: object.etag };
   }
 
-  private parseSnapshot(document: unknown, workspaceId: string, revisionId: string): WorkspaceSnapshot {
+  private parseSnapshot(document: unknown, workspaceId: string, revisionId: string): StoredSnapshot {
     const parsed = workspaceSnapshotSchema.safeParse(document);
     if (!parsed.success || parsed.data.workspaceId !== workspaceId || parsed.data.revisionId !== revisionId) {
       throw new WorkspaceStorageCorruptError('Revision schema or identity is invalid');
     }
-    return document as WorkspaceSnapshot;
+    return document as StoredSnapshot;
   }
 
   private validateSnapshot(
     workspaceId: string,
     source: WorkspaceSnapshot,
     previousRevisionId: string | null,
-  ): WorkspaceSnapshot {
-    const parsed = workspaceSnapshotSchema.safeParse(source);
-    if (!parsed.success || parsed.data.workspaceId !== workspaceId || parsed.data.previousRevisionId !== previousRevisionId) {
+  ): StoredSnapshot {
+    const persisted = persistWorkspace(source);
+    if (persisted.workspaceId !== workspaceId || persisted.previousRevisionId !== previousRevisionId) {
       throw new WorkspaceStorageCorruptError('Snapshot schema, workspace ID, or revision chain is invalid');
     }
-    return source;
+    return persisted;
   }
 
-  private async serializeSnapshot(snapshot: WorkspaceSnapshot): Promise<{ body: string; hash: string }> {
+  private async serializeSnapshot(snapshot: StoredSnapshot): Promise<{ body: string; hash: string }> {
     // Persist the insertion order of asset JSON so generated configurations
     // retain the template's layout. Hashes remain canonical for CAS/integrity.
     const body = JSON.stringify(snapshot);
     return { body, hash: await sha256Hex(canonicalJson(snapshot)) };
   }
 
-  private async putImmutableRevision(snapshot: WorkspaceSnapshot, body: string, hash: string): Promise<void> {
+  private async putImmutableRevision(snapshot: StoredSnapshot, body: string, hash: string): Promise<void> {
     const created = await this.bucket.put(
       r2ObjectKeys.revision(snapshot.workspaceId, snapshot.revisionId),
       body,
@@ -247,7 +251,7 @@ export class R2WorkspaceStore implements WorkspaceStore<WorkspaceSnapshot> {
     if (!created) throw new WorkspaceRevisionCollisionError(snapshot.revisionId);
   }
 
-  private createHead(snapshot: WorkspaceSnapshot, contentHash: string): WorkspaceHeadDocument {
+  private createHead(snapshot: StoredSnapshot, contentHash: string): WorkspaceHeadDocument {
     return {
       schemaVersion: 1,
       workspaceId: snapshot.workspaceId,

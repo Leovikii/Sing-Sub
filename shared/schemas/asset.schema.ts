@@ -1,8 +1,10 @@
+import { entityEditMetadataSchema } from './metadata.schema';
 import { z } from 'zod';
 
 export const putFileRequestSchema = z.object({
   path: z.string().min(1),
   content: z.string(),
+  metadata: entityEditMetadataSchema.optional(),
   expectedRevision: z.string().min(1),
   sha: z.string().nullable().optional(),
   oldPath: z.string().optional(),

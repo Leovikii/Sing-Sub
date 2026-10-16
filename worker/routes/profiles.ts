@@ -24,8 +24,9 @@ export async function handlePutState(request: Request, env: Env): Promise<Respon
     revisionId: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     state: parsed.data.state,
+    profileName: parsed.data.profileName, oldProfileName: parsed.data.oldProfileName,
   });
-  return jsonResponse({ revision: result.revision });
+  return jsonResponse({ revision: result.revision, state: result.state });
 }
 
 export async function handlePreview(request: Request, env: Env, name: string): Promise<Response> {

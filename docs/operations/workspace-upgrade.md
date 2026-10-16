@@ -1,34 +1,32 @@
-# 工作区升级路径：移除适配器
+# 工作区升级与跨格式恢复
 
-3.1.3 及后续版本只读取 v3，不再携带一次性迁移模块或离线转换工具。已完成迁移的安装可直接更新；仍使用 v2 的安装必须先部署 3.1.2 并按下列步骤完成迁移，再更新。新安装直接创建 v3。删除迁移代码不会删除 R2 中的既有备份。
+## 3.1.6：正文与元数据分离
 
-现有 workspace schema v2 在部署 3.1.2 后，首次访问需要工作区的接口时自动转换为 v3。无需手动修改 R2、执行离线脚本或切换 head；新建工作区直接使用 v3。
+新安装直接写 workspace v4。已有 v3 安装可更新至 3.1.6：先校验原 schema、身份和 head hash，再在内存转换；登录/预览/订阅读取不会发布 revision 或改写历史。第一次明确保存以既有 head CAS 原子发布 v4，失败仍保留原 current。
 
-## 操作顺序
+上线前在隔离副本完成以下步骤；生产备份、部署、同步和对象恢复须明确授权。
 
-1. 确认当前工作区仍为 v2 时，先将部署代码固定到 3.1.2；不要直接更新到最新 main。已有 v3 工作区可跳过转换步骤。
-2. 部署成功后打开网页并登录，或请求已有订阅，即会触发升级。
-3. 检查保留的配置、预览和订阅，确认转换成功后再更新至后续版本。旧页面持有的 revision 已失效，保存遇到冲突时重新加载。
-4. 若启用了 GitHub 同步，检查差异后明确选择以 R2 覆盖 GitHub，让保留的配置文件更新为新格式。不会在自动升级时擅自向 GitHub 推送。
+1. 停止旧页面写入，保存上一可用代码、current/previous/head、同步 base revision 与对应 Git commit/受管树的联合备份；凭据按原安全流程单独备份，不能放进业务 JSON。
+2. 用 3.1.6 读取并检查 Profile、备注、资源、规则集来源和时间。未知管理字段、冲突备注、没有唯一 tag 的注释会阻断转换；修复输入歧义后重试，不能删除报错数据来继续。
+3. 进行一次正常保存，再检查 current 是 v4。若 previous 仍为 v3，再进行一次明确保存；有 GitHub 同步时先检查 diff、明确方向，把远端转为纯正文加一个 `sing-sub/metadata.json` 和现有 manifest。不会自动推送，也不清空旧基线。
+4. 核对登录、预览/订阅、公开 JSON/SRS、资源改名删除、跨设备排序和规则编辑能力。旧本机排序仅点选确认导入后写入工作区，成功才清理旧键；旧设备不会自动覆盖。
 
-## 数据处理
+GitHub metadata 保存备注/order/已知时间/display/editor，正文文件不再混入管理字段。R2 metadata 位于同一个 immutable revision 内，不另建 metadata 对象。首次同步的格式差异是可见变更；旧 v2 基线按原表示验证，保留 B/L/G。
 
-- 删除适配器资源以及 adapterUrl 非空的 Profile；被删除配置的订阅不再可用。需要保留时，可以在部署前把适配器效果写入独立模板，再取消该配置的适配器选择。
-- 其余 Profile 删除空 adapterUrl 字段；名称、备注、顺序、模板/节点引用和筛选规则不变。
-- 模板、节点、规则集、SRS 状态、artifact 指针、认证与订阅签名版本保持原样。保留配置的订阅地址不变。
-- configs 仍保存 Profile 定义，templates、nodes、rulesets 仍分立；不把完整 sing-box 产物存入 configs。
-- GitHub 同步基线重置，首次同步需要明确方向。旧 GitHub Profile 带 adapterUrl 时不能直接拉取；使用网页明确确认的 R2 覆盖推送即可更新这些文件。旧 adapters 目录已不参与同步或运行，可自行删除，不阻塞网站使用。
+## 3.1.7 前置条件与一次性代码退场
 
-## 一次性执行与故障恢复
+3.1.7 移除 v3 快照、v2 同步和本机旧排序导入的兼容代码。升级前必须用 3.1.6 确认 head.current、head.previous、sync.baseWorkspaceRevision 均指向 v4，存在同步基线时 baseFormatVersion 为 3。仍有旧引用应回到 3.1.6 完成正常保存和明确同步，不在新版自动补救、不重置基线。
 
-升级先完整校验旧 head、snapshot 身份和内容哈希，再创建原始数据备份：
-workspaces/primary/migrations/v3/<旧 revision ID>.json。
-该文件包含原 head 与 snapshot，使用只创建不覆盖的条件写入，不参与普通 revision retention 清理，也不会输出到日志或 GitHub。
+历史 revision 不就地改写，原备份继续保留。3.1.7 不直接读取旧 v3 历史；需要恢复时，用保留的 3.1.6 在隔离副本恢复旧 revision 并另存 v4，再按完整备份流程导入。
 
-随后写入两个新的 v3 revision，保证 current/previous 都能被新运行时读取；最后以原 head ETag 条件切换入口。并发请求只会成功发布一个入口，其余重读；并发旧版保存不会被覆盖。中途失败保留旧 head，后续请求可重试；损坏数据拒绝转换，不清空或重新初始化工作区。
+## 联合恢复和回滚
 
-迁移成功后按 v3 正常读取，不再执行转换或重复创建备份。适配器执行、业务 schema 和历史 readRevision 不支持旧格式。3.1.3 已移除转换代码；迁移备份继续保留。
+同格式 restore 将选定快照（正文+metadata+原运行摘要）发布为新 revision，以当前 revision 做 CAS；不会倒退 head。head 损坏时 recoverHead 校验原始 revision hash。retention 继续保护 current、previous 和 sync base。
 
-## 回退
+跨 v3/v4 不能只回滚代码：停止写入，先备份最新数据，再配套恢复旧代码可读的 current/previous、head hash、sync base 及对应远端 v2 树。正文和 metadata 不能分别覆盖。升级后产生的新修改必须先保存并核对，不能直接用旧备份丢弃它们。本版不提供自动降级。
 
-跨 v2/v3 不能只回滚 Worker。需要回退时停止写入，先备份最新 v3 数据，再配套恢复旧格式；如果已产生新数据，不得直接恢复迁移备份而丢弃新修改。自动迁移不提供自动降级。
+GitHub 站外恢复只恢复业务定义、正文和元数据；新部署重新连接、建立同步基线并 reconcile 派生构建。旧 artifact 已被清理则重新编译；不能从 GitHub 导入 ready 状态冒充二进制可用。
+
+## 更早的 v2 安装
+
+仍使用 workspace v2 的安装必须先经过 3.1.2，完成其适配器移除升级，再升级至 3.1.6。3.1.3 已删除该旧转换入口。原迁移备份 `workspaces/primary/migrations/v3/<旧 revision ID>.json` 保留，不由此次升级清理。更早流程细节查对应 Git tag，不在当前运行时恢复长期兼容栈。

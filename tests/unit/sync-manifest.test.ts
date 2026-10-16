@@ -72,12 +72,13 @@ describe('workspace sync export', () => {
     expect(first).toEqual(second);
     expect(first.files.map(file => file.path)).toEqual([
       'sing-sub/configs/default.json',
+      'sing-sub/metadata.json',
       'sing-sub/rulesets/direct.json',
       'sing-sub/templates/default.json',
       SYNC_MANIFEST_PATH,
     ]);
     expect(syncManifestSchema.parse(first.manifest)).toEqual(first.manifest);
-    expect(first.manifest.files).toHaveLength(3);
+    expect(first.manifest.files).toHaveLength(4);
     expect(first.manifest.contentHash).toBe(first.serializedHash);
     for (const file of first.businessFiles) {
       expect(file.contentHash).toBe(await sha256Hex(file.content));

@@ -12,3 +12,4 @@ export * from './schemas/profile.schema';
 export * from './schemas/workspace.schema';
 export * from './schemas/sync-manifest.schema';
 export * from './schemas/sync.schema';
+export * from './schemas/metadata.schema';

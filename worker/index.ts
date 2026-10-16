@@ -1,3 +1,4 @@
+import { handlePutMetadata } from './routes/metadata';
 import type { Env } from './types';
 import { handleLogin, handleLogout, handleBootstrap, handleGetSettings, handlePutSettings } from './routes/auth';
 import { handleGetState, handlePutState, handlePreview } from './routes/profiles';
@@ -56,6 +57,8 @@ export default {
         response = await handlePushGithubSync(request, env);
       } else if (path === '/api/github-sync/pull' && method === 'POST') {
         response = await handlePullGithubSync(request, env, context);
+      } else if (path === '/api/metadata' && method === 'PUT') {
+        response = await handlePutMetadata(request, env);
       } else if (path === '/api/state' && method === 'GET') {
         response = await handleGetState(request, env);
       } else if (path === '/api/state' && method === 'PUT') {

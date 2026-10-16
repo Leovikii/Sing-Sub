@@ -7,6 +7,7 @@ import {
 import { WorkspaceConflictError } from '../errors/workspace-conflict';
 import type { SyncGateway, SyncRepositoryConnection } from '../ports/sync-gateway';
 import type { WorkspaceRead, WorkspaceStore } from '../ports/workspace-store';
+import { editableMetadata } from '../../lib/workspace-metadata';
 import {
   analyzeSyncState,
   diffSyncFiles,
@@ -96,7 +97,7 @@ async function loadSyncContext(
   };
   let importedRemote: ImportedSyncTree;
   try {
-    importedRemote = await importSyncTree(download.files);
+    importedRemote = await importSyncTree(download.files, { requireMetadata: current.snapshot.sync.baseFormatVersion === 3, manifestContent: download.manifestContent });
   } catch (error) {
     if (!(error instanceof SyncTreeValidationError)) throw error;
     throw new InvalidRemoteSyncTreeError(current, local, {
@@ -118,8 +119,8 @@ async function loadSyncContext(
   if (sync.baseWorkspaceRevision && sync.baseRemoteRevision && sync.baseContentHash &&
       sync.baseRepository?.toLowerCase() === expectedRepository) {
     const baseSnapshot = await dependencies.workspaceStore.readRevision(workspaceId, sync.baseWorkspaceRevision);
-    const baseBusiness = await exportSyncBusinessFiles(baseSnapshot);
-    if (baseBusiness.contentHash !== sync.baseContentHash) throw new SyncBaseInvalidError();
+    const baseBusiness = await exportSyncBusinessFiles(baseSnapshot, sync.baseFormatVersion ?? 2);
+    if (baseBusiness.contentHash !== (sync.baseWorkspaceContentHash ?? sync.baseContentHash)) throw new SyncBaseInvalidError();
     base = {
       revision: sync.baseWorkspaceRevision,
       remoteRevision: sync.baseRemoteRevision,
@@ -149,6 +150,7 @@ export async function getWorkspaceSyncStatus(
     if (!(error instanceof InvalidRemoteSyncTreeError)) throw error;
     return {
       connected: true,
+      validation: { path: error.validation.path, reason: error.validation.code },
       repository: repositoryName(dependencies.connection),
       defaultBranch: dependencies.connection.defaultBranch,
       status: 'conflict',
@@ -212,8 +214,8 @@ export async function getDisconnectedWorkspaceSyncStatus(
   const sync = current.snapshot.sync;
   if (sync.baseWorkspaceRevision && sync.baseContentHash) {
     const baseSnapshot = await workspaceStore.readRevision(current.workspaceId, sync.baseWorkspaceRevision);
-    const baseBusiness = await exportSyncBusinessFiles(baseSnapshot);
-    if (baseBusiness.contentHash === sync.baseContentHash) {
+    const baseBusiness = await exportSyncBusinessFiles(baseSnapshot, sync.baseFormatVersion ?? 2);
+    if (baseBusiness.contentHash === (sync.baseWorkspaceContentHash ?? sync.baseContentHash)) {
       baseFiles = baseBusiness.files;
       changedFromBase = localBusiness.contentHash !== sync.baseContentHash;
     }
@@ -247,6 +249,7 @@ function syncedMetadata(
     baseWorkspaceRevision,
     baseRemoteRevision,
     baseContentHash,
+    baseFormatVersion: 3,
     baseRepository: repositoryName(connection),
     updatedAt,
   };
@@ -486,17 +489,21 @@ export async function pullWorkspaceFromGithub(
   const createdAt = new Date().toISOString();
   const revisionId = crypto.randomUUID();
   const builds = await pulledBuilds(context.current.snapshot, context.importedRemote, revisionId, createdAt);
-  // GitHub business files carry no reliable manual modification timestamp.
-  // Preserve it only when this exact resource version is already known locally.
+  // Keep valid remote observations. A missing time can use a known local time
+  // only when body and editable metadata describe the same entity version.
   for (const kind of ['nodes', 'templates', 'rulesets'] as const) {
     for (const [id, asset] of Object.entries(context.importedRemote.assets[kind])) {
       const previous = context.current.snapshot.assets[kind][id];
-      if (previous?.updatedAt && previous.path === asset.path
-          && JSON.stringify(previous.content) === JSON.stringify(asset.content)) {
+      if (!asset.updatedAt && previous?.updatedAt && previous.path === asset.path
+          && JSON.stringify(previous.content) === JSON.stringify(asset.content)
+          && JSON.stringify(editableMetadata(context.current.snapshot.metadata?.entities[asset.path] ?? {})) ===
+             JSON.stringify(editableMetadata(context.importedRemote.metadata.entities[asset.path]))) {
         asset.updatedAt = previous.updatedAt;
+        context.importedRemote.metadata.entities[asset.path].updatedAt = previous.updatedAt;
       }
     }
   }
+  const importedProjection = await exportSyncBusinessFiles(context.importedRemote);
   const result = await dependencies.workspaceStore.publish({
     workspaceId: command.workspaceId,
     expectedRevision: context.current.revision,
@@ -507,17 +514,16 @@ export async function pullWorkspaceFromGithub(
       createdAt,
       profiles: context.importedRemote.profiles,
       assets: context.importedRemote.assets,
+      metadata: context.importedRemote.metadata,
       builds,
-      sync: syncedMetadata(
-        dependencies.connection,
-        revisionId,
-        context.remote.revision,
-        context.remote.contentHash,
-        createdAt,
-      ),
+      sync: { ...syncedMetadata(
+        dependencies.connection, revisionId, context.remote.revision, context.remote.contentHash, createdAt,
+        importedProjection.contentHash === context.remote.contentHash ? 'synced' : 'local-ahead',
+      ), baseWorkspaceContentHash: importedProjection.contentHash },
     },
   });
   return {
+    warnings: context.importedRemote.warnings,
     action: 'pulled',
     revision: result.revision,
     remoteRevision: context.remote.revision,
