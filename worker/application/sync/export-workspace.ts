@@ -72,8 +72,13 @@ export async function exportSyncBusinessFiles(source: SyncBusinessSource, format
   }
   if (formatVersion === 3) {
     const entities: Record<string, unknown> = {};
-    for (const file of businessFiles) entities[file.path] = { ...pure.metadata?.entities[file.path], contentHash: file.contentHash };
+    for (const file of businessFiles) entities[file.path] = {
+      ...pure.metadata?.entities[file.path],
+      contentHash: pure.metadata?.entities[file.path]?.contentHash ?? file.contentHash,
+    };
     const value = { schemaVersion: 1, entities };
+    // The generated binding participates in the semantic projection of the
+    // current body, while the serialized metadata retains the repository value.
     const semanticEntities = Object.fromEntries(Object.entries(entities).map(([path, metadata]) => [path, { ...(metadata as object), contentHash: semanticFiles.find(file => file.path === path)!.contentHash }]));
     const content = canonicalPrettyJson(value);
     businessFiles.push({ path: SYNC_METADATA_PATH, content, contentHash: await sha256Hex(content) });

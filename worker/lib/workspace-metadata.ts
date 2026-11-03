@@ -12,9 +12,10 @@ export function pureProfile(profile: Profile | ProfileDefinition): ProfileDefini
   for (const key of ['note', 'order', 'created_at', 'updated_at']) delete definition[key];
   return definition as ProfileDefinition;
 }
-function timestamp(value: number | undefined): string | undefined {
+function timestamp(value: number | undefined, previous?: string): string | undefined {
   if (value === undefined) return undefined;
   if (!Number.isFinite(value) || !Number.isFinite(new Date(value).getTime())) throw new Error('Invalid legacy profile timestamp');
+  if (previous !== undefined && Date.parse(previous) === value) return previous;
   return new Date(value).toISOString();
 }
 export function projectProfile(definition: ProfileDefinition, metadata: EntityMetadata = {}): Profile {
@@ -36,9 +37,11 @@ export function separateWorkspace(source: Pick<WorkspaceSnapshot, 'profiles' | '
     const previous = source.metadata?.entities[path] ?? {};
     metadata.entities[path] = { ...previous,
       ...(profile.note !== undefined ? { note: profile.note } : {}),
-      order: profile.order,
-      ...(profile.created_at !== undefined ? { createdAt: timestamp(profile.created_at) } : {}),
-      ...(profile.updated_at !== undefined ? { updatedAt: timestamp(profile.updated_at) } : {}),
+      // A projected Profile defaults a missing order to zero for display only.
+      // Do not turn that default into a repository metadata edit on pull.
+      ...(source.metadata?.entities[path] ? {} : { order: profile.order }),
+      ...(profile.created_at !== undefined ? { createdAt: timestamp(profile.created_at, previous.createdAt) } : {}),
+      ...(profile.updated_at !== undefined ? { updatedAt: timestamp(profile.updated_at, previous.updatedAt) } : {}),
     };
     return pureProfile(profile);
   });

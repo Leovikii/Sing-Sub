@@ -10,6 +10,7 @@ export interface SyncTreeState {
 
 export interface SyncBaseState extends SyncTreeState {
   remoteRevision: string;
+  workspaceContentHash?: string;
 }
 
 export interface SyncAnalysis {
@@ -54,12 +55,12 @@ export function analyzeSyncState(
   remote: SyncTreeState,
 ): SyncAnalysis {
   const sameContent = local.contentHash === remote.contentHash;
-  const localChanged = base ? local.contentHash !== base.contentHash : local.files.length > 0;
+  const localChanged = base ? local.contentHash !== (base.workspaceContentHash ?? base.contentHash) : local.files.length > 0;
   const remoteChanged = base ? remote.contentHash !== base.contentHash : remote.files.length > 0;
   let status: SyncStatus;
   if (!base) status = 'never';
   else if (sameContent) status = 'synced';
-  else if (localChanged && !remoteChanged) status = 'local-ahead';
+  else if (!remoteChanged) status = 'local-ahead';
   else if (!localChanged && remoteChanged) status = 'remote-ahead';
   else status = 'conflict';
   return {

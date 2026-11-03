@@ -109,7 +109,7 @@ describe('safe directional GitHub sync', () => {
     await pullWorkspaceFromGithub(dependencies, {
       workspaceId: 'primary', expectedRevision: result.revision, overwrite: true,
     });
-    expect((await store.read('primary')).snapshot.assets.templates.default.updatedAt).toBeUndefined();
+    expect((await store.read('primary')).snapshot.assets.templates.default.updatedAt).toBe(modifiedAt);
   });
 
   it('only allows an explicit R2 overwrite when the remote tree has an invalid profile schema', async () => {

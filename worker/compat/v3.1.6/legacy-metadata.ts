@@ -1,4 +1,4 @@
-// TEMPORARY: 3.1.6 upgrade boundary. Remove in 3.1.7 after the retirement
+// TEMPORARY: 3.1.6 upgrade boundary. Remove in the dedicated migration after the retirement
 // checks in docs/agent/metadata-compat-retirement.md. Never write this format.
 import { entityMetadataSchema, type EntityMetadata, type JsonAsset } from '../../../shared';
 import { readRulesetMetadata } from '../../lib/rulesets';

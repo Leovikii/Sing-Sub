@@ -1,6 +1,6 @@
 # Cloudflare 部署、更新与恢复
 
-适用版本：`v3.1.6`；代码回滚基线：`v3.0.0`。
+适用版本：`v3.1.7`；代码回滚基线：`v3.0.0`。
 
 部署前必须保留上一可用 Worker version，并完成本文的发布前检查。现有 workspace schema v2 必须先通过 3.1.2 完成自动迁移，再更新至本版本，详见 [工作区升级路径](./workspace-upgrade.md)。
 
@@ -9,7 +9,7 @@
 - Worker `compatibility_date` 为 `2026-07-15`。
 - 运行时只需要 `WORKSPACE_BUCKET` R2 binding 和 `ADMIN_PASSWORD`、`SESSION_SIGNING_SECRET`、`SUBSCRIPTION_SIGNING_SECRET`。
 - Workers observability 与 Turnstile 暂不启用。
-- 3.1.6 新写 workspace v4，临时兼容读 v3；v2 current 不转换。head schema v1 不变，GitHub sync manifest v3 加单一 metadata schema v1，旧同步 v2 只用于本次兼容。3.1.7 删除兼容前须完成活跃引用检查，详见升级说明。
+- 3.1.6 新写 workspace v4，临时兼容读 v3；v2 current 不转换。head schema v1 不变，GitHub sync manifest v3 加单一 metadata schema v1，旧同步 v2 只用于本次兼容。后续删除兼容前须完成活跃引用检查，详见升级说明。
 - 私有配置订阅 Token 为 `s2.<22-char-tag>`；旧格式不兼容。
 - 规则集公开 JSON/SRS URL、GitHub editable sync 与 SRS compiler 均不属于网站部署初始化。
 

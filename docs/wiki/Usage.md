@@ -13,7 +13,7 @@ The JSON editor for nodes and templates supports formatting, validation, find an
 - Every resource card shows a compact timestamp in its footer: the time this configuration file was successfully saved locally, including name, note and content changes. This is neither per-node history nor a compilation timestamp.
 - **Source updated** stays at the bottom left of the SOURCE section in the rule set editor, beside the interval setting. It means the latest successful fetch, not necessarily a change upstream. Multiple sources also show their individual times below.
 - Recent times appear as minutes, hours or days ago. At 30 days, they switch to the local date and time. Focus or touch a timestamp to see its precise time and time zone; the resource dialog also displays the full configuration modification time.
-- Missing history shows **Not recorded**. GitHub pulls preserve known times for unchanged resources. New or changed imports have no reliable original modification time; the pull time is not substituted. Saving locally starts a new record.
+- GitHub pulls preserve modification times recorded in repository metadata, including after direct body edits. Missing times show **Not recorded**; the pull time is not substituted. Saving locally records a new modification time.
 
 **Remote sources currently refresh when the rule set is saved; interval settings do not yet trigger background scheduled fetches.** Failed or conflicting saves publish no new timestamp. SRS compilation and retries do not change configuration modification times.
 

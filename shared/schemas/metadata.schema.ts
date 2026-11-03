@@ -20,6 +20,8 @@ export const rulesetEditorSchema = z.object({
   needsReview: z.boolean().optional(),
 }).strict();
 export const entityMetadataSchema = z.object({
+  // Preserve the repository's existing sync binding; body edits do not rewrite metadata.
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   note: z.string().optional(),
   order: z.number().int().nonnegative().optional(),
   createdAt: z.iso.datetime().optional(),

@@ -7,11 +7,10 @@
 1. [工程标准](./engineering-standards.md)
 2. [架构决策](./decisions.md)
 3. [当前进度](./progress.md)
-4. [当前交付范围](./v3.1.6-plan.md)；已完成计划不重复保留，历史使用 Git。
 
-当前实施：[3.1.6 计划](./v3.1.6-plan.md)与[元数据分类及文件保存设计](./metadata-storage-design.md)。用户已批准实施、隔离测试及提交推送 dev；到 main 的 PR 由用户手动创建，不授权合并、部署、发布或生产数据操作。
+当前范围：3.1.7 修复 GitHub 拉取后 metadata 差异、时间丢失及连续拉取受阻，见 [当前进度](./progress.md) 和 ADR-070。2026-11-03 用户取消规则集扩展，原 DLC 计划已删除；不新增 TXT/YAML 导入，不升级编译器，不剥离现有规则集功能。同日用户追加授权提交推送 dev、创建并合并到 main 的 PR 以发布更新，完成后将 dev 快进至 main 保持一致；main 更新按既有 Cloudflare Builds 流程部署，不额外手动部署或操作生产数据。
 
-兼容代码仅用于本次升级，3.1.7 必须按[退场清单](./metadata-compat-retirement.md)移除。
+兼容代码不扩展成本次同步修复的一部分；原定退场需在后续迁移任务按[退场清单](./metadata-compat-retirement.md)完成，不隐含生产检查或数据操作授权。
 
 按需阅读：
 

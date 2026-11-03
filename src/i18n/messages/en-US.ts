@@ -228,7 +228,7 @@ export default {
     compilerError: 'SRS compiler setup failed. Check the repository settings and try again.',
   },
   sync: {
-    metadataWarnings: 'Imported with {{count}} metadata warnings. Review rule-set editor notices and the next sync diff.',
+    metadataWarnings: 'Imported with {count} metadata references to review.',
     metadataFileHint: 'Restore and repair sing-sub/metadata.json before pulling to preserve notes and editor definitions.',
     status: 'Status',
     refresh: 'Refresh',

@@ -128,13 +128,7 @@ export async function importSyncTree(input: SyncFile[], options: { requireMetada
     if (portable) {
       const entry = portable.entities[file.path];
       if (!entry) throw new SyncTreeValidationError('INVALID_SCHEMA', file.path, 'Metadata record is missing');
-      const { contentHash, ...entity } = entry;
-      metadata.entities[file.path] = entity;
-      if (contentHash !== await sha256Hex(orderedPrettyJson(json))) {
-        delete entity.updatedAt;
-        if (entity.editor?.ruleset) entity.editor.ruleset.needsReview = true;
-        warnings.push(`${file.path}: body changed outside Sing-Sub; timestamp cleared${entity.editor?.ruleset ? ', editor requires review' : ''}`);
-      }
+      metadata.entities[file.path] = structuredClone(entry);
     }
     if (managed.kind === 'configs') {
       const parsed = (formatVersion === 3 ? profileDefinitionSchema : profileSchema).safeParse(json);
@@ -178,13 +172,6 @@ export async function importSyncTree(input: SyncFile[], options: { requireMetada
             warnings.push(`${file.path}: annotation ${annotation.direction}/${annotation.tag} requires a unique current tag`);
           }
         }
-        if (entry.display && json && typeof json === 'object' && !Array.isArray(json)) {
-          const outbounds = (json as { outbounds?: Array<{ tag?: string }> }).outbounds ?? [];
-          const available = new Set(outbounds.map(item => item.tag));
-          const pruned = entry.display.outboundOrder.filter(tag => available.has(tag));
-          if (pruned.length !== entry.display.outboundOrder.length) warnings.push(`${file.path}: removed obsolete display tags`);
-          entry.display.outboundOrder = pruned;
-        }
         assets[managed.kind][managed.entityId] = { ...split.asset, ...(entry.note !== undefined ? { note: entry.note } : {}), ...(entry.updatedAt ? { updatedAt: entry.updatedAt } : {}) };
       } catch (error) { throw new SyncTreeValidationError('INVALID_SCHEMA', file.path, error instanceof Error ? error.message : 'Invalid asset'); }
     } else assets[managed.kind][managed.entityId] = candidate as JsonAsset;
@@ -206,8 +193,7 @@ export async function importSyncTree(input: SyncFile[], options: { requireMetada
   }
 
   if (portable) for (const path of Object.keys(portable.entities)) if (!paths.has(path.toLowerCase())) warnings.push(`${path}: orphan metadata ignored`);
-  // Compare the actual remote tree, before removing stale metadata. This keeps
-  // B/L/G honest and exposes sanitization as a subsequent local change.
+  // Compare the actual remote tree. Metadata is independent of body changes.
   const rawFiles: SyncFile[] = [];
   const semanticFiles: SyncFile[] = [];
   for (const file of input.filter(file => file.path !== SYNC_MANIFEST_PATH)) {
@@ -220,7 +206,7 @@ export async function importSyncTree(input: SyncFile[], options: { requireMetada
     const semantic = structuredClone(parseJson(sidecar!) as PortableMetadata);
     for (const file of rawFiles) if (file.path !== SYNC_METADATA_PATH) {
       const entry = semantic.entities[file.path];
-      if (entry?.contentHash === file.contentHash) entry.contentHash = semanticFiles.find(item => item.path === file.path)!.contentHash;
+      if (entry) entry.contentHash = semanticFiles.find(item => item.path === file.path)!.contentHash;
     }
     semanticFiles.find(file => file.path === SYNC_METADATA_PATH)!.contentHash = await sha256Hex(canonicalPrettyJson(semantic));
   }
