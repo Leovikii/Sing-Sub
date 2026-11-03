@@ -11,16 +11,17 @@ sing-sub/configs/*.json
 sing-sub/nodes/*.json
 sing-sub/templates/*.json
 sing-sub/rulesets/*.json
+sing-sub/metadata.json
 sing-sub/manifest.json
 ```
 
-editable-sync manifest 使用 schema v2，只导入 configs、nodes、templates、rulesets 路径。旧 adapters/patches 目录不参与同步，可自行删除。旧 v2 工作区须先通过 3.1.2 [完成升级](./workspace-upgrade.md)；远端旧 Profile 字段不符合新 schema 时，先检查差异，再明确选择以 R2 覆盖推送，不需要手工编辑这些文件。
+editable-sync manifest 使用 schema v3，metadata 使用 schema v1；正文位于 configs、nodes、templates、rulesets，备注、排序和时间等位于 metadata。metadata 缺失、损坏或缺少现存实体记录时会阻止拉取。旧 adapters/patches 目录不参与同步，可自行删除。旧 v2 工作区须先通过 3.1.2 [完成升级](./workspace-upgrade.md)。
 
 `.github/workflows/compile-srs.yml` 只由 SRS provisioner 管理。README、源码、其他 workflow 和任意非受管路径在同步 push 中通过 Git base tree 原样保留。SRS 二进制、build/job 状态、PAT、Cookie、订阅 Token 和短期 ticket 不进入同步树。
 
 业务 JSON 保留对象字段与数组顺序，使用两空格缩进、LF 和单个末尾换行。远端文件在比较前先解析并重新规范化，因此只修改缩进或 key 顺序不会产生业务冲突。
 
-拉取时，未变资源保留已知的配置修改时间；新增或变更资源没有可信的原始修改时间，因此显示“未记录”，不将导入时间当作手动修改时间。来源抓取记录仍随规则集内容保留。
+拉取保留仓库 metadata 中已有的备注、排序、时间和编辑定义。直接修改正文无需同步修改 metadata 中的 contentHash，也不会因此清空时间或自动修复 metadata。缺失时间显示“未记录”，不查询 Git 历史或用拉取时间代替；后续在本站保存时记录新的修改时间。拉取不会修改 GitHub 文件。
 
 ## 连接与权限
 

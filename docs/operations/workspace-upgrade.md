@@ -13,11 +13,11 @@
 
 GitHub metadata 保存备注/order/已知时间/display/editor，正文文件不再混入管理字段。R2 metadata 位于同一个 immutable revision 内，不另建 metadata 对象。首次同步的格式差异是可见变更；旧 v2 基线按原表示验证，保留 B/L/G。
 
-## 3.1.7 前置条件与一次性代码退场
+## 后续一次性代码退场的前置条件
 
-3.1.7 移除 v3 快照、v2 同步和本机旧排序导入的兼容代码。升级前必须用 3.1.6 确认 head.current、head.previous、sync.baseWorkspaceRevision 均指向 v4，存在同步基线时 baseFormatVersion 为 3。仍有旧引用应回到 3.1.6 完成正常保存和明确同步，不在新版自动补救、不重置基线。
+当前同步修复保留已有读取兼容。后续移除 v3 快照、v2 同步和本机旧排序导入前，必须用支持该兼容的版本确认 head.current、head.previous、sync.baseWorkspaceRevision 均指向 v4，存在同步基线时 baseFormatVersion 为 3。仍有旧引用时先完成正常保存和明确同步，不在退场版本自动补救、不重置基线。
 
-历史 revision 不就地改写，原备份继续保留。3.1.7 不直接读取旧 v3 历史；需要恢复时，用保留的 3.1.6 在隔离副本恢复旧 revision 并另存 v4，再按完整备份流程导入。
+历史 revision 不就地改写，原备份继续保留。兼容退场后不直接读取旧 v3 历史；需要恢复时，用保留的 3.1.6 在隔离副本恢复旧 revision 并另存 v4，再按完整备份流程导入。
 
 ## 联合恢复和回滚
 

@@ -7,7 +7,6 @@ import {
 import { WorkspaceConflictError } from '../errors/workspace-conflict';
 import type { SyncGateway, SyncRepositoryConnection } from '../ports/sync-gateway';
 import type { WorkspaceRead, WorkspaceStore } from '../ports/workspace-store';
-import { editableMetadata } from '../../lib/workspace-metadata';
 import {
   analyzeSyncState,
   diffSyncFiles,
@@ -125,6 +124,7 @@ async function loadSyncContext(
       revision: sync.baseWorkspaceRevision,
       remoteRevision: sync.baseRemoteRevision,
       contentHash: sync.baseContentHash,
+      workspaceContentHash: sync.baseWorkspaceContentHash,
       serializedHash: baseBusiness.serializedHash,
       files: baseBusiness.files,
     };
@@ -217,7 +217,7 @@ export async function getDisconnectedWorkspaceSyncStatus(
     const baseBusiness = await exportSyncBusinessFiles(baseSnapshot, sync.baseFormatVersion ?? 2);
     if (baseBusiness.contentHash === (sync.baseWorkspaceContentHash ?? sync.baseContentHash)) {
       baseFiles = baseBusiness.files;
-      changedFromBase = localBusiness.contentHash !== sync.baseContentHash;
+      changedFromBase = localBusiness.contentHash !== (sync.baseWorkspaceContentHash ?? sync.baseContentHash);
     }
   }
   return {
@@ -489,20 +489,6 @@ export async function pullWorkspaceFromGithub(
   const createdAt = new Date().toISOString();
   const revisionId = crypto.randomUUID();
   const builds = await pulledBuilds(context.current.snapshot, context.importedRemote, revisionId, createdAt);
-  // Keep valid remote observations. A missing time can use a known local time
-  // only when body and editable metadata describe the same entity version.
-  for (const kind of ['nodes', 'templates', 'rulesets'] as const) {
-    for (const [id, asset] of Object.entries(context.importedRemote.assets[kind])) {
-      const previous = context.current.snapshot.assets[kind][id];
-      if (!asset.updatedAt && previous?.updatedAt && previous.path === asset.path
-          && JSON.stringify(previous.content) === JSON.stringify(asset.content)
-          && JSON.stringify(editableMetadata(context.current.snapshot.metadata?.entities[asset.path] ?? {})) ===
-             JSON.stringify(editableMetadata(context.importedRemote.metadata.entities[asset.path]))) {
-        asset.updatedAt = previous.updatedAt;
-        context.importedRemote.metadata.entities[asset.path].updatedAt = previous.updatedAt;
-      }
-    }
-  }
   const importedProjection = await exportSyncBusinessFiles(context.importedRemote);
   const result = await dependencies.workspaceStore.publish({
     workspaceId: command.workspaceId,

@@ -334,7 +334,7 @@ test('React entry initializes with a password-only request and guarded route', a
   expect(brandIconBox!.width).toBe(36);
   expect(brandIconBox!.height).toBe(36);
   await page.goto('/#/settings/about');
-  await expect(page.getByRole('main').getByText('v3.1.6', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('v3.1.7', { exact: true })).toBeVisible();
 });
 
 test('React resource times separate configuration edits from source refreshes across viewports', async ({ page }, testInfo) => {
@@ -1055,6 +1055,27 @@ test('React sync pushes with the current revision after status preflight', async
   expect(state.syncRequests[0].postDataJSON()).toEqual({ expectedRevision: 'revision-1', resolution: 'safe' });
 });
 
+for (const locale of ['zh-CN', 'en-US']) {
+  test(`React sync warning counts render after a safe pull in ${locale}`, async ({ page }) => {
+    const state = await mockReactApi(page);
+    await login(page, state);
+    state.connected = true;
+    state.syncStatus = 'remote-ahead';
+    if (locale === 'en-US') await page.getByRole('button', { name: '切换语言', exact: true }).click();
+    await page.route('**/api/github-sync/pull', async route => {
+      expect(route.request().postDataJSON()).toMatchObject({ resolution: 'safe' });
+      await route.fulfill({ json: { data: {
+        action: 'pulled', revision: 'revision-1', remoteRevision: 'remote-2', contentHash: 'remote-hash',
+        changes: { added: [], modified: [], deleted: [] }, warnings: ['orphan metadata ignored'],
+      } } });
+    });
+    await page.goto('/#/sync');
+    await page.getByRole('button', { name: locale === 'zh-CN' ? '从 GitHub 拉取' : 'Pull from GitHub', exact: true }).click();
+    await expect(page.getByText(locale === 'zh-CN' ? '已导入；1 处元数据引用需要核对。' : 'Imported with 1 metadata references to review.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+}
+
 
 test('React filter modes respond to clicks and keyboard before and after entering keywords', async ({ page }) => {
   const state = await mockReactApi(page);
@@ -1250,7 +1271,9 @@ test('React cards support pointer and touch dragging and preserve failed server 
   await page.route('**/api/metadata', route => failure
     ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'INTERNAL_ERROR' } }) })
     : route.fallback());
-  const save = page.getByRole('button', { name: '保存顺序', exact: true }); await save.click();
+  const save = page.getByRole('button', { name: '保存顺序', exact: true });
+  // dnd-kit suppresses clicks for 50 ms after drop; hold the press past that guard.
+  await save.click({ delay: 75 });
   await expect(page.getByRole('alert').filter({ hasText: '无法保存顺序' })).toBeVisible();
   await expect(save).toBeEnabled();
   await expect(page.getByRole('article').first()).toHaveAccessibleName('node-1');

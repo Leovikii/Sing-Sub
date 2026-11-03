@@ -1,6 +1,6 @@
 # 元数据统一文件与正文隔离设计（3.1.6）
 
-2026-10-16 · ACCEPTED / 开发及隔离验证完成。持久化采用 workspace v4、editable-sync v3；3.1.6 历史格式兼容在 3.1.7 按[退场清单](./metadata-compat-retirement.md)移除。现行交付范围见 [3.1.7 计划](./v3.1.7-plan.md)，已完成的 3.1.6 计划使用 Git 追溯。
+2026-11-03 · ACCEPTED / 按 ADR-070 修正 GitHub 导入。持久化采用 workspace v4、editable-sync v3；历史格式退场留待独立迁移任务按[退场清单](./metadata-compat-retirement.md)处理。当前仅修复同步，见[进度](./progress.md)；原规则集扩展计划已取消，历史使用 Git 追溯。
 
 ## 1. 先区分 Profile、资源 JSON 与最终产物
 
@@ -96,7 +96,7 @@ workspaces/primary/
 
 GitHub metadata.json 由此区序列化导出，不再在 R2 额外写一个 metadata.json 对象。内容/元数据分区与 settings/builds/sync 等原运行字段同处 immutable revision；保存成功仍仅以 head CAS 为准。
 
-contentHash 为同步表示中根据正文生成的只读完整性字段，不在 R2 元数据区再缓存一份。共用 EntityMetadata schema，导出层只扩展正文版本绑定字段；不要为每个文件建立独立存储服务。
+contentHash 为现有同步格式的生成字段。按 ADR-070，导入时在同一 metadata 区保留仓库原值，正文变化不重新绑定，也不据此清除时间或修改 editor；缺失时首次导出生成。它不属于可编辑 DTO，不进入业务正文或 SRS；文件和整树摘要仍按真实内容计算，不建立额外副本或存储服务。
 
 ## 4. 哪些进入统一文件，哪些不进入
 
@@ -147,7 +147,7 @@ private.updatedAt、revision/head 时间、实体修改时间、source.lastFetch
 
 同一字段只有一个持久化权威。前端卡片、表单、资产摘要所需的扁平视图在 API/selector 中组合，不把兼容显示对象再持久化为正文。迁移结束后停止旧混合格式双写。
 
-排序 order 为同类实体内的非负整数，明确保存时生成连续值；缺失/重复使用固定的稳定路径比较兜底，不依赖对象键顺序或设备语言。新增追加，改名保留，删除不改其他实体时间。模板 display 数组只控制展示，清理无效 tag，新项追加。
+排序 order 为同类实体内的非负整数，明确保存时生成连续值；缺失/重复使用固定的稳定路径比较兜底，不依赖对象键顺序或设备语言。新增追加，改名保留，删除不改其他实体时间。模板 display 数组只控制展示；展示时忽略已不存在的 tag，新项追加，拉取时保留仓库原值。
 
 ### 6.2 时间各司其职
 
@@ -175,24 +175,24 @@ private.updatedAt、revision/head 时间、实体修改时间、source.lastFetch
 
 - metadata.json 对新格式为固定控制文件，即使 entities 为空也生成；manifest 继续独立，两个控制文件不计入 200 个业务实体，但均受 4 MiB 单文件/32 MiB 总量约束。路径稳定排序、两空格、LF、末尾换行，不写逐次 exportedAt/lastSyncedAt 到实体元数据。
 - records 必须关联存在的受管 Profile/资源，路径和类型严格校验；拒绝未知字段、重复原始 JSON 键/路径/大小写身份碰撞、非法时间、非法 display/editor 类型和超限。
-- 内容文件仍保留业务字段与数组顺序。contentHash 对应纯定义/正文的标准化输出，不是 Git SHA、R2 revision 或 SRS sourceHash。它是内容版本检查，不用于判断谁较新。
+- 内容文件仍保留业务字段与数组顺序。metadata 中已有 contentHash 原样往返，不是 Git SHA、R2 revision 或 SRS sourceHash，也不用于判断谁较新。整树语义摘要按当前正文的顺序无关 hash 投影生成字段，文件表示摘要保留实际值；不因仅对象键顺序或生成字段差异制造业务冲突。
 - 正文+metadata+manifest 在一次 Git tree/commit 中发布，不 force push、不触碰其他路径。同步差异应显示正文与元数据影响；仅备注/排序变化也必须能同步。
 - manifest 是生成清单，不决定 IDE 修改后的远端真相。旧基线按 v2 导出器验证，新的 manifest/同步表示 v3；sync.baseFormatVersion 缺失按 v2，成功后记录采用格式，不重置旧 base 绕过冲突。
 - 新旧格式结构差异是一次真实变更，首次升级同步明确展示。旧 B、旧远端和新的纯正文/metadata 比较使用版本化投影；不能用新投影与旧 base hash 直接比较而误报损坏。
 
 | 情形 | 处理 |
 |---|---|
-| 新格式记录和正文 hash 匹配 | 导入管理信息，按类型恢复 editor 能力 |
-| IDE 改正文，hash 不匹配 | 保留有效备注/排序；旧 updatedAt 不再冒充新版本时间；有本地完全相同正文时可用该版本已知时间，否则未记录 |
-| hash 不匹配且规则集 editor 已不能解释正文 | 标记编辑来源待确认，不自动用旧来源/手写输入覆盖当前 rules；可预览纯正文，结构化再生成前明确选择保留正文为手写基线或采用已有来源定义 |
-| 模板 tag 被改/删 | 清理失效 display；有管理注释无法唯一关联时保留并提示，不悄悄附到别的对象 |
+| 新格式记录与正文独立修改 | 分别导入；保留仓库已有备注、排序、时间、display 和 editor，不因 hash 不匹配修改 metadata |
+| 仓库有时间或省略时间 | 分别显示原时间或未记录；不借用本地时间，不查询 Git 历史，不使用拉取时间 |
+| 规则集正文与 editor 分别修改 | 拉取保留两者，不触发来源刷新或重新生成正文；仓库已有 needsReview 保留原值 |
+| 模板 tag 被改/删 | 保留 display；有管理注释无法唯一关联时保留并提示，不悄悄附到别的对象 |
 | 手动删除实体但留下记录 | 忽略孤立记录并 warning，下次导出清理；不靠元数据重建实体 |
 | 新格式漏掉尚存实体的记录 | 拒绝不完整导入；可选字段省略表示无值，实体记录本身必须存在 |
 | 已有新格式/base v3 或有效 v3 manifest，metadata 文件缺失/损坏 | 阻止导入并指出恢复文件路径，不能按空数据清掉备注、来源和手写编辑定义 |
 | 旧 v2 混合格式且没有 metadata | 通过显式旧格式转换器提取正文与元数据，不当作新格式元数据删除 |
 | 两侧同时变化 | 延用整体 B/L/G 和明确覆盖方向，不按时间戳选赢家、不增加逐字段自动合并 |
 
-导入远端原树 hash、落入 R2 的校验结果和下一次导出分开处理。剔除陈旧时间或清理孤立项要暴露本地待同步修正，不能伪造远端 hash、静默覆盖 IDE 修改或形成循环差异。非法结构不能自动降级为空 metadata。
+导入远端原树 hash、落入 R2 的校验结果和下一次导出分开处理。已有实体不自动修复 metadata；删除实体留下的孤立记录仍不能重建正文。历史导入投影使用 baseWorkspaceContentHash 判断是否真的存在新的本地修改，远端与 baseContentHash 比较，不能把旧版本清理造成的差异当成用户编辑。非法结构不能自动降级为空 metadata。
 
 ## 8. 升级、恢复和回滚
 
@@ -218,4 +218,4 @@ private.updatedAt、revision/head 时间、实体修改时间、source.lastFetch
 
 用户已批准；现行架构、验证结果与运维说明已更新，交付证据见 [当前进度](./progress.md)。
 
-兼容代码仅服务 3.1.6，本机排序导入与旧格式读取在 3.1.7 按[退场清单](./metadata-compat-retirement.md)移除。
+兼容代码仅服务一次性升级，不扩展为长期多版本实现；本机排序导入与旧格式读取在后续迁移任务按[退场清单](./metadata-compat-retirement.md)移除，不混入本次同步修复。

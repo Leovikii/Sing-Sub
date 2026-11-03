@@ -228,7 +228,7 @@ export default {
     compilerError: 'SRS 编译器配置失败，请检查仓库设置后重试。',
   },
   sync: {
-    metadataWarnings: '已导入；{{count}} 处元数据需要核对，请检查规则集编辑提示及下次同步差异。',
+    metadataWarnings: '已导入；{count} 处元数据引用需要核对。',
     metadataFileHint: '请恢复并修复 sing-sub/metadata.json，缺失或损坏时不能拉取，以免丢失备注和编辑定义。',
     status: '状态',
     refresh: '刷新',

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceSnapshot } from '../../shared';
+import type { AssetSnapshot, FileContent, SyncOperationResult, WorkspaceSnapshot } from '../../shared';
 import worker from '../../worker/index';
 import type { Env } from '../../worker/types';
 import { R2WorkspaceStore } from '../../worker/infrastructure/r2/r2-workspace-store';
@@ -137,11 +137,72 @@ class StatefulGitHub {
     this.currentCommit = `commit-${this.commitNumber}`;
     this.currentTree = `tree-${this.treeNumber}`;
   }
+
+  readFile(path: string): string { return this.managed.get(path)!; }
+
+  editBody(path: string, content: unknown): void {
+    this.managed.set(path, JSON.stringify(content));
+    this.commitNumber += 1;
+    this.treeNumber += 1;
+    this.currentCommit = `commit-${this.commitNumber}`;
+    this.currentTree = `tree-${this.treeNumber}`;
+  }
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GitHub sync routes', () => {
+  it('pulls repeated GitHub body edits through R2 without losing times or writing metadata back', async () => {
+    const bucket = new InMemoryR2Bucket();
+    const store = new R2WorkspaceStore(bucket);
+    const source = snapshot();
+    const path = 'sing-sub/templates/base.json';
+    const updatedAt = '2026-10-15T00:00:00.000Z';
+    source.assets.templates.base = { path, content: { log: { level: 'info' } }, note: 'known note', updatedAt };
+    source.profiles[0].updated_at = Date.parse(updatedAt);
+    await store.create({ workspaceId: 'primary', snapshot: source });
+    const env = environment(bucket);
+    const github = new StatefulGitHub();
+    vi.stubGlobal('fetch', github.fetch);
+    await new R2PrivateMetadataStore(bucket).create({ schemaVersion: 1, workspaceId: 'primary', updatedAt,
+      github: { owner: 'owner', repo: 'private-data', pat: 'test', defaultBranch: 'main' } });
+    const login = await worker.fetch(new Request('https://example.com/api/login', {
+      method: 'POST', body: JSON.stringify({ adminPassword: 'correct-password' }),
+    }), env);
+    const headers = { Cookie: login.headers.get('Set-Cookie')!.split(';')[0], 'Content-Type': 'application/json' };
+    const pushed = await worker.fetch(new Request('https://example.com/api/github-sync/push', {
+      method: 'POST', headers, body: JSON.stringify({ expectedRevision: 'revision-1', resolution: 'overwrite' }),
+    }), env);
+    expect(pushed.status).toBe(200);
+    let revision = (await data<SyncOperationResult>(pushed)).revision;
+    const originalMetadata = github.readFile('sing-sub/metadata.json');
+    const writeCount = github.requests.filter(request => request.method !== 'GET').length;
+    for (const level of ['debug', 'warn']) {
+      github.editBody(path, { log: { level } });
+      const status = await worker.fetch(new Request('https://example.com/api/github-sync', { headers }), env);
+      expect(await data(status)).toMatchObject({ status: 'remote-ahead', canPull: true });
+      const pull = await worker.fetch(new Request('https://example.com/api/github-sync/pull', {
+        method: 'POST', headers, body: JSON.stringify({ expectedRevision: revision, resolution: 'safe' }),
+      }), env);
+      expect(pull.status).toBe(200);
+      const result = await data<SyncOperationResult>(pull);
+      revision = result.revision;
+      expect(result.warnings).toEqual([]);
+      const assets = await data<AssetSnapshot>(await worker.fetch(new Request('https://example.com/api/assets', { headers }), env));
+      expect(assets.templates[0]).toMatchObject({ path, note: 'known note', updatedAt });
+      const file = await data<FileContent>(await worker.fetch(new Request(`https://example.com/api/file?path=${encodeURIComponent(path)}`, { headers }), env));
+      expect(JSON.parse(file.content)).toEqual({ log: { level } });
+      expect(file.metadata).toEqual(JSON.parse(originalMetadata).entities[path]);
+      const current = (await store.read('primary')).snapshot;
+      expect(current.profiles[0].updated_at).toBe(Date.parse(updatedAt));
+      expect(current.metadata!.entities[path]).toEqual(file.metadata);
+      expect(await data(await worker.fetch(new Request('https://example.com/api/github-sync', { headers }), env)))
+        .toMatchObject({ status: 'synced', sameContent: true, canPull: true,
+          local: { changes: { added: [], modified: [], deleted: [] } }, remote: { changes: { added: [], modified: [], deleted: [] } } });
+      expect(github.readFile('sing-sub/metadata.json')).toBe(originalMetadata);
+    }
+    expect(github.requests.filter(request => request.method !== 'GET')).toHaveLength(writeCount);
+  });
   it('connects, previews, blocks unsafe first sync, pushes once, and pulls actual remote edits', async () => {
     const bucket = new InMemoryR2Bucket();
     const store = new R2WorkspaceStore(bucket);

@@ -4,7 +4,7 @@
 
 [简体中文](README_zh-CN.md) · [Wiki](https://github.com/Leovikii/Sing-Sub/wiki) · [License](LICENSE)
 
-![Version 3.1.6](https://img.shields.io/badge/version-3.1.6-e64980)
+![Version 3.1.7](https://img.shields.io/badge/version-3.1.7-e64980)
 
 Sing-Sub is a self-hosted control plane for editing and distributing [sing-box](https://sing-box.sagernet.org/) configurations.
 

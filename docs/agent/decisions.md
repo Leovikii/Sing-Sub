@@ -1,6 +1,6 @@
 # 架构决策
 
-状态：`ACCEPTED` 已锁定；`PROPOSED` 待实施前确认；`SUPERSEDED` 已被后续决策取代。
+状态：`ACCEPTED` 已锁定；`PROPOSED` 待实施前确认；`SUPERSEDED` 已被后续决策取代；`WITHDRAWN` 用户取消。
 
 ## 当前有效决策
 
@@ -40,23 +40,22 @@
 | ADR-066 | ACCEPTED | 3.1.5 共用卡片、排序工具栏与导航内容；资源/筛选卡片顺序为浏览器展示偏好。 |
 | ADR-067 | ACCEPTED | 3.1.6 用单一 metadata 文档分离 Profile/资源管理信息，按实体路径归集展示/编辑数据，保留部署与临时状态边界。 |
 | ADR-068 | ACCEPTED | 保留官方 sing-box CLI 按字段自动选择 SRS 格式；不强制 v5、不自研二进制写入器。 |
-| ADR-069 | PROPOSED | DLC 消费原生构建后展开的 YAML；以链接及分类复用 SOURCE 多行输入和既有原子保存/SRS 流程。 |
+| ADR-069 | WITHDRAWN | 2026-11-03 用户取消 DLC 来源兼容与规则集扩展，删除暂定计划；细节使用 Git 历史。 |
+| ADR-070 | ACCEPTED | GitHub 拉取将正文与元数据独立导入，保留已有元数据及时间，不因正文 hash 不匹配自动修复 metadata。 |
+
+## ADR-070：GitHub 拉取保留元数据
+
+2026-11-03 用户报告直接在 GitHub 编辑正文后，拉取会清空时间并产生 metadata 差异，进一步妨碍连续拉取。用户明确要求简化同步：仓库 metadata 中已有的备注、排序、时间、display 和 editor 定义按原值导入；正文变化不清空时间、不写入 needsReview、不清理 display，也不查询逐文件 Git 历史或用拉取时间替代修改时间。缺失的时间继续显示未记录。此决策取代 ADR-067 与元数据设计中按正文 hash 自动修正已有实体元数据的规则。用户另行取消 DLC 方案，现有规则集功能本次不剥离、不扩展。
+
+现有同步 metadata 的 contentHash 在同一 metadata 区按可选字段保留并原样往返，仅未携带该字段的实体在导出时生成；不再用它使其他元数据失效。它不进入可编辑 DTO、公开业务正文或 SRS 源。整树语义摘要继续按当前正文的顺序无关 hash 投影该生成字段，实际文件的表示摘要保留原值；正文顺序变化不制造业务冲突，备注等真实元数据变化仍参与比较。保留既有同步格式与历史基线校验。已有清理产生的本地基线以 baseWorkspaceContentHash 判断本地是否真的变化，远端仍与 baseContentHash 比较，不把导入投影差异当成用户本地编辑。正文/metadata 结构校验、缺失记录阻断、孤立记录不重建实体、明确覆盖方向、revision/CAS 和 SRS 行为继续保留；拉取不写 GitHub。
+
+本次只修复同步及提示并清理取消的工程计划，不移除现有规则集或一次性迁移边界；原定随 3.1.7 的兼容退场留待独立迁移任务及隔离检查，不新增长期兼容框架。
 
 ## ADR-068：保留官方 SRS 自动格式选择
 
 2026-11-02 用户确认：保留官方 CLI 按实际字段自动降低二进制格式版本的行为。采用官方 `sing-box rule-set compile`，不强制 v5、不增加直接调用 SRS writer 的 Go wrapper、不通过修改文件头伪装版本。纯域名源仍可使用 v2，产物为 v2 是正常结果；支持最新格式不等于要求所有产物都是最高版本。
 
-该确认针对规则集格式版本，不取消固定编译器版本/校验摘要、job.compilerVersion、回调校验与可复现构建约束。编译器升级单独审计，不在每次 Action 中浮动下载 latest。3.1.7 的其余接入方案见 ADR-069，尚未实施。
-
-## ADR-069：DLC 展开 YAML 来源与现有 SOURCE 复用
-
-PROPOSED，供本轮审阅；不替代已生效的数据、revision、sync 和 SRS 发布规则。
-
-推荐消费官方或自有规则仓库通过原生构建器/datdump 生成的展开 YAML。SOURCE 继续使用现有多行 Textarea，以 `HTTPS-YAML-URL#分类,分类@属性` 表达选择；普通 JSON URL 原用法不变。不建立仓库/ref 连接 UI、来源异步任务、Worker include 递归解析器或新的 Go 编译阶段。
-
-输入 fragment 解析后拆为无 fragment 的 url 和可选 selectors，保存到现有 editor.ruleset.sources；通用 fetch 仍拒绝 fragment。selectors 缺省表示 JSON 来源。Worker 独占 YAML 解析依赖，四类域名规则统一转为既有 RuleBucket，单次原子保存正文与 metadata，后续复用可选 SRS 编译。新来源依然支持 JSON-only。
-
-自建规则仓库只需发布相同 YAML；创建/发布/自动同步该仓库不隐含在此决策中。依赖、资源门槛、格式白名单、错误策略、产物身份及实施验收详见[3.1.7 计划](./v3.1.7-plan.md)。方案接受前只维护文档，不将拟议行为当作已经生效的架构。
+该确认针对规则集格式版本，固定编译器版本/校验摘要、job.compilerVersion、回调校验与可复现构建约束继续保留。原 3.1.7 编译器升级和 DLC 接入计划已取消，不在本次修复中实施。
 
 ## ADR-050：React 19 + Mantine 9
 
@@ -147,9 +146,9 @@ verify 的关键 E2E 默认针对生产构建执行，防止仅在打包后出�
 
 性能约束：普通读取不新增逐实体哈希、请求或 R2 对象；继续一次快照读取/发布，不新增运行依赖，原三段 gzip 预算不变。
 
-同步导入的原树摘要与清理后的本地投影分开：`sync.baseContentHash` 保留远端原树 B；必要时 `baseWorkspaceContentHash` 校验已保存的本地基线投影，`baseFormatVersion` 指定该投影格式。陈旧时间/编辑定义的修正表现为 local-ahead，不伪造远端摘要或清空基线。内存中的 Profile/资源包装视图可组合管理字段，但只经统一编解码边界持久化为纯正文与唯一 metadata 区。
+同步导入的原树摘要与本地投影分开：`sync.baseContentHash` 保留远端原树 B；必要时 `baseWorkspaceContentHash` 校验已保存的本地基线投影，`baseFormatVersion` 指定该投影格式。按 ADR-070，导入不再自动清除已有实体的时间或修正编辑定义。内存中的 Profile/资源包装视图可组合管理字段，但只经统一编解码边界持久化为纯正文与唯一 metadata 区。
 
-用户追加约束：3.1.6 兼容转换为一次性代码，3.1.7 移除；集中于 `worker/compat/v3.1.6`，旧 schema/投影入口一并退场。移除前检查活跃 v4 引用，旧历史需要保留的 3.1.6 在隔离副本中恢复，详见 [退场清单](./metadata-compat-retirement.md)。
+3.1.6 兼容转换仍为一次性代码，集中于 `worker/compat/v3.1.6`，不得扩展为长期框架。原定随 3.1.7 的退场按 ADR-070 移出本次同步修复；后续移除前检查活跃 v4 引用，旧历史需要保留的 3.1.6 在隔离副本中恢复，详见 [退场清单](./metadata-compat-retirement.md)。
 
 3.1.6 使用 Rolldown 原生 `$initial` tag 合并本来已需首屏加载的依赖，减少小共享 chunk 的 import/包装开销；保持 strictExecutionOrder、路由与编辑器懒加载，原三段预算不变，不把延迟功能强拉入首屏。
 

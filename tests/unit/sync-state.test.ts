@@ -52,4 +52,13 @@ describe('sync state analysis', () => {
       deleted: ['sing-sub/nodes/a.json'],
     });
   });
+  it('compares each side with its retained baseline after an import projection', () => {
+    const projectedBase = { ...base, workspaceContentHash: 'imported' };
+    expect(analyzeSyncState(projectedBase, tree('local', 'imported', baseFiles), tree('remote', 'base', baseFiles)))
+      .toMatchObject({ localChanged: false, remoteChanged: false, canPull: true, requiresResolution: false });
+    expect(analyzeSyncState(projectedBase, tree('local', 'imported', baseFiles), tree('remote', 'new-remote', baseFiles)))
+      .toMatchObject({ status: 'remote-ahead', canPull: true, requiresResolution: false });
+    expect(analyzeSyncState(projectedBase, tree('local', 'new-local', baseFiles), tree('remote', 'new-remote', baseFiles)))
+      .toMatchObject({ status: 'conflict', canPull: false, canPush: false, requiresResolution: true });
+  });
 });
