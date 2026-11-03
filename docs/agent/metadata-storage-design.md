@@ -1,6 +1,6 @@
 # 元数据统一文件与正文隔离设计（3.1.6）
 
-2026-10-16 · ACCEPTED / 开发及隔离验证完成。目标为 workspace v4、editable-sync v3，兼容读取历史格式。实施范围见 [3.1.6 计划](./v3.1.6-plan.md)。
+2026-10-16 · ACCEPTED / 开发及隔离验证完成。持久化采用 workspace v4、editable-sync v3；3.1.6 历史格式兼容在 3.1.7 按[退场清单](./metadata-compat-retirement.md)移除。现行交付范围见 [3.1.7 计划](./v3.1.7-plan.md)，已完成的 3.1.6 计划使用 Git 追溯。
 
 ## 1. 先区分 Profile、资源 JSON 与最终产物
 

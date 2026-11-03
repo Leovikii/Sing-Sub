@@ -39,6 +39,24 @@
 
 | ADR-066 | ACCEPTED | 3.1.5 共用卡片、排序工具栏与导航内容；资源/筛选卡片顺序为浏览器展示偏好。 |
 | ADR-067 | ACCEPTED | 3.1.6 用单一 metadata 文档分离 Profile/资源管理信息，按实体路径归集展示/编辑数据，保留部署与临时状态边界。 |
+| ADR-068 | ACCEPTED | 保留官方 sing-box CLI 按字段自动选择 SRS 格式；不强制 v5、不自研二进制写入器。 |
+| ADR-069 | PROPOSED | DLC 消费原生构建后展开的 YAML；以链接及分类复用 SOURCE 多行输入和既有原子保存/SRS 流程。 |
+
+## ADR-068：保留官方 SRS 自动格式选择
+
+2026-11-02 用户确认：保留官方 CLI 按实际字段自动降低二进制格式版本的行为。采用官方 `sing-box rule-set compile`，不强制 v5、不增加直接调用 SRS writer 的 Go wrapper、不通过修改文件头伪装版本。纯域名源仍可使用 v2，产物为 v2 是正常结果；支持最新格式不等于要求所有产物都是最高版本。
+
+该确认针对规则集格式版本，不取消固定编译器版本/校验摘要、job.compilerVersion、回调校验与可复现构建约束。编译器升级单独审计，不在每次 Action 中浮动下载 latest。3.1.7 的其余接入方案见 ADR-069，尚未实施。
+
+## ADR-069：DLC 展开 YAML 来源与现有 SOURCE 复用
+
+PROPOSED，供本轮审阅；不替代已生效的数据、revision、sync 和 SRS 发布规则。
+
+推荐消费官方或自有规则仓库通过原生构建器/datdump 生成的展开 YAML。SOURCE 继续使用现有多行 Textarea，以 `HTTPS-YAML-URL#分类,分类@属性` 表达选择；普通 JSON URL 原用法不变。不建立仓库/ref 连接 UI、来源异步任务、Worker include 递归解析器或新的 Go 编译阶段。
+
+输入 fragment 解析后拆为无 fragment 的 url 和可选 selectors，保存到现有 editor.ruleset.sources；通用 fetch 仍拒绝 fragment。selectors 缺省表示 JSON 来源。Worker 独占 YAML 解析依赖，四类域名规则统一转为既有 RuleBucket，单次原子保存正文与 metadata，后续复用可选 SRS 编译。新来源依然支持 JSON-only。
+
+自建规则仓库只需发布相同 YAML；创建/发布/自动同步该仓库不隐含在此决策中。依赖、资源门槛、格式白名单、错误策略、产物身份及实施验收详见[3.1.7 计划](./v3.1.7-plan.md)。方案接受前只维护文档，不将拟议行为当作已经生效的架构。
 
 ## ADR-050：React 19 + Mantine 9
 
@@ -119,7 +137,7 @@ verify 的关键 E2E 默认针对生产构建执行，防止仅在打包后出�
 
 ## ADR-067：统一元数据文档与正文隔离（ACCEPTED）
 
-2026-10-16 用户要求分类核对保存价值，并避免管理信息混入业务正文和零散文件增加维护成本。详细契约见 [统一元数据设计](./metadata-storage-design.md)，任务见 [3.1.6 计划](./v3.1.6-plan.md)。
+2026-10-16 用户要求分类核对保存价值，并避免管理信息混入业务正文和零散文件增加维护成本。详细契约见 [统一元数据设计](./metadata-storage-design.md)，3.1.6 任务已完成，历史计划使用 Git。
 
 每个工作区只新增一个 GitHub metadata.json，按实体路径保存 Profile/资源 note/order/已知时间、display 和恢复编辑能力所需的 editor 定义；Profile 的同步 JSON 保留纯管理定义，资源 JSON 保留纯业务正文。在线 R2 使用同一 immutable revision 的 metadata 区，不额外写元数据对象，不保留原字段持久化副本，不创建逐实体/逐类型 sidecar。
 
